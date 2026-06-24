@@ -494,7 +494,7 @@ async function heicToJpegBlob(file,quality){
 function makePreviews(file){
   return new Promise(res=>{
     const url=URL.createObjectURL(file); const img=new Image();
-    img.onload=()=>{ const thumb=scaleToDataURL(img,THUMB_PX,0.72); const preview=scaleToDataURL(img,PREVIEW_PX,0.8); URL.revokeObjectURL(url); res({thumb,preview}); };
+    img.onload=()=>{ const thumb=scaleToDataURL(img,THUMB_PX,0.504); const preview=scaleToDataURL(img,PREVIEW_PX,0.56); URL.revokeObjectURL(url); res({thumb,preview}); };
     img.onerror=()=>{ URL.revokeObjectURL(url); res({thumb:null,preview:null}); };
     img.src=url;
   });
