@@ -648,7 +648,10 @@ function updateGallery(){
   const passName=p=>!nameFilter||((p.name||"").toLowerCase().includes(nameFilter));
   let inView=sortPhotos(photos.filter(p=>p.lat!=null&&passDate(p)&&passName(p)&&spatial.contains([p.lat,p.lng])),center);
   let noGeo=showNoGeo?sortPhotos(photos.filter(p=>p.lat==null&&passDate(p)&&passName(p)),center):[];
+  /* keep the open viewer pinned to the same photo across re-sorts (lightboxIndex is positional) */
+  const openP=lb.classList.contains("open")?lightboxList[lightboxIndex]:null;
   lightboxList=inView.concat(noGeo);
+  if(openP){ let i=lightboxList.indexOf(openP); if(i<0){ lightboxList=[openP].concat(lightboxList); i=0; } lightboxIndex=i; }
   const anyImg=photos.some(p=>p.thumb||p.preview);
   if(!anyImg){
     body.innerHTML='<div class="empty-msg"><b>Locations loaded without images.</b><br/>Open the source folder or a saved .JSON to see thumbnails.</div>';
@@ -721,11 +724,11 @@ function loadViewer(){
   showPreview(p);
   highlightCurrent();
 }
-function showPreview(p){
+function showPreview(p,keepView){
   let s=p.preview||p.thumb;
   if(!s && p.file && !p.isHeic){ s=curUrl=URL.createObjectURL(p.file); }
   if(!s) s="";
-  lbImg.onload=()=>setupFit(lbImg.naturalWidth,lbImg.naturalHeight);
+  lbImg.onload=()=>setupFit(lbImg.naturalWidth,lbImg.naturalHeight,keepView);
   lbImg.src=s; lbRefImg.src=s;
 }
 function swapViewer(src){
@@ -965,7 +968,7 @@ lbFull.addEventListener("change",async ()=>{
     if(lightboxList[lightboxIndex]!==p) return;
     if(!ok){ lbFull.checked=false; alert("Could not load the full quality original for "+p.name+". Connect the source folder with Open Folder, then tick Full quality again."); }
   } else {
-    showPreview(p);
+    showPreview(p,true);
   }
 });
 document.getElementById("lbDel").addEventListener("click",e=>{
