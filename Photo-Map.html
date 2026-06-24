@@ -1136,12 +1136,24 @@ async function reopenLastJson(){
 }
 async function ensurePermission(handle){ try{ const o={mode:"read"}; if((await handle.queryPermission(o))==="granted")return true; if((await handle.requestPermission(o))==="granted")return true; }catch(e){} return false; }
 let permArmed=false;
+/* A native permission dialog swallows the mouseup of the click that opened it,
+   leaving Leaflet's drag handler stuck "pressed" so the map pans without the
+   button held. Dispatch synthetic release events to clear any stuck drag. */
+function releaseStuckDrag(){
+  try{
+    document.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true}));
+    window.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true}));
+    document.dispatchEvent(new PointerEvent("pointerup",{bubbles:true,cancelable:true}));
+    window.dispatchEvent(new PointerEvent("pointerup",{bubbles:true,cancelable:true}));
+  }catch(e){}
+}
 function armFolderPermission(){
   if(permArmed||!dirHandle) return; permArmed=true;
   const once=async(ev)=>{
     if(ev&&ev.target&&ev.target.closest&&ev.target.closest(".toolbar")) return;   // folder buttons handle their own permission
     window.removeEventListener("pointerdown",once,true); window.removeEventListener("keydown",once,true); permArmed=false;
     try{ if(dirHandle) await dirHandle.requestPermission({mode:"read"}); }catch(e){}
+    finally{ releaseStuckDrag(); }
   };
   window.addEventListener("pointerdown",once,true); window.addEventListener("keydown",once,true);
 }
