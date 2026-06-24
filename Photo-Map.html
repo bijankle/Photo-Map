@@ -1063,7 +1063,7 @@ function downloadJson(data){ const blob=new Blob([data],{type:"application/json"
 document.getElementById("btnOpenJson").addEventListener("click",async()=>{
   if(hasFSA&&window.showOpenFilePicker){
     try{ const [h]=await window.showOpenFilePicker({types:[{description:"JSON",accept:{"application/json":[".json"]}}]}); saveFileHandle=h; jsonHandle=h; try{await idbSet("jsonHandle",h);}catch(e){} const f=await h.getFile(); loadStateText(await f.text()); }
-    catch(err){ if(err&&err.name!=="AbortError") console.warn(err); }
+    catch(err){ if(err&&err.name==="AbortError") return; console.warn(err); document.getElementById("jsonInput").click(); }   // FSA picker can fail (e.g. file:// pages); fall back to the file input
   } else document.getElementById("jsonInput").click();
 });
 document.getElementById("jsonInput").addEventListener("change",async e=>{ const f=e.target.files[0]; if(f) loadStateText(await f.text()); });
