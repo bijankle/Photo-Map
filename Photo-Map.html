@@ -508,15 +508,21 @@ function renderClusters(){
 const IMG_RE=/\.(jpe?g|png|tiff?|heic|heif|webp|gif|bmp)$/i;
 const hasFSA="showDirectoryPicker" in window;
 document.getElementById("btnFolder").addEventListener("click",openFolder);
-document.getElementById("folderInput").addEventListener("change",e=>{
+document.getElementById("folderInput").addEventListener("change",async e=>{
   const fl=Array.from(e.target.files||[]);
   const items=fl.filter(f=>IMG_RE.test(f.name)).map(f=>({name:f.name,path:f.webkitRelativePath||f.name,getFile:async()=>f}));
+  const prevRoot=folderName, hadPhotos=photos.length>0;
   folderName=(fl[0]&&(fl[0].webkitRelativePath||"").split("/")[0])||"folder";
-  ingest(items,true);   // additive + incremental: only new files are processed
+  await ingest(items,true);   // additive + incremental: only new files are processed
+  if(hadPhotos && prevRoot===folderName) pruneMissing(folderName,new Set(items.map(it=>it.path)));   // same root reopened -> sync deletions too
 });
 async function openFolder(){
   if(hasFSA){
-    try{ dirHandle=await window.showDirectoryPicker(); invalidateDirIndex(); await idbSet("dirHandle",dirHandle); folderName=dirHandle.name; await loadFromHandle(dirHandle,true); }
+    try{
+      const prevRoot=folderName, hadPhotos=photos.length>0;
+      dirHandle=await window.showDirectoryPicker(); invalidateDirIndex(); await idbSet("dirHandle",dirHandle); folderName=dirHandle.name;
+      await loadFromHandle(dirHandle,true,{prune: hadPhotos && (prevRoot===dirHandle.name || !prevRoot)});
+    }
     catch(err){ if(err&&err.name==="AbortError")return; console.warn("picker fallback",err); document.getElementById("folderInput").click(); }
   } else { document.getElementById("folderInput").click(); }
 }
@@ -527,13 +533,34 @@ async function* walkDir(handle,prefix){
     else if(h.kind==="directory") yield* walkDir(h,path);
   }
 }
-async function loadFromHandle(handle, append){
+async function loadFromHandle(handle, append, opts){
   const items=[];
   for await (const f of walkDir(handle,"")) if(IMG_RE.test(f.name)) items.push({name:f.name,path:f.path,getFile:()=>f.handle.getFile()});
   await ingest(items, append);
+  if(opts&&opts.prune) pruneMissing(handle.name,new Set(items.map(it=>it.path)));
+}
+/* Disk-truth sync: a fresh scan of the root folder is authoritative for PHYSICAL paths. Any stored
+   physical path no longer present is removed from that photo — so folder-derived tags disappear for
+   a moved/deleted copy — while in-app tags (vpaths) are never touched. A photo whose last physical
+   copy vanished is dropped from the map unless it still carries in-app tags. */
+function pruneMissing(root, seenRaw){
+  const pref=(root||"")+"/";
+  const norm=pa=>{ pa=String(pa||""); return pa.startsWith(pref)?pa.slice(pref.length):pa; };
+  const seen=new Set(); for(const s of seenRaw) seen.add(norm(s));
+  let changed=false, removedPhotos=0;
+  for(let i=photos.length-1;i>=0;i--){ const p=photos[i];
+    const phys=physPaths(p); if(!phys.length) continue;
+    const kept=phys.filter(pa=>seen.has(norm(pa)));
+    if(kept.length===phys.length) continue;
+    changed=true; p.paths=kept;
+    if(kept.length){ if(!kept.includes(p.path)) p.path=kept[0]; }
+    else if(!virtPaths(p).length){ photos.splice(i,1); removedPhotos++; }
+  }
+  if(changed){ rebuildSizeIndex(); buildDateFilter(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); cacheFullSession(); }
+  return removedPhotos;
 }
 const progress=document.getElementById("progress");
-function rebuildSizeIndex(){ sizeIndex=new Map(); existingPaths=new Set(); for(const p of photos){ if(p.size!=null && !sizeIndex.has(p.size)) sizeIndex.set(p.size,p); for(const pa of pathsOf(p)) existingPaths.add(pa); } }
+function rebuildSizeIndex(){ sizeIndex=new Map(); existingPaths=new Set(); for(const p of photos){ if(p.size!=null && !sizeIndex.has(p.size)) sizeIndex.set(p.size,p); for(const pa of physPaths(p)) existingPaths.add(pa); } }
 function addPath(p,path){ if(!path) return; if(!Array.isArray(p.paths)) p.paths=p.path?[p.path]:[]; if(!p.paths.includes(path)) p.paths.push(path); }
 async function ingest(items, append){
   if(!items.length){ alert("No image files found in that drop."); return; }
@@ -557,7 +584,7 @@ async function processOne(it){
   // The check-and-reserve below runs synchronously (no await between), so it is race-safe
   // across the concurrent worker pool.
   if(sz!=null && sizeIndex.has(sz)){ addPath(sizeIndex.get(sz),it.path); if(it.path) existingPaths.add(it.path); return; }
-  const p={id:nextId++,path:it.path,name:it.name,file,size:sz,isHeic:false,thumb:null,lat:null,lng:null,time:null,dir:null,marks:[],paths:[it.path]};
+  const p={id:nextId++,path:it.path,name:it.name,file,size:sz,isHeic:false,thumb:null,lat:null,lng:null,time:null,dir:null,marks:[],paths:[it.path],vpaths:[]};
   if(sz!=null) sizeIndex.set(sz,p);
   if(it.path) existingPaths.add(it.path);
   photos.push(p);
@@ -765,7 +792,11 @@ function updateGallery(){
   document.getElementById("stView").textContent=inView.length;
   renderMapTags();
 }
-function pathsOf(p){ return (Array.isArray(p.paths)&&p.paths.length)?p.paths:(p.path?[p.path]:[]); }
+/* p.paths = PHYSICAL locations discovered on disk (pruned against reality on every folder rescan).
+   p.vpaths = VIRTUAL tag memberships added in-app (never touched by disk syncs). */
+function physPaths(p){ return Array.isArray(p.paths)?p.paths:(p.path?[p.path]:[]); }
+function virtPaths(p){ return Array.isArray(p.vpaths)?p.vpaths:[]; }
+function pathsOf(p){ const a=physPaths(p), b=virtPaths(p); return b.length?a.concat(b.filter(v=>!a.includes(v))):a; }
 function cardHtml(p,isNoGeo){
   const sub=p.time?fmtDate(p.time):(p.lat!=null?fmtCoord(p.lat,p.lng):"no metadata");
   const flag=isNoGeo?'<div class="flag">NO GPS</div>':"";
@@ -846,7 +877,8 @@ function toggleTagFilter(folder){
 function renderPhotoTags(p){
   const el=document.getElementById("lbTags"); if(!el) return;
   if(!p){ el.innerHTML=""; return; }
-  const folders=[...new Set(pathsOf(p).map(pa=>pathFolder(pa)).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const fset=new Set(); for(const pa of pathsOf(p)) for(const c of expandFolders(pa)) fset.add(c);
+  const folders=[...fset].sort((a,b)=>a.localeCompare(b));
   el.innerHTML=tagPillsHtml(folders);
   el.classList.toggle("filtered",tagFilters.size>0);
   wireTagPills(el);
@@ -1189,20 +1221,30 @@ lbFull.addEventListener("change",async ()=>{
     showPreview(p,true);
   }
 });
-/* ---- Add to folder (virtual organization; drives search + de-dupe grouping) ---- */
+/* ---- Tags (virtual organization; drives search + filtering) ----
+   Tags are DERIVED from a photo's paths: every ancestor folder of a nested path is a tag, so a
+   photo in Photos/130-MC-002 Panel 13 & 2/Panel 13 carries BOTH the parent tag and the leaf tag.
+   Because they are derived, moving the file on disk + reopening the folder updates that photo's
+   tags automatically. */
 function pathFolder(pa){ const i=String(pa||"").lastIndexOf("/"); return i>0?pa.slice(0,i):""; }
-function allFolders(){ const s=new Set(); for(const p of photos) for(const pa of pathsOf(p)){ const f=pathFolder(pa); if(f) s.add(f); } return Array.from(s).sort((a,b)=>a.localeCompare(b)); }
-function photoInFolder(p,F){ return pathsOf(p).some(pa=>pathFolder(pa)===F); }
+function folderChain(f){ const segs=String(f||"").split("/").filter(Boolean); const out=[]; let cur=""; for(const s of segs){ cur=cur?cur+"/"+s:s; out.push(cur); } return out; }
+// All tag-folders a single path confers: the folder and every ancestor (the bare root only when the file sits directly in it).
+function expandFolders(pa){ const f=pathFolder(pa); if(!f) return []; const r=rootPrefix(); return folderChain(f).filter(c=>c===f||c!==r); }
+function allFolders(){ const s=new Set(); for(const p of photos) for(const pa of pathsOf(p)) for(const c of expandFolders(pa)) s.add(c); return Array.from(s).sort((a,b)=>a.localeCompare(b)); }
+function photoInFolder(p,F){ return pathsOf(p).some(pa=>{ const pf=pathFolder(pa); return pf===F||pf.startsWith(F+"/"); }); }
 function setPhotoFolder(p,F,on){
-  if(!Array.isArray(p.paths)) p.paths=p.path?[p.path]:[];
-  if(on){ const np=F?F+"/"+p.name:p.name; if(!p.paths.includes(np)) p.paths.push(np); }
-  else { p.paths=p.paths.filter(pa=>pathFolder(pa)!==F); if(!p.paths.length) p.paths=[p.name||""]; }
+  if(!Array.isArray(p.vpaths)) p.vpaths=[];
+  if(on){ const np=F?F+"/"+p.name:p.name; if(!photoInFolder(p,F)&&!p.vpaths.includes(np)) p.vpaths.push(np); }
+  else { const hit=pf=>pf===F||pf.startsWith(F+"/");
+    p.vpaths=p.vpaths.filter(pa=>!hit(pathFolder(pa)));
+    if(Array.isArray(p.paths)) p.paths=p.paths.filter(pa=>!hit(pathFolder(pa)));   // untag also drops the physical membership (a rescan restores it from disk)
+  }
 }
 let folderPopShown=false;
 function closeFolderPop(){ folderPopShown=false; document.getElementById("folderPop").style.display="none"; }
 // The linked/root folder name (e.g. "Photos") is redundant on every label — strip it for display.
 function rootPrefix(){ return (folderName||"").replace(/\/+$/,""); }
-function folderLabel(f){ const r=rootPrefix(); if(r&&f===r) return "(main folder)"; if(r&&f.startsWith(r+"/")) return f.slice(r.length+1); return f; }
+function folderLabel(f){ const r=rootPrefix(); if(r&&f===r) return "(main folder)"; const segs=String(f||"").split("/").filter(Boolean); return segs.length?segs[segs.length-1]:f; }   // leaf name only; full path stays in the tooltip
 /* Tag callout (opened by the up-arrow): every existing tag as a pill, plus ONE input that both
    searches and creates — typing filters the pills; if no exact match, a Create button appears. */
 function openFolderPop(){
@@ -1458,7 +1500,8 @@ function serializeState(includeImages){
       box: boxBounds?[boxBounds.getSouth(),boxBounds.getWest(),boxBounds.getNorth(),boxBounds.getEast()]:null,
       view:{ center:[map.getCenter().lat, map.getCenter().lng], zoom:map.getZoom() } },
     photos: photos.map(p=>{ const o={path:p.path,name:p.name,lat:p.lat,lng:p.lng,time:p.time,dir:p.dir,size:p.size,isHeic:p.isHeic};
-      if(Array.isArray(p.paths)&&p.paths.length&&(p.paths.length>1||p.paths[0]!==p.path))o.paths=p.paths;   // preserve folder membership (de-duped overlaps + moves)
+      if(Array.isArray(p.paths)&&(p.paths.length!==1||p.paths[0]!==p.path))o.paths=p.paths;   // physical locations (incl. empty when pruned from disk)
+      if(Array.isArray(p.vpaths)&&p.vpaths.length)o.vpaths=p.vpaths;   // in-app tag memberships — never pruned by disk syncs
       if(p.marks&&p.marks.length)o.marks=p.marks;
       if(includeImages){ if(p.thumb){ o.thumb=p.thumb; if(p.tv)o.tv=p.tv; } if(p.preview)o.preview=p.preview; }   // thumb + screenshot-quality preview; full quality always comes from disk
       return o; })
@@ -1476,7 +1519,13 @@ function loadStateText(text){
 }
 function applyState(st){
   clearAll(false); folderName=st.folderName||"";
-  (st.photos||[]).forEach(m=>photos.push({id:nextId++,path:m.path,name:m.name,paths:Array.isArray(m.paths)&&m.paths.length?m.paths:(m.path?[m.path]:[]),file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,lat:m.lat,lng:m.lng,time:m.time,dir:m.dir,marks:Array.isArray(m.marks)?m.marks:[]}));   // baked full-quality renditions from old files are intentionally dropped
+  (st.photos||[]).forEach(m=>{
+    let phys=Array.isArray(m.paths)?m.paths:(m.path?[m.path]:[]), vp=Array.isArray(m.vpaths)?m.vpaths:null;
+    if(vp===null){   // legacy file (mixed paths): keep the anchor path as physical, treat extras as virtual so tags can never be wrongly pruned
+      vp=phys.filter(pa=>pa!==m.path); phys=m.path?[m.path]:phys.slice(0,1);
+    }
+    photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,lat:m.lat,lng:m.lng,time:m.time,dir:m.dir,marks:Array.isArray(m.marks)?m.marks:[]});
+  });   // baked full-quality renditions from old files are intentionally dropped
   if(lastFullCache) overlayImagesFromCache(lastFullCache);   // the .json is metadata-only — fill thumbs/previews back in from the browser image cache
   const s=st.settings||{};
   if(s.thumb){ document.documentElement.style.setProperty("--thumb",s.thumb); document.getElementById("thumbSize").value=parseInt(s.thumb)||120; }
@@ -1497,8 +1546,8 @@ function applyState(st){
    even when the heavy image Save fails or goes stale. These helpers let us re-apply that fresh
    metadata onto a reloaded session so folder additions are never lost. Matched by a stable key. */
 function metaKey(p){ return (p.name||"")+"|"+(p.size!=null?p.size:"")+"|"+(p.lat!=null?Number(p.lat).toFixed(5):"")+"|"+(p.lng!=null?Number(p.lng).toFixed(5):""); }
-function snapshotMeta(list){ const m=new Map(); for(const p of (list||[])){ const k=metaKey(p); if(!m.has(k)) m.set(k,{paths:Array.isArray(p.paths)?p.paths.slice():null, marks:Array.isArray(p.marks)&&p.marks.length?p.marks:null}); } return m; }
-function applyMetaMap(m){ if(!m||!m.size) return; for(const p of photos){ const meta=m.get(metaKey(p)); if(!meta) continue; if(meta.paths&&meta.paths.length) p.paths=meta.paths.slice(); if(meta.marks) p.marks=meta.marks; } }
+function snapshotMeta(list){ const m=new Map(); for(const p of (list||[])){ const k=metaKey(p); if(!m.has(k)) m.set(k,{paths:Array.isArray(p.paths)?p.paths.slice():null, vpaths:Array.isArray(p.vpaths)?p.vpaths.slice():null, marks:Array.isArray(p.marks)&&p.marks.length?p.marks:null}); } return m; }
+function applyMetaMap(m){ if(!m||!m.size) return; for(const p of photos){ const meta=m.get(metaKey(p)); if(!meta) continue; if(meta.paths&&meta.paths.length) p.paths=meta.paths.slice(); if(meta.vpaths&&meta.vpaths.length) p.vpaths=meta.vpaths.slice(); if(meta.marks) p.marks=meta.marks; } }
 
 /* persistence (IndexedDB): metadata only, cheap */
 function idbOpen(){ return new Promise((res,rej)=>{ const o=indexedDB.open("photomap",1); o.onupgradeneeded=()=>o.result.createObjectStore("kv"); o.onsuccess=()=>res(o.result); o.onerror=()=>rej(o.error); }); }
@@ -1572,7 +1621,7 @@ function applyShared(P){
   if(!P||!Array.isArray(P.p))return false;
   if(boxRect){map.removeLayer(boxRect);boxRect=null;} boxBounds=null; setAreaBtn();
   photos=[]; nextId=1; undoStack=[];
-  P.p.forEach(m=>photos.push({id:nextId++,path:m[2]||"",name:m[2]||"",paths:m[2]?[m[2]]:[],file:null,size:null,isHeic:false,thumb:null,lat:(m[0]!=null?m[0]:null),lng:(m[1]!=null?m[1]:null),time:m[3]||null,dir:null,marks:[]}));
+  P.p.forEach(m=>photos.push({id:nextId++,path:m[2]||"",name:m[2]||"",paths:m[2]?[m[2]]:[],vpaths:[],file:null,size:null,isHeic:false,thumb:null,lat:(m[0]!=null?m[0]:null),lng:(m[1]!=null?m[1]:null),time:m[3]||null,dir:null,marks:[]}));
   buildDateFilter(); buildCluster(); renderClusters(); updateStats();
   if(P.vw){ try{ map.setView([P.vw[0],P.vw[1]],P.vw[2]); }catch(e){} }
   updateGallery();
