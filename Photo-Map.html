@@ -101,6 +101,8 @@
   .folder-pop .fp-tag.on{opacity:1;background:var(--accent-tint);border-color:var(--accent);}
   .folder-pop .fp-create{font:600 11px var(--font);color:#fff;background:var(--accent);border:none;border-radius:6px;padding:5px 10px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .folder-pop .fp-create:hover{background:var(--accent2);}
+  .loadnote{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:1300;display:none;background:#ffffffee;border:1px solid var(--line2);border-radius:10px;padding:10px 18px;font:600 12px var(--font);color:var(--ink);box-shadow:0 6px 24px #1e1f2233;pointer-events:none;max-width:70%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .loadnote.show{display:block;}
   .map-tags{position:absolute;left:12px;bottom:14px;z-index:1000;display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:280px;max-height:48%;overflow:auto;scrollbar-width:none;}
   .map-tags::-webkit-scrollbar{display:none;}
   .map-tags.filtered .ip-tag{opacity:.35;}
@@ -300,8 +302,8 @@
     <button class="btn grpL" id="btnSaveAs" title="Choose a new .json to keep this project in (metadata only — no embedded photos)">Save As</button>
     <span class="savestat" id="saveStatus"></span>
     <span class="sep"></span>
-    <button class="btn grpR" id="btnClear">Clear Map</button>
-    <button class="btn grpR" id="btnNew">New</button>
+    <button class="btn grpR" id="btnClear">Clear</button>
+    <button class="btn grpR" id="btnRefresh" title="Re-scan the main photos folder: add what's new, remove what's gone">Refresh</button>
   </div>
   <input id="folderInput" type="file" webkitdirectory directory multiple style="display:none" />
   <input id="origInput" type="file" webkitdirectory directory multiple style="display:none" />
@@ -534,10 +536,11 @@ async function* walkDir(handle,prefix){
   }
 }
 async function loadFromHandle(handle, append, opts){
+  loadNote("Loading — scanning “"+(handle.name||"folder")+"”…");
   const items=[];
-  for await (const f of walkDir(handle,"")) if(IMG_RE.test(f.name)) items.push({name:f.name,path:f.path,getFile:()=>f.handle.getFile()});
+  for await (const f of walkDir(handle,"")) if(IMG_RE.test(f.name)){ items.push({name:f.name,path:f.path,getFile:()=>f.handle.getFile()}); if(items.length%200===0) loadNote("Loading — scanning “"+(handle.name||"folder")+"”… "+items.length.toLocaleString()+" photos found"); }
   await ingest(items, append);
-  if(opts&&opts.prune) pruneMissing(handle.name,new Set(items.map(it=>it.path)));
+  if(opts&&opts.prune){ loadNote("Loading — syncing removed files…"); pruneMissing(handle.name,new Set(items.map(it=>it.path))); loadNote(""); }
 }
 /* Disk-truth sync: a fresh scan of the root folder is authoritative for PHYSICAL paths. Any stored
    physical path no longer present is removed from that photo — so folder-derived tags disappear for
@@ -562,16 +565,29 @@ function pruneMissing(root, seenRaw){
 const progress=document.getElementById("progress");
 function rebuildSizeIndex(){ sizeIndex=new Map(); existingPaths=new Set(); for(const p of photos){ if(p.size!=null && !sizeIndex.has(p.size)) sizeIndex.set(p.size,p); for(const pa of physPaths(p)) existingPaths.add(pa); } }
 function addPath(p,path){ if(!path) return; if(!Array.isArray(p.paths)) p.paths=p.path?[p.path]:[]; if(!p.paths.includes(path)) p.paths.push(path); }
+/* Padded callout at the top of the map: "Loading (XX%) — <what is happening>". Gives feedback
+   during folder scans/change checks (which previously showed nothing) and makes auto-save visible. */
+let loadNoteEl=null, loadNoteTimer=null;
+function loadNote(msg){
+  if(!loadNoteEl){ loadNoteEl=document.createElement("div"); loadNoteEl.className="loadnote"; map.getContainer().appendChild(loadNoteEl); }
+  clearTimeout(loadNoteTimer);
+  if(!msg){ loadNoteEl.classList.remove("show"); return; }
+  loadNoteEl.textContent=msg; loadNoteEl.classList.add("show");
+}
+function flashLoadNote(msg,ms){ loadNote(msg); loadNoteTimer=setTimeout(()=>loadNote(""),ms||1400); }
 async function ingest(items, append){
-  if(!items.length){ alert("No image files found in that drop."); return; }
+  if(!items.length){ loadNote(""); alert("No image files found in that drop."); return; }
   const wasEmpty=photos.length===0;
   if(!append) clearAll(false);
+  loadNote("Loading (0%) — checking "+items.length.toLocaleString()+" file"+(items.length>1?"s":"")+" for changes");
   rebuildSizeIndex();   // de-dupe new files against everything already loaded (appends, JSON sessions)
-  let done=0; const total=items.length; progress.style.width="0%";
+  let done=0, lastPct=-1; const total=items.length; progress.style.width="0%";
   let idx=0; const POOL=6;
-  async function worker(){ while(idx<items.length){ const it=items[idx++]; try{ await processOne(it); }catch(e){} done++; progress.style.width=(done/total*100).toFixed(1)+"%"; } }
+  async function worker(){ while(idx<items.length){ const it=items[idx++]; try{ await processOne(it); }catch(e){} done++; progress.style.width=(done/total*100).toFixed(1)+"%";
+    const pct=Math.round(done/total*100); if(pct!==lastPct){ lastPct=pct; loadNote("Loading ("+pct+"%) — checking files & adding new photos"); } } }
   await Promise.all(Array.from({length:POOL},worker));
   finishLoad(!append || wasEmpty); setTimeout(()=>progress.style.width="0%",600);
+  loadNote("");
 }
 async function processOne(it){
   // Incremental load: a file already present (same path) is skipped without even reading it,
@@ -1362,13 +1378,19 @@ window.addEventListener("mousemove",e=>{ if(!resizing)return; let w=Math.max(220
 window.addEventListener("mouseup",()=>{ if(resizing){resizing=false;document.body.style.userSelect="";persistState();} });
 
 /* file ops */
-document.getElementById("btnClear").addEventListener("click",()=>clearAll(true));
-document.getElementById("btnNew").addEventListener("click",async()=>{
-  if(!confirm("Start a new map? This clears the current photos and the saved state."))return;
-  clearAll(true); saveFileHandle=null; jsonHandle=null; dirHandle=null; folderName="";
-  try{ await idbDel("lastState"); await idbDel("dirHandle"); await idbDel("jsonHandle"); await idbDel("lastFull"); }catch(e){}
-  hideBanner();
+document.getElementById("btnClear").addEventListener("click",()=>{
+  if(!photos.length){ clearAll(true); return; }
+  if(confirm("Clear the map?\n\nThis removes all loaded photos and tags from the current session. Your files on disk and your saved .json are NOT touched — Refresh or Open .JSON brings everything back.")) clearAll(true);
 });
+// Refresh = re-scan the remembered main photos folder: incremental add + removal sync.
+document.getElementById("btnRefresh").addEventListener("click",refreshFolder);
+async function refreshFolder(){
+  if(!dirHandle){ try{ dirHandle=await idbGet("dirHandle"); }catch(e){} }
+  if(dirHandle && await ensurePermission(dirHandle)){
+    invalidateDirIndex(); folderName=dirHandle.name; hideBanner();
+    await loadFromHandle(dirHandle,true,{prune:photos.length>0});
+  } else openFolder();   // no remembered folder yet -> pick one
+}
 function clearAll(redraw){
   if(boxRect){map.removeLayer(boxRect);boxRect=null;} boxBounds=null; setAreaBtn();
   photos=[]; nextId=1; cluster=null; markerLayer.clearLayers(); undoStack=[]; lightboxList=[]; lightboxIndex=0; sizeIndex=new Map();
@@ -1396,6 +1418,7 @@ function metaSignature(){ const st=serializeState(false); delete st.savedAt; if(
 function scheduleAutoSave(){ if(!jsonHandle||autoDisabled) return; autoPending=true; clearTimeout(autoTimer); autoTimer=setTimeout(()=>flushAutoSave(false),900); }
 async function flushAutoSave(interactive){
   if(!jsonHandle) return {status:"no-file"};
+  if(!photos.length) return {status:"empty"};   // never auto-write an EMPTY map over the .json (e.g. right after Clear)
   if(autoDisabled) return {status:"disabled"};   // a prior write failed -> stop auto-writing so we don't keep corrupting the file
   // Serialize once: `data` is what gets written; `sig` is the same object minus volatile fields.
   const st=serializeState(false); const data=JSON.stringify(st);
@@ -1406,6 +1429,7 @@ async function flushAutoSave(interactive){
   if(!(await ensureJsonWrite(interactive))){ setSaveStatus("Save pending…",""); autoPending=true; return {status:"no-permission"}; }
   autoBusy=true; autoPending=false; let err=null;
   setSaveStatus("Saving…","busy");
+  loadNote("Saving — writing "+(jsonHandle.name||loadedJsonName||".json")+"…");
   try{
     const w=await jsonHandle.createWritable(); await w.write(data); await w.close();
     const chk=await jsonHandle.getFile(); if(chk.size < data.length*0.9) throw new Error("the file did not write completely (network drive?) — got "+chk.size+" of "+data.length+" bytes");
@@ -1414,6 +1438,7 @@ async function flushAutoSave(interactive){
   catch(e){ err=e; console.warn("auto-save failed",e); autoDisabled=true; }   // stop auto-saving until the user picks a reliable location (Save As)
   autoBusy=false;
   setSaveStatus(err?"Save failed":("Saved · "+fmtSize(data.length)), err?"bad":"ok");
+  if(err) loadNote(""); else flashLoadNote("Saved ✓ · "+fmtSize(data.length));
   if(!err && autoPending) scheduleAutoSave();   // a change landed mid-write; write again
   return err?{status:"error",error:err}:{status:"saved"};
 }
@@ -1485,7 +1510,7 @@ document.getElementById("btnSaveAs").addEventListener("click",adoptNewJson);
 function downloadJson(data,name){ const blob=new Blob([data],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name||((folderName||"photomap")+".json"); a.click(); setTimeout(()=>URL.revokeObjectURL(url),500); }
 document.getElementById("btnOpenJson").addEventListener("click",async()=>{
   if(hasFSA&&window.showOpenFilePicker){
-    try{ const [h]=await window.showOpenFilePicker({types:[{description:"JSON",accept:{"application/json":[".json"]}}]}); saveFileHandle=h; jsonHandle=h; loadedJsonName=h.name; try{await idbSet("jsonHandle",h);}catch(e){} const f=await h.getFile(); loadStateText(await f.text()); fileLoadedOnce=true; lastWrittenSig=metaSignature(); setSaveStatus("Saved","ok"); armFileSync(); }
+    try{ const [h]=await window.showOpenFilePicker({types:[{description:"JSON",accept:{"application/json":[".json"]}}]}); saveFileHandle=h; jsonHandle=h; loadedJsonName=h.name; try{await idbSet("jsonHandle",h);}catch(e){} loadNote("Loading — reading "+(h.name||".json")+"…"); const f=await h.getFile(); loadStateText(await f.text()); loadNote(""); fileLoadedOnce=true; lastWrittenSig=metaSignature(); setSaveStatus("Saved","ok"); armFileSync(); }
     catch(err){ if(err&&err.name==="AbortError") return; console.warn(err); document.getElementById("jsonInput").click(); }   // FSA picker can fail (e.g. file:// pages); fall back to the file input
   } else document.getElementById("jsonInput").click();
 });
