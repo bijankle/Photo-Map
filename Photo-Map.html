@@ -47,6 +47,8 @@
   .sharerow .btn{flex:1;text-align:center;}
   .sep{width:1px;height:24px;background:var(--line);margin:0 2px;}
 
+  .savestat{font-family:var(--mono);font-size:10px;letter-spacing:.3px;color:var(--dim);white-space:nowrap;align-self:center;padding:0 4px;min-width:56px;}
+  .savestat.ok{color:var(--good);} .savestat.busy{color:var(--accent);} .savestat.bad{color:var(--bad);}
   .stats{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel);}
   .stat{padding:5px 12px;border-right:1px solid var(--line);min-width:66px;}
   .stat:last-child{border-right:none;}
@@ -275,6 +277,7 @@
     <button class="btn grpL" id="btnOpenJson">Open .JSON</button>
     <button class="btn grpL" id="btnSave" title="Changes auto-save onto the loaded .json — click to force an immediate save">Save</button>
     <button class="btn grpL" id="btnSaveAs" title="Choose a new .json to keep this project in (metadata only — no embedded photos)">Save As</button>
+    <span class="savestat" id="saveStatus"></span>
     <span class="sep"></span>
     <button class="btn grpR" id="btnClear">Clear Map</button>
     <button class="btn grpR" id="btnNew">New</button>
@@ -1169,15 +1172,24 @@ async function ensureJsonWrite(interactive){
   }catch(e){}
   return false;
 }
-let autoTimer=null, autoPending=false, autoBusy=false;
+let autoTimer=null, autoPending=false, autoBusy=false, lastWrittenSig=null;
+function setSaveStatus(txt,cls){ const el=document.getElementById("saveStatus"); if(!el)return; el.textContent=txt; el.className="savestat"+(cls?" "+cls:""); }
+// Content signature excluding volatile fields (timestamp, map view) so only real changes trigger a write.
+function metaSignature(){ const st=serializeState(false); delete st.savedAt; if(st.settings) delete st.settings.view; return JSON.stringify(st); }
 function scheduleAutoSave(){ if(!jsonHandle) return; autoPending=true; clearTimeout(autoTimer); autoTimer=setTimeout(()=>flushAutoSave(false),900); }
 async function flushAutoSave(interactive){
   if(!jsonHandle || autoBusy) return false;
-  if(!(await ensureJsonWrite(interactive))) return false;   // write permission needs a prior user-gesture grant
+  const sig=metaSignature();
+  // Nothing substantive changed since the last write -> skip entirely (no file rewrite, instant).
+  if(sig===lastWrittenSig){ autoPending=false; setSaveStatus("Saved","ok"); return true; }
+  if(!(await ensureJsonWrite(interactive))){ setSaveStatus("Save pending…",""); return false; }   // write permission needs a prior user-gesture grant
   autoBusy=true; autoPending=false; let ok=false;
-  try{ const data=serializeMeta(); const w=await jsonHandle.createWritable(); await w.write(data); await w.close(); loadedJsonName=jsonHandle.name||loadedJsonName; ok=true; }
+  setSaveStatus("Saving…","busy");
+  const data=serializeMeta();
+  try{ const w=await jsonHandle.createWritable(); await w.write(data); await w.close(); lastWrittenSig=sig; loadedJsonName=jsonHandle.name||loadedJsonName; ok=true; }
   catch(e){ console.warn("auto-save failed",e); }
   autoBusy=false;
+  setSaveStatus(ok?("Saved · "+fmtSize(data.length)):"Save failed", ok?"ok":"bad");
   if(autoPending) scheduleAutoSave();   // a change landed mid-write; write again
   return ok;
 }
@@ -1203,6 +1215,7 @@ async function loadFromJsonFile(fromGesture){
     if(photos.some(p=>p.thumb||p.preview)) hideBanner();
     buildCluster(); renderClusters(); updateGallery(); cacheFullSession();
     saveFileHandle=jsonHandle; loadedJsonName=jsonHandle.name||loadedJsonName; fileLoadedOnce=true;
+    lastWrittenSig=metaSignature(); setSaveStatus("Saved","ok");   // loaded state already matches the file on disk
     return true;
   }catch(e){ console.warn("open-from-file failed",e); return false; }
 }
@@ -1238,7 +1251,7 @@ document.getElementById("btnSaveAs").addEventListener("click",adoptNewJson);
 function downloadJson(data,name){ const blob=new Blob([data],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name||((folderName||"photomap")+".json"); a.click(); setTimeout(()=>URL.revokeObjectURL(url),500); }
 document.getElementById("btnOpenJson").addEventListener("click",async()=>{
   if(hasFSA&&window.showOpenFilePicker){
-    try{ const [h]=await window.showOpenFilePicker({types:[{description:"JSON",accept:{"application/json":[".json"]}}]}); saveFileHandle=h; jsonHandle=h; loadedJsonName=h.name; try{await idbSet("jsonHandle",h);}catch(e){} const f=await h.getFile(); loadStateText(await f.text()); fileLoadedOnce=true; armFileSync(); }
+    try{ const [h]=await window.showOpenFilePicker({types:[{description:"JSON",accept:{"application/json":[".json"]}}]}); saveFileHandle=h; jsonHandle=h; loadedJsonName=h.name; try{await idbSet("jsonHandle",h);}catch(e){} const f=await h.getFile(); loadStateText(await f.text()); fileLoadedOnce=true; lastWrittenSig=metaSignature(); setSaveStatus("Saved","ok"); armFileSync(); }
     catch(err){ if(err&&err.name==="AbortError") return; console.warn(err); document.getElementById("jsonInput").click(); }   // FSA picker can fail (e.g. file:// pages); fall back to the file input
   } else document.getElementById("jsonInput").click();
 });
