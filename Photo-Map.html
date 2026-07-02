@@ -388,7 +388,7 @@
 "use strict";
 
 /* config */
-const THUMB_PX = 270;     // gallery + hover — the ONLY cached rendition; full quality always streams from disk
+const THUMB_PX = 480, THUMB_Q = 0.72, THUMB_VER = 2;   // gallery + hover — the ONLY cached rendition; full quality always streams from disk
 
 /* state */
 let photos=[], nextId=1, folderName="";
@@ -528,7 +528,7 @@ async function processOne(it){
   let disp=file;
   if(p.isHeic){ try{ disp=await heicToJpegBlob(file,0.82); }catch(e){} }
   const imgs=await makePreviews(disp).catch(()=>({thumb:null}));
-  p.thumb=imgs.thumb;
+  p.thumb=imgs.thumb; p.tv=THUMB_VER;
 }
 function isHeic(file){ return /\.(heic|heif)$/i.test(file.name||"") || /heic|heif/i.test(file.type||""); }
 async function heicToJpegBlob(file,quality){
@@ -539,7 +539,7 @@ async function heicToJpegBlob(file,quality){
 function makePreviews(file){
   return new Promise(res=>{
     const url=URL.createObjectURL(file); const img=new Image();
-    img.onload=()=>{ const thumb=scaleToDataURL(img,THUMB_PX,0.6); URL.revokeObjectURL(url); res({thumb}); };
+    img.onload=()=>{ const thumb=scaleToDataURL(img,THUMB_PX,THUMB_Q); URL.revokeObjectURL(url); res({thumb}); };
     img.onerror=()=>{ URL.revokeObjectURL(url); res({thumb:null}); };
     img.src=url;
   });
@@ -789,23 +789,65 @@ async function getOriginalFileSilent(p){
 async function originalToURL(p,file){
   let src=file;
   if(p.isHeic||isHeic(file)){ try{ src=await heicToJpegBlob(file,0.92); }catch(e){} }
-  return URL.createObjectURL(src);
+  return {url:URL.createObjectURL(src), blob:src};
+}
+// Photos loaded before a thumb-quality bump keep their old thumbs (incremental load skips them);
+// regenerate organically from the original we just streamed for the viewer.
+async function maybeUpgradeThumb(p,blob){
+  if(p.tv===THUMB_VER || !blob) return;
+  try{ const imgs=await makePreviews(blob); if(imgs.thumb){ p.thumb=imgs.thumb; p.tv=THUMB_VER; cacheFullSession(); } }catch(e){}
+}
+/* Prefetch the surrounding originals (±5) so arrowing through photos has no lag: each is read
+   from disk and decoded ahead of time, then handed to the viewer instantly on navigation.
+   The CURRENT photo always has priority — a prefetch pass only starts after the photo on screen
+   has been displayed, every navigation immediately invalidates the old pass (checked after every
+   await), and entries falling out of the window are revoked to cap memory. */
+const PREFETCH_SPAN=5, prefetched=new Map();   // photo id -> {url,img}
+let prefetchRun=0;
+function prefetchWindowIds(){ const ids=new Set(); const n=lightboxList.length; if(!n) return ids; for(let d=-PREFETCH_SPAN; d<=PREFETCH_SPAN; d++){ ids.add(lightboxList[(lightboxIndex+d+n)%n].id); } return ids; }
+function clearPrefetch(){ prefetchRun++; for(const e of prefetched.values()) URL.revokeObjectURL(e.url); prefetched.clear(); }
+function takePrefetched(p){ const e=prefetched.get(p.id); if(!e) return null; prefetched.delete(p.id); return e.url; }
+async function prefetchNeighbors(){
+  const run=++prefetchRun, n=lightboxList.length; if(!n) return;
+  const keep=prefetchWindowIds();
+  for(const [id,e] of prefetched){ if(!keep.has(id)){ URL.revokeObjectURL(e.url); prefetched.delete(id); } }
+  // nearest-first, alternating forward/back: +1,-1,+2,-2,… so both directions are ready
+  const order=[]; for(let d=1;d<=PREFETCH_SPAN;d++){ order.push((lightboxIndex+d)%n); order.push((lightboxIndex-d+n)%n); }
+  for(const j of order){
+    if(run!==prefetchRun) return;   // user moved on; the newer pass owns the window
+    const p2=lightboxList[j]; if(!p2||p2===curPhoto()||prefetched.has(p2.id)) continue;
+    let f=null; try{ f=await getOriginalFileSilent(p2); }catch(e){}
+    if(run!==prefetchRun) return;
+    if(!f) continue;
+    try{
+      const r=await originalToURL(p2,f);
+      if(run!==prefetchRun || !prefetchWindowIds().has(p2.id)){ URL.revokeObjectURL(r.url); if(run!==prefetchRun) return; continue; }
+      const im=new Image(); im.src=r.url; if(im.decode) im.decode().catch(()=>{});   // warm the decoder off the main thread
+      prefetched.set(p2.id,{url:r.url,img:im});
+    }catch(e){}
+    await new Promise(r=>setTimeout(r,0));   // yield between neighbors so navigation clicks are never queued behind prefetch work
+  }
 }
 async function autoLoadFull(p){
   const tok=++fullToken;
+  const pre=takePrefetched(p);
+  if(pre){ swapViewer(pre); lbFull.checked=true; prefetchNeighbors(); return; }   // instant — already loaded & decoded
   let file=null; try{ file=await getOriginalFileSilent(p); }catch(e){}
-  if(!file) return;   // no silent access — thumb stays; the Full quality tick can prompt
-  const url=await originalToURL(p,file);
-  if(tok!==fullToken || curPhoto()!==p || !lb.classList.contains("open")){ URL.revokeObjectURL(url); return; }
-  swapViewer(url); lbFull.checked=true;
+  if(!file){ prefetchNeighbors(); return; }   // no silent access — thumb stays; the Full quality tick can prompt
+  const r=await originalToURL(p,file);
+  if(tok!==fullToken || curPhoto()!==p || !lb.classList.contains("open")){ URL.revokeObjectURL(r.url); return; }
+  swapViewer(r.url); lbFull.checked=true;
+  maybeUpgradeThumb(p,r.blob);
+  prefetchNeighbors();
 }
 async function showFull(p){
   const stay=()=>lightboxList[lightboxIndex]===p;
   let file=null; try{ file=await getOriginalFileSilent(p); }catch(e){}
   if(!file){ file=await fetchOriginal(p); if(file) p.file=file; }
   if(!file) return false;
-  const url=await originalToURL(p,file);
-  if(stay()&&lb.classList.contains("open")) swapViewer(url); else URL.revokeObjectURL(url);
+  const r=await originalToURL(p,file);
+  if(stay()&&lb.classList.contains("open")){ swapViewer(r.url); maybeUpgradeThumb(p,r.blob); prefetchNeighbors(); }
+  else URL.revokeObjectURL(r.url);
   return true;
 }
 function setupFit(natW,natH,keepView){
@@ -834,7 +876,7 @@ lbStage.addEventListener("wheel",e=>{ e.preventDefault(); const r=lbStage.getBou
 let panning=false,panX=0,panY=0;
 /* pointer handling consolidated in the markup engine below */
 function vStep(d){ if(!lightboxList.length)return; lightboxIndex=(lightboxIndex+d+lightboxList.length)%lightboxList.length; loadViewer(); }
-function closeViewer(){ if(!lb.classList.contains("open")) return; if(selMark) deselectText(); closeFileInfo(); if(typeof closeFolderPop==="function") closeFolderPop(); setMarkTool("none"); draft=null; polyPrev=null; clearHighlight(); lb.classList.remove("open"); if(curUrl){URL.revokeObjectURL(curUrl);curUrl=null;} lbImg.src=""; setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); },30); }
+function closeViewer(){ if(!lb.classList.contains("open")) return; if(selMark) deselectText(); closeFileInfo(); if(typeof closeFolderPop==="function") closeFolderPop(); setMarkTool("none"); draft=null; polyPrev=null; clearHighlight(); lb.classList.remove("open"); clearPrefetch(); if(curUrl){URL.revokeObjectURL(curUrl);curUrl=null;} lbImg.src=""; setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); },30); }
 document.getElementById("lbClose").addEventListener("click",closeViewer);
 document.getElementById("lbPrev").addEventListener("click",e=>{e.stopPropagation();vStep(-1);});
 document.getElementById("lbNext").addEventListener("click",e=>{e.stopPropagation();vStep(1);});
@@ -1234,7 +1276,7 @@ async function flushAutoSave(interactive){
 function overlayImagesFromCache(cache){
   if(!cache||!Array.isArray(cache.photos)) return; const m=new Map();
   for(const c of cache.photos){ const k=metaKey(c); if(!m.has(k)) m.set(k,c); }
-  for(const p of photos){ const c=m.get(metaKey(p)); if(!c) continue; if(!p.thumb&&c.thumb)p.thumb=c.thumb; }
+  for(const p of photos){ const c=m.get(metaKey(p)); if(!c) continue; if(!p.thumb&&c.thumb){ p.thumb=c.thumb; p.tv=c.tv||null; } }
 }
 // Load the latest straight from the .json file (the source of truth), using the cache only for images.
 let fileLoadedOnce=false, lastFullCache=null;
@@ -1315,7 +1357,7 @@ function serializeState(includeImages){
     photos: photos.map(p=>{ const o={path:p.path,name:p.name,lat:p.lat,lng:p.lng,time:p.time,dir:p.dir,size:p.size,isHeic:p.isHeic};
       if(Array.isArray(p.paths)&&p.paths.length&&(p.paths.length>1||p.paths[0]!==p.path))o.paths=p.paths;   // preserve folder membership (de-duped overlaps + moves)
       if(p.marks&&p.marks.length)o.marks=p.marks;
-      if(includeImages && p.thumb)o.thumb=p.thumb;   // thumbs are the only cached rendition — full quality always comes from disk
+      if(includeImages && p.thumb){ o.thumb=p.thumb; if(p.tv)o.tv=p.tv; }   // thumbs are the only cached rendition — full quality always comes from disk
       return o; })
   };
 }
@@ -1331,7 +1373,7 @@ function loadStateText(text){
 }
 function applyState(st){
   clearAll(false); folderName=st.folderName||"";
-  (st.photos||[]).forEach(m=>photos.push({id:nextId++,path:m.path,name:m.name,paths:Array.isArray(m.paths)&&m.paths.length?m.paths:(m.path?[m.path]:[]),file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,lat:m.lat,lng:m.lng,time:m.time,dir:m.dir,marks:Array.isArray(m.marks)?m.marks:[]}));   // old files' preview/full renditions are intentionally dropped — thumbs only
+  (st.photos||[]).forEach(m=>photos.push({id:nextId++,path:m.path,name:m.name,paths:Array.isArray(m.paths)&&m.paths.length?m.paths:(m.path?[m.path]:[]),file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,tv:m.tv||null,lat:m.lat,lng:m.lng,time:m.time,dir:m.dir,marks:Array.isArray(m.marks)?m.marks:[]}));   // old files' preview/full renditions are intentionally dropped — thumbs only
   const s=st.settings||{};
   if(s.thumb){ document.documentElement.style.setProperty("--thumb",s.thumb); document.getElementById("thumbSize").value=parseInt(s.thumb)||120; }
   if(s.galleryW) document.documentElement.style.setProperty("--gallery-w",s.galleryW);
