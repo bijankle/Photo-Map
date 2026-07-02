@@ -516,7 +516,7 @@ document.getElementById("folderInput").addEventListener("change",e=>{
 });
 async function openFolder(){
   if(hasFSA){
-    try{ dirHandle=await window.showDirectoryPicker(); await idbSet("dirHandle",dirHandle); folderName=dirHandle.name; await loadFromHandle(dirHandle,true); }
+    try{ dirHandle=await window.showDirectoryPicker(); invalidateDirIndex(); await idbSet("dirHandle",dirHandle); folderName=dirHandle.name; await loadFromHandle(dirHandle,true); }
     catch(err){ if(err&&err.name==="AbortError")return; console.warn("picker fallback",err); document.getElementById("folderInput").click(); }
   } else { document.getElementById("folderInput").click(); }
 }
@@ -881,7 +881,7 @@ async function getOriginalFileSilent(p){
   if(p.file) return p.file;
   const idx=fromIndex(p); if(idx){ p.file=idx; return idx; }
   if(!dirHandle){ try{ dirHandle=await idbGet("dirHandle"); }catch(e){} }
-  try{ if(dirHandle && (await dirHandle.queryPermission({mode:"read"}))==="granted"){ const f=await resolveFileByPath(dirHandle,p.path); if(f){ p.file=f; return f; } } }catch(e){}
+  try{ if(dirHandle && (await dirHandle.queryPermission({mode:"read"}))==="granted"){ const f=await resolveFromHandle(p); if(f){ p.file=f; return f; } } }catch(e){}
   return null;
 }
 async function originalToURL(p,file){
@@ -1258,26 +1258,53 @@ origInput.addEventListener("cancel",()=>{ if(origInputResolve){ const r=origInpu
 function connectViaInput(){ return new Promise(resolve=>{ origInputResolve=resolve; origInput.value=""; origInput.click(); }); }
 async function connectSourceFolder(){
   if(hasFSA && window.showDirectoryPicker){
-    try{ dirHandle=await window.showDirectoryPicker(); await idbSet("dirHandle",dirHandle); return true; }
+    try{ dirHandle=await window.showDirectoryPicker(); invalidateDirIndex(); await idbSet("dirHandle",dirHandle); return true; }
     catch(err){ if(err&&err.name==="AbortError") return false; }   // blocked (iframe) or unsupported -> fall back to folder input
   }
   return await connectViaInput();
 }
 function fromIndex(p){ if(!originalIndex) return null; return originalIndex.get(String(p.name||"").toLowerCase())||null; }
+/* Robust resolution from the remembered folder handle: try EVERY stored path for the photo (with
+   and without the root folder name), and if none resolve, fall back to a one-time filename index
+   built by walking the whole folder tree — so root-name mismatches, overlap-merged photos, and
+   reorganized subfolders all still resolve without ever re-prompting for the folder. */
+let dirIndex=null, dirIndexBuild=null;
+function invalidateDirIndex(){ dirIndex=null; dirIndexBuild=null; }
+async function buildDirIndex(){
+  if(dirIndex) return dirIndex;
+  if(!dirIndexBuild) dirIndexBuild=(async()=>{
+    const m=new Map();
+    try{ for await (const f of walkDir(dirHandle,"")) if(IMG_RE.test(f.name)){ const k=f.name.toLowerCase(); if(!m.has(k)) m.set(k,f.handle); } }catch(e){}
+    dirIndex=m; return m;
+  })();
+  return dirIndexBuild;
+}
+async function resolveFromHandle(p){
+  if(!dirHandle) return null;
+  const rootLow=(dirHandle.name||"").toLowerCase(), cands=[];
+  const push=v=>{ v=String(v||"").replace(/^\/+|\/+$/g,""); if(v&&!cands.includes(v)) cands.push(v); };
+  for(const pa of pathsOf(p)){ push(pa); const low=pa.toLowerCase();
+    if(rootLow&&low.startsWith(rootLow+"/")) push(pa.slice(rootLow.length+1));
+    else if(rootLow) push(dirHandle.name+"/"+pa); }
+  push(p.name);
+  for(const c of cands){ try{ const f=await resolveFileByPath(dirHandle,c); if(f) return f; }catch(e){} }
+  try{ const idx=await buildDirIndex(); const h=idx.get(String(p.name||"").toLowerCase()); if(h) return await h.getFile(); }catch(e){}
+  return null;
+}
 async function fetchOriginal(p){
   // 1. Already-indexed original from a connected folder input.
   const cached=fromIndex(p); if(cached) return cached;
-  // 2. File System Access handle (fast path-based resolution).
+  // 2. Remembered folder handle — re-grants permission with a small Allow dialog (no navigating),
+  //    then resolves via every known path and the filename index.
   if(!dirHandle){ try{ dirHandle=await idbGet("dirHandle"); }catch(e){} }
   if(dirHandle && await ensurePermission(dirHandle)){
-    try{ return await resolveFileByPath(dirHandle,p.path); }catch(e){}
+    const f=await resolveFromHandle(p); if(f) return f;
   }
-  // 3. Ask the user to connect the source folder (picker, or folder input if blocked).
+  // 3. Only when the folder is truly unknown or missing: ask the user to connect it.
   const connected=await connectSourceFolder();
   if(!connected) return null;
   const idx=fromIndex(p); if(idx) return idx;
-  if(dirHandle){ try{ return await resolveFileByPath(dirHandle,p.path); }catch(e){} }
-  return null;
+  return await resolveFromHandle(p);
 }
 async function resolveFileByPath(dir,path){
   let segs=String(path).split("/").filter(Boolean);
