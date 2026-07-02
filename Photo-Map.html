@@ -101,8 +101,6 @@
   .folder-pop .fp-tag.on{opacity:1;background:var(--accent-tint);border-color:var(--accent);}
   .folder-pop .fp-create{font:600 11px var(--font);color:#fff;background:var(--accent);border:none;border-radius:6px;padding:5px 10px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .folder-pop .fp-create:hover{background:var(--accent2);}
-  .loadnote{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:1300;display:none;background:#ffffffee;border:1px solid var(--line2);border-radius:10px;padding:10px 18px;font:600 12px var(--font);color:var(--ink);box-shadow:0 6px 24px #1e1f2233;pointer-events:none;max-width:70%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .loadnote.show{display:block;}
   .map-tags{position:absolute;left:12px;bottom:14px;z-index:1000;display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:280px;max-height:48%;overflow:auto;scrollbar-width:none;}
   .map-tags::-webkit-scrollbar{display:none;}
   .map-tags.filtered .ip-tag{opacity:.35;}
@@ -154,7 +152,16 @@
   .tbed .tbctrl .tbdel:hover{background:#b83436;border-color:#b83436;color:#fff;}
   .tbed .tbctrl .tbmove{color:var(--dim);font-size:13px;padding:0 5px;cursor:grab;}
   .tbed .tbctrl .tbmove:active{cursor:grabbing;}
-  .progress{position:absolute;top:0;left:0;height:3px;background:var(--accent);width:0;z-index:1300;box-shadow:0 0 8px var(--accent);transition:width .2s;}
+  .projhead{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:1300;display:none;flex-direction:column;align-items:stretch;background:#ffffffee;border:1px solid var(--line2);border-radius:10px;padding:9px 16px;box-shadow:0 6px 24px #1e1f2233;max-width:72%;pointer-events:none;}
+  .projhead.show{display:flex;}
+  .ph-track{display:none;height:4px;border-radius:3px;background:var(--line);overflow:hidden;margin:0 0 7px;}
+  .projhead.loading .ph-track{display:block;}
+  .projhead .progress{position:static;display:block;height:100%;width:0;background:var(--accent);border-radius:3px;transition:width .15s;box-shadow:none;}
+  .ph-line{font:600 13px var(--font);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ph-name{font-size:14px;}
+  .ph-saved{color:var(--muted);font-weight:500;}
+  .ph-load{color:var(--accent);}
+  .progress{display:none;}
 
   .splitter{width:7px;flex:0 0 7px;cursor:col-resize;background:var(--line);position:relative;z-index:3;}
   .splitter::after{content:"";position:absolute;inset:0 2px;background:var(--line2);border-radius:2px;}
@@ -427,7 +434,7 @@ let dateMin=null,dateMax=null,dateLo=null,dateHi=null;
 let lightboxList=[], lightboxIndex=0;
 let undoStack=[];
 let cluster=null;
-let saveFileHandle=null, jsonHandle=null, dirHandle=null, loadedJsonName=null;
+let saveFileHandle=null, jsonHandle=null, dirHandle=null, loadedJsonName=null, lastSavedAt=null;
 let bannerAction=null;
 let boxBounds=null,boxRect=null,drawing=false,drawStart=null,tempRect=null,drawMode=null;
 let measuring=false, measurePts=[], measureLayer=null;
@@ -565,15 +572,25 @@ function pruneMissing(root, seenRaw){
 const progress=document.getElementById("progress");
 function rebuildSizeIndex(){ sizeIndex=new Map(); existingPaths=new Set(); for(const p of photos){ if(p.size!=null && !sizeIndex.has(p.size)) sizeIndex.set(p.size,p); for(const pa of physPaths(p)) existingPaths.add(pa); } }
 function addPath(p,path){ if(!path) return; if(!Array.isArray(p.paths)) p.paths=p.path?[p.path]:[]; if(!p.paths.includes(path)) p.paths.push(path); }
-/* Padded callout at the top of the map: "Loading (XX%) — <what is happening>". Gives feedback
-   during folder scans/change checks (which previously showed nothing) and makes auto-save visible. */
-let loadNoteEl=null, loadNoteTimer=null;
-function loadNote(msg){
-  if(!loadNoteEl){ loadNoteEl=document.createElement("div"); loadNoteEl.className="loadnote"; map.getContainer().appendChild(loadNoteEl); }
-  clearTimeout(loadNoteTimer);
-  if(!msg){ loadNoteEl.classList.remove("show"); return; }
-  loadNoteEl.textContent=msg; loadNoteEl.classList.add("show");
+/* Project header at the top of the map: the .json name this session is based on, its last-saved
+   time, and — while anything is busy — a compact load bar just above the text plus
+   "Loading (XX%) — <what is happening>" appended after the title. */
+let projHeadEl=null, loadNoteTimer=null, projLoadMsg="";
+function renderProjHead(){
+  if(!projHeadEl){
+    projHeadEl=document.createElement("div"); projHeadEl.className="projhead";
+    projHeadEl.innerHTML='<div class="ph-track"></div><div class="ph-line"><span class="ph-name"></span><span class="ph-saved"></span><span class="ph-load"></span></div>';
+    map.getContainer().appendChild(projHeadEl);
+    const pr=document.getElementById("progress"); if(pr) projHeadEl.querySelector(".ph-track").appendChild(pr);   // the load bar lives just above the header text, sized to the callout
+  }
+  const has=!!(loadedJsonName||folderName||photos.length||projLoadMsg);
+  projHeadEl.classList.toggle("show",has); if(!has) return;
+  projHeadEl.querySelector(".ph-name").textContent=loadedJsonName||folderName||"PhotoMap";
+  projHeadEl.querySelector(".ph-saved").textContent=lastSavedAt?(" (last saved "+fmtDate(lastSavedAt)+")"):" (not saved yet)";
+  projHeadEl.querySelector(".ph-load").textContent=projLoadMsg?(" — "+projLoadMsg):"";
+  projHeadEl.classList.toggle("loading",!!projLoadMsg);
 }
+function loadNote(msg){ projLoadMsg=msg||""; clearTimeout(loadNoteTimer); renderProjHead(); }
 function flashLoadNote(msg,ms){ loadNote(msg); loadNoteTimer=setTimeout(()=>loadNote(""),ms||1400); }
 async function ingest(items, append){
   if(!items.length){ loadNote(""); alert("No image files found in that drop."); return; }
@@ -1433,7 +1450,7 @@ async function flushAutoSave(interactive){
   try{
     const w=await jsonHandle.createWritable(); await w.write(data); await w.close();
     const chk=await jsonHandle.getFile(); if(chk.size < data.length*0.9) throw new Error("the file did not write completely (network drive?) — got "+chk.size+" of "+data.length+" bytes");
-    lastWrittenSig=sig; loadedJsonName=jsonHandle.name||loadedJsonName;
+    lastWrittenSig=sig; loadedJsonName=jsonHandle.name||loadedJsonName; lastSavedAt=Date.now();
   }
   catch(e){ err=e; console.warn("auto-save failed",e); autoDisabled=true; }   // stop auto-saving until the user picks a reliable location (Save As)
   autoBusy=false;
@@ -1544,6 +1561,7 @@ function loadStateText(text){
 }
 function applyState(st){
   clearAll(false); folderName=st.folderName||"";
+  if(st.savedAt){ const t=Date.parse(st.savedAt); if(!isNaN(t)) lastSavedAt=t; }
   (st.photos||[]).forEach(m=>{
     let phys=Array.isArray(m.paths)?m.paths:(m.path?[m.path]:[]), vp=Array.isArray(m.vpaths)?m.vpaths:null;
     if(vp===null){   // legacy file (mixed paths): keep the anchor path as physical, treat extras as virtual so tags can never be wrongly pruned
@@ -1565,7 +1583,7 @@ function applyState(st){
   buildCluster(); renderClusters(); updateStats(); updateGallery(); map.invalidateSize();
   if(s.view && Array.isArray(s.view.center)) map.setView(s.view.center, (s.view.zoom!=null?s.view.zoom:map.getZoom()));
   else fitToPhotos();
-  maybeOfferReconnect(); cacheFullSession();
+  maybeOfferReconnect(); cacheFullSession(); renderProjHead();
 }
 /* Folder membership + markup are lightweight and are autosaved (lastState) on every change,
    even when the heavy image Save fails or goes stale. These helpers let us re-apply that fresh
@@ -1683,8 +1701,9 @@ function parseShareHash(){
   // The file existed but couldn't be read (likely a damaged/partial write on the network drive) yet the
   // browser cache restored the session — tell the user and offer to Save As to a fresh, reliable file.
   if(fileCorrupt && photos.length){ autoDisabled=true; showBanner('Could not read <b>'+esc(loadedJsonName||(jsonHandle&&jsonHandle.name)||"the project file")+'</b> — it looks damaged. Your last session was restored from this browser. Click to <b>Save As</b> a fresh file (pick a LOCAL folder).', ()=>{ hideBanner(); adoptNewJson(); }); }
-  if(jsonHandle) armFileSync();   // on first interaction, pull the latest from the file and enable auto-save
+  if(jsonHandle){ if(!loadedJsonName) loadedJsonName=jsonHandle.name||null; armFileSync(); }   // on first interaction, pull the latest from the file and enable auto-save
   if(dirHandle){ try{ if((await dirHandle.queryPermission({mode:"read"}))!=="granted") armFolderPermission(); }catch(e){} }
+  renderProjHead();
 })();
 </script>
 </body>
