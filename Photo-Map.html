@@ -356,7 +356,7 @@
     </div>
     <div class="ip-tagcol">
       <div class="ip-tags" id="lbTags"></div>
-      <button class="lb-textbtn" id="lbFolder" title="All tags — search or create">Add tag &#9652;</button>
+      <button class="lb-textbtn" id="lbFolder" title="All tags — search, toggle, or create">Add/remove tag &#9652;</button>
     </div>
     <div class="ip-fullbox">
       <label class="lb-fullchk" id="lbFullWrap"><input type="checkbox" id="lbFull" /><span>Full quality</span></label>
@@ -1440,6 +1440,7 @@ function loadStateText(text){
 function applyState(st){
   clearAll(false); folderName=st.folderName||"";
   (st.photos||[]).forEach(m=>photos.push({id:nextId++,path:m.path,name:m.name,paths:Array.isArray(m.paths)&&m.paths.length?m.paths:(m.path?[m.path]:[]),file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,lat:m.lat,lng:m.lng,time:m.time,dir:m.dir,marks:Array.isArray(m.marks)?m.marks:[]}));   // baked full-quality renditions from old files are intentionally dropped
+  if(lastFullCache) overlayImagesFromCache(lastFullCache);   // the .json is metadata-only — fill thumbs/previews back in from the browser image cache
   const s=st.settings||{};
   if(s.thumb){ document.documentElement.style.setProperty("--thumb",s.thumb); document.getElementById("thumbSize").value=parseInt(s.thumb)||120; }
   if(s.galleryW) document.documentElement.style.setProperty("--gallery-w",s.galleryW);
@@ -1472,7 +1473,7 @@ function persistState(){ clearTimeout(persistTimer); persistTimer=setTimeout(()=
 // Cache the image-bearing session to IndexedDB (browser-local, no .crswap) so reopen shows photos
 // instantly without reconnecting the folder. The .json file itself stays small (metadata only).
 let fullCacheTimer=null;
-function cacheFullSession(){ clearTimeout(fullCacheTimer); fullCacheTimer=setTimeout(()=>{ try{ if(photos.some(p=>p.thumb)) idbSet("lastFull",serializeState(true)).catch(()=>{}); }catch(e){} },1500); }
+function cacheFullSession(){ clearTimeout(fullCacheTimer); fullCacheTimer=setTimeout(()=>{ try{ if(photos.some(p=>p.thumb)){ const st=serializeState(true); lastFullCache=st; idbSet("lastFull",st).catch(()=>{}); } }catch(e){} },1500); }   // keep the in-memory cache reference fresh so a later Open .JSON in the same session can restore images
 
 /* banner */
 function showBanner(html,action){ document.getElementById("rcMsg").innerHTML=html; bannerAction=action; document.getElementById("reconnect").classList.add("show"); }
