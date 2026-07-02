@@ -82,19 +82,21 @@
   .ip-iconbtn:hover .pct{color:inherit;}
   .ip-iconbtn:hover{color:var(--accent);border-color:var(--accent);}
   .ip-iconbtn.ok{background:var(--good);border-color:var(--good);color:#fff;}
-  .folder-pop{display:none;position:absolute;bottom:52px;left:12px;z-index:7;width:340px;max-width:calc(100% - 24px);max-height:60vh;overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:0 12px 40px #1e1f2233;padding:10px;}
+  .folder-pop{display:none;position:absolute;bottom:52px;left:12px;z-index:7;max-width:calc(100% - 24px);align-items:flex-end;gap:8px;background:none;border:none;box-shadow:none;padding:0;overflow:visible;}
+  .folder-pop .fp-searchbox{flex:none;width:240px;background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:0 12px 40px #1e1f2233;padding:10px;}
+  .folder-pop .fp-results{display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-height:46vh;overflow:auto;scrollbar-width:none;padding-bottom:2px;}
+  .folder-pop .fp-results::-webkit-scrollbar{display:none;}
+  .folder-pop .fp-hint{font:600 9px var(--mono);letter-spacing:1px;text-transform:uppercase;color:#ffffff;background:#1e1f2299;border-radius:5px;padding:2px 7px;}
   .folder-pop .fp-title{font:600 12px var(--font);color:var(--ink);margin:0 2px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .folder-pop .fp-search{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;font:12px var(--mono);color:var(--text);padding:6px 22px 6px 9px;}
   .folder-pop .fp-search:focus{outline:none;border-color:var(--accent);}
-  .folder-pop .xwrap{margin:0 0 8px;}
+  .folder-pop .xwrap{margin:0;}
   .xwrap{position:relative;display:flex;flex:1;min-width:0;}
   .xwrap input{flex:1;width:100%;padding-right:22px;}
   .xclear{position:absolute;right:2px;top:50%;transform:translateY(-50%);border:none;background:none;color:var(--dim);font-size:14px;line-height:1;cursor:pointer;padding:2px 5px;display:none;}
   .xwrap.has .xclear{display:block;}
   .xclear:hover{color:var(--bad);}
-  .folder-pop .fp-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
-  .folder-pop .fp-empty{font:12px var(--font);color:var(--dim);padding:4px 2px;}
-  .folder-pop .fp-tag{font:600 11px var(--font);color:var(--accent2);background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:4px 10px;cursor:pointer;opacity:.45;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:opacity .12s,border-color .12s;}
+  .folder-pop .fp-tag{font:600 11px var(--font);color:var(--accent2);background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:4px 10px;cursor:pointer;opacity:.7;box-shadow:0 2px 8px #1e1f221a;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:opacity .12s,border-color .12s;}
   .folder-pop .fp-tag:hover{border-color:var(--accent);opacity:.85;}
   .folder-pop .fp-tag.on{opacity:1;background:var(--accent-tint);border-color:var(--accent);}
   .folder-pop .fp-create{font:600 11px var(--font);color:#fff;background:var(--accent);border:none;border-radius:6px;padding:5px 10px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -123,6 +125,8 @@
   .ip-tags.filtered .ip-tag.on{opacity:1;border-color:var(--accent);background:var(--accent-tint);}
   .ip-tag.clearall{opacity:1!important;color:var(--bad);}
   .ip-tag.clearall:hover{border-color:var(--bad);}
+  .ip-tag .tag-x{margin-right:7px;color:var(--faint);font-style:normal;font-weight:700;cursor:pointer;}
+  .ip-tag .tag-x:hover{color:var(--bad);}
   .ip-fullbox{position:absolute;right:12px;bottom:14px;z-index:6;}
   .ip-marktools{position:absolute;top:46px;left:12px;z-index:6;display:flex;flex-direction:column;gap:5px;background:#ffffffe8;border:1px solid var(--line);padding:8px 6px;border-radius:10px;max-height:calc(100% - 120px);overflow:auto;scrollbar-width:none;box-shadow:0 4px 16px #1e1f2226;}
   .ip-marktools::-webkit-scrollbar{display:none;}
@@ -232,8 +236,14 @@
   .leaflet-bar a:hover{background:var(--panel2)!important;color:var(--accent)!important;}
   .leaflet-control-attribution{background:#ffffffcc!important;color:var(--dim)!important;font-size:10px;}
   .leaflet-control-attribution a{color:var(--muted)!important;}
-  .leaflet-control-scale-line{background:#ffffffe8!important;border:1px solid var(--line2)!important;border-top:none!important;color:var(--muted)!important;font:600 10px var(--mono)!important;letter-spacing:.4px;padding:3px 8px!important;border-radius:0 0 7px 7px;box-shadow:0 2px 8px #1e1f221a;text-shadow:none!important;}
-  .leaflet-control-scale-line:not(:first-child){border-top:1px solid var(--line2)!important;margin-top:-1px;border-radius:7px 7px 0 0;}
+  .scalebar{background:#ffffffee;border:1px solid var(--line2);border-radius:8px;padding:6px 14px 6px;box-shadow:0 2px 10px #1e1f221f;pointer-events:none;}
+  .scalebar .sb-title{font:600 10px var(--font);color:var(--ink);margin-bottom:3px;}
+  .scalebar .sb-bar{display:flex;height:7px;border:1px solid var(--ink);box-sizing:border-box;background:#fff;}
+  .scalebar .sb-bar i{display:block;height:100%;}
+  .scalebar .sb-bar i.dark{background:var(--ink);}
+  .scalebar .sb-bar i.lite{background:#fff;}
+  .scalebar .sb-labels{position:relative;height:11px;margin-top:2px;font:600 9px var(--mono);color:var(--ink);}
+  .scalebar .sb-labels span{position:absolute;top:0;transform:translateX(-50%);line-height:1;white-space:nowrap;}
 
   .lightbox{position:fixed;inset:0;z-index:3000;display:none;align-items:center;justify-content:center;background:rgba(28,30,38,.55);backdrop-filter:blur(3px);}
   .lightbox.open{display:flex;animation:fade .15s ease;}
@@ -366,7 +376,7 @@
     </div>
     <div class="ip-tagcol">
       <div class="ip-tags" id="lbTags"></div>
-      <button class="lb-textbtn" id="lbFolder" title="All tags — search, toggle, or create">Add/remove tag &#9652;</button>
+      <button class="lb-textbtn" id="lbFolder" title="Type to find existing tags or create a new one">Search/add tag &#9652;</button>
     </div>
     <div class="ip-fullbox">
       <label class="lb-fullchk" id="lbFullWrap"><input type="checkbox" id="lbFull" /><span>Full quality</span></label>
@@ -444,7 +454,28 @@ const google=L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",{s
 const esri=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:24,maxNativeZoom:19,attribution:"Imagery &copy; Esri, Maxar, Earthstar Geographics"});
 const none=L.layerGroup();
 L.control.layers({ "Google":google, "Esri":esri, "None":none },null,{position:"topright",collapsed:false}).addTo(map);
-L.control.scale({position:"bottomright",imperial:false,metric:true,maxWidth:170}).addTo(map);
+/* USGS-style scale bar on a white pad: alternating black/white segments with 0 / ¼ / ½ / full
+   labels. Meters, switching to kilometers once the bar total reaches 1000 m. */
+(function(){
+  const ctl=L.control({position:"bottomright"}); let el=null;
+  ctl.onAdd=function(){ el=L.DomUtil.create("div","scalebar"); el.innerHTML='<div class="sb-title"></div><div class="sb-bar"><i class="dark" style="width:25%"></i><i class="lite" style="width:25%"></i><i class="dark" style="width:50%"></i></div><div class="sb-labels"></div>'; return el; };
+  ctl.addTo(map);
+  function niceTotal(maxMeters){ const p=Math.pow(10,Math.floor(Math.log10(maxMeters))); for(const m of [4,2,1]){ if(m*p<=maxMeters) return m*p; } return p; }
+  function fmt(v,km){ const n=km?v/1000:v; return (Math.round(n*100)/100).toLocaleString(); }
+  function updateScale(){
+    if(!el) return;
+    const y=Math.round(map.getSize().y/2), maxPx=170;
+    const maxMeters=map.distance(map.containerPointToLatLng([10,y]),map.containerPointToLatLng([10+maxPx,y]));
+    if(!(maxMeters>0)) return;
+    const total=niceTotal(maxMeters), km=total>=1000;
+    const px=Math.max(60,Math.round(maxPx*total/maxMeters));
+    el.querySelector(".sb-title").textContent=km?"Kilometers":"Meters";
+    el.querySelector(".sb-bar").style.width=px+"px";
+    const lab=el.querySelector(".sb-labels"); lab.style.width=px+"px";
+    lab.innerHTML='<span style="left:0">0</span><span style="left:25%">'+fmt(total/4,km)+'</span><span style="left:50%">'+fmt(total/2,km)+'</span><span style="left:100%">'+fmt(total,km)+'</span>';
+  }
+  map.on("move zoom moveend zoomend resize",updateScale); setTimeout(updateScale,0);
+})();
 const markerLayer=L.layerGroup().addTo(map);
 const highlightLayer=L.layerGroup().addTo(map);
 map.keyboard.disable();
@@ -469,11 +500,12 @@ let hlMarker=null;
 function highlightDot(p){ clearHighlight(); if(!p||p.lat==null)return; hlMarker=L.circleMarker([p.lat,p.lng],{radius:13,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.45,interactive:false,className:"hl-dot"}).addTo(highlightLayer); }
 function clearHighlight(){ if(hlMarker){ highlightLayer.removeLayer(hlMarker); hlMarker=null; } }
 function highlightCurrent(){ if(lb.classList.contains("open")&&lightboxList[lightboxIndex]) highlightDot(lightboxList[lightboxIndex]); else clearHighlight(); }
-// Keep the dots in sync immediately, but debounce the heavy work (full gallery DOM rebuild +
-// state serialization) until the map has settled — wheel/pinch zooms fire many end events in a
-// burst, and rebuilding the gallery for each one is what caused zoom lag.
+// Zoom/pan smoothness: dots re-clustering, the gallery rebuild, and state persistence all wait
+// until the map has been completely still for 1 second — any motion resets the clock. Existing
+// dots keep tracking their positions during the motion; only the re-grouping is deferred.
 let mapIdleTimer=null;
-map.on("moveend zoomend",()=>{ renderClusters(); clearTimeout(mapIdleTimer); mapIdleTimer=setTimeout(()=>{ updateGallery(); persistState(); },180); });
+const onMapMotion=()=>{ clearTimeout(mapIdleTimer); mapIdleTimer=setTimeout(()=>{ renderClusters(); updateGallery(); persistState(); },1000); };
+map.on("move zoom movestart zoomstart moveend zoomend",onMapMotion);
 
 /* proximity clustering */
 // Shared search predicate (folder path + filename; space-separated terms are AND) used by
@@ -504,7 +536,11 @@ function renderClusters(){
       const cnt=c.properties.point_count, size=cnt<10?34:cnt<100?42:cnt<1000?52:62, fs=cnt<100?13:cnt<1000?12:11;
       const icon=L.divIcon({className:"",html:'<div class="cl-bubble" style="width:'+size+'px;height:'+size+'px;font-size:'+fs+'px">'+c.properties.point_count_abbreviated+'</div>',iconSize:[size,size],iconAnchor:[size/2,size/2]});
       const m=L.marker([lat,lng],{icon}); const cid=c.properties.cluster_id;
-      m.on("click",()=>{ let ez=Math.min(cluster.getClusterExpansionZoom(cid),map.getMaxZoom()); map.flyTo([lat,lng],ez,{duration:.45}); });
+      m.on("click",()=>{   // zoom to the extent of ALL the photos in this cluster (like a zoom window on just them)
+        try{ const leaves=cluster.getLeaves(cid,Infinity);
+          if(leaves.length){ map.flyToBounds(L.latLngBounds(leaves.map(f=>[f.geometry.coordinates[1],f.geometry.coordinates[0]])),{padding:[46,46],maxZoom:19,duration:.45}); return; } }catch(err){}
+        const ez=Math.min(cluster.getClusterExpansionZoom(cid),map.getMaxZoom()); map.flyTo([lat,lng],ez,{duration:.45});   // fallback
+      });
       markerLayer.addLayer(m);
     } else {
       const p=photoById(c.properties.pid); if(!p) continue;
@@ -901,17 +937,21 @@ function loadViewer(){
 /* Tag pills. Clicking toggles that tag in the active filter set — several tags can be active at
    once and photos must be in ALL of them (overlap). Active = full opacity, rest dimmed. Works the
    same from the photo's pills and the map rail. */
-function tagPillsHtml(folders){
+function tagPillsHtml(folders, removable){
   let html="";
   for(const f of folders){ const on=tagFilters.has(f);
-    html+='<button class="ip-tag'+(on?" on":"")+'" data-folder="'+esc(f)+'" title="'+esc(f)+'">'+esc(folderLabel(f))+'</button>'; }
+    html+='<button class="ip-tag'+(on?" on":"")+'" data-folder="'+esc(f)+'" title="'+esc(f)+' — click to filter, × to remove">'+(removable?'<b class="tag-x" title="Remove this tag from the photo">&times;</b>':"")+esc(folderLabel(f))+'</button>'; }
   if(tagFilters.size>1) html+='<button class="ip-tag clearall" title="Remove all tag filters">Clear filters &times;</button>';
   return html;
 }
-function wireTagPills(el){
+function wireTagPills(el, removable){
   el.querySelectorAll(".ip-tag").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation();
-    if(b.classList.contains("clearall")){ tagFilters.clear(); refreshTagFilter(); }
-    else toggleTagFilter(b.dataset.folder);
+    if(b.classList.contains("clearall")){ tagFilters.clear(); refreshTagFilter(); return; }
+    if(removable && e.target.closest && e.target.closest(".tag-x")){   // the little × removes the tag from THIS photo
+      const p=curPhoto(); if(!p) return;
+      const before=snapshotTags(p); setPhotoFolder(p,b.dataset.folder,false); recordTagChange(p,before); afterFolderChange(); return;
+    }
+    toggleTagFilter(b.dataset.folder);
   }));
 }
 function refreshTagFilter(){ buildCluster(); renderClusters(); updateGallery(); renderPhotoTags(curPhoto()); }
@@ -924,9 +964,9 @@ function renderPhotoTags(p){
   if(!p){ el.innerHTML=""; return; }
   const fset=new Set(); for(const pa of pathsOf(p)) for(const c of expandFolders(pa)) fset.add(c);
   const folders=[...fset].sort((a,b)=>a.localeCompare(b));
-  el.innerHTML=tagPillsHtml(folders);
+  el.innerHTML=tagPillsHtml(folders,true);   // viewer pills carry the × so tags can be de-allocated in place
   el.classList.toggle("filtered",tagFilters.size>0);
-  wireTagPills(el);
+  wireTagPills(el,true);
 }
 /* Tag rail on the MAP (bottom-left): every existing tag, filter-only — shown ONLY while no large
    photo is open. No create here. */
@@ -1045,7 +1085,7 @@ const tbEditor=document.getElementById("tbEditor"), tbText=document.getElementBy
 let markColor="#ff3b30", markThick=5, selMark=null, selPhoto=null;
 function curPhoto(){ return lightboxList[lightboxIndex]; }
 function curMarks(){ const p=curPhoto(); if(!p)return []; if(!p.marks)p.marks=[]; return p.marks; }
-function afterMarkChange(){ redoMarks=[]; redrawMarks(); persistState(); }
+function afterMarkChange(){ const ms=curMarks(); if(ms.length&&!ms[ms.length-1]._t) ms[ms.length-1]._t=Date.now(); redoMarks=[]; redrawMarks(); persistState(); }   // stamp marks so undo can interleave chronologically with tag edits
 function setColor(c){ markColor=c; document.querySelectorAll("#markPalette .sw").forEach(b=>b.classList.toggle("on",b.dataset.c===c)); if(selMark){ selMark.c=c; tbText.style.color=c; tbText.style.borderColor=c; } }
 document.querySelectorAll("#markPalette .sw").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); setColor(b.dataset.c); }));
 const thickSlider=document.getElementById("thickSlider");
@@ -1241,9 +1281,9 @@ document.addEventListener("keydown",e=>{
     if(measuring&&measurePts.length){ measurePts.pop(); drawMeasure(); return; }
     const open=lb.classList.contains("open");
     if(open&&draft&&draft.t==="poly"&&draft.p.length){ draft.p.pop(); if(!draft.p.length){ draft=null; polyPrev=null; } redrawMarks(); return; }
-    if(open&&e.shiftKey){ if(redoMarks.length){ curMarks().push(redoMarks.pop()); redrawMarks(); persistState(); } return; }
-    if(open){ const ms=curMarks(); if(ms.length){ redoMarks.push(ms.pop()); redrawMarks(); persistState(); } else undoDelete(); } else undoDelete(); return; }
-  if((e.ctrlKey||e.metaKey)&&(e.key==="y"||e.key==="Y")){ e.preventDefault(); if(lb.classList.contains("open")&&redoMarks.length){ curMarks().push(redoMarks.pop()); redrawMarks(); persistState(); } return; }
+    if(e.shiftKey){ redoLatest(open); return; }
+    undoLatest(open); return; }
+  if((e.ctrlKey||e.metaKey)&&(e.key==="y"||e.key==="Y")){ e.preventDefault(); redoLatest(lb.classList.contains("open")); return; }
   const tag=((e.target&&e.target.tagName)||"").toLowerCase();
   if(tag==="input"||tag==="select"||tag==="textarea") return;
   if(document.activeElement===tbText) return;
@@ -1290,39 +1330,73 @@ function closeFolderPop(){ folderPopShown=false; document.getElementById("folder
 // The linked/root folder name (e.g. "Photos") is redundant on every label — strip it for display.
 function rootPrefix(){ return (folderName||"").replace(/\/+$/,""); }
 function folderLabel(f){ const r=rootPrefix(); if(r&&f===r) return "(main folder)"; const segs=String(f||"").split("/").filter(Boolean); return segs.length?segs[segs.length-1]:f; }   // leaf name only; full path stays in the tooltip
-/* Tag callout (opened by the up-arrow): every existing tag as a pill, plus ONE input that both
-   searches and creates — typing filters the pills; if no exact match, a Create button appears. */
+/* Tag callout (Search/add tag): starts EMPTY — typing surfaces matching tags as pills in a column
+   to the RIGHT of the search box, rising upward (offset so it never covers the photo's own tag
+   stack). Click a result to toggle it on/off this photo; a Create pill appears when there is no
+   exact match. */
 function openFolderPop(){
   const p=curPhoto(); if(!p) return;
   const pop=document.getElementById("folderPop");
   const folders=allFolders();
-  let html='<div class="fp-title">Tags for '+esc(p.name)+'</div>';
-  html+='<span class="xwrap"><input type="text" class="fp-search" id="fpSearch" placeholder="Search or create tag…" autocomplete="off"/><button class="xclear" type="button" title="Clear">&times;</button></span>';
-  html+='<div class="fp-list" id="fpList">';
-  for(const f of folders){ const on=photoInFolder(p,f); html+='<button class="fp-tag'+(on?" on":"")+'" data-folder="'+esc(f)+'" title="'+esc(f)+'">'+esc(folderLabel(f))+'</button>'; }
-  html+='<button class="fp-create" id="fpCreate" style="display:none"></button>';
-  html+='<div class="fp-empty" id="fpEmpty" style="display:none">No tags yet — type a name to create one.</div>';
-  html+='</div>';
-  pop.innerHTML=html; pop.style.display="block"; folderPopShown=true;
-  pop.querySelectorAll(".fp-tag").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); const f=b.dataset.folder; const now=!photoInFolder(p,f); setPhotoFolder(p,f,now); b.classList.toggle("on",now); afterFolderChange(); }));
-  const search=pop.querySelector("#fpSearch"), createBtn=pop.querySelector("#fpCreate"), emptyEl=pop.querySelector("#fpEmpty");
+  pop.innerHTML='<div class="fp-searchbox"><div class="fp-title">Tags for '+esc(p.name)+'</div>'+
+    '<span class="xwrap"><input type="text" class="fp-search" id="fpSearch" placeholder="Search or create tag…" autocomplete="off"/><button class="xclear" type="button" title="Clear">&times;</button></span></div>'+
+    '<div class="fp-results" id="fpResults"></div>';
+  pop.style.display="flex"; folderPopShown=true;
+  const search=pop.querySelector("#fpSearch"), res=pop.querySelector("#fpResults");
   const addNew=raw=>{ let name=(raw||"").trim().replace(/^\/+|\/+$/g,""); if(!name) return;
     const r=rootPrefix(); if(r&&name.toLowerCase()!==r.toLowerCase()&&!name.toLowerCase().startsWith(r.toLowerCase()+"/")) name=r+"/"+name;   // new tags live inside the linked root
-    setPhotoFolder(p,name,true); afterFolderChange(); openFolderPop(); };
-  const doFilter=()=>{
-    const q=search.value.trim().toLowerCase(); let exact=false;
-    pop.querySelectorAll(".fp-tag").forEach(el=>{ const full=(el.dataset.folder||"").toLowerCase(), lbl=el.textContent.toLowerCase();
-      const show=!q||full.includes(q)||lbl.includes(q); el.style.display=show?"":"none";
-      if(q&&(lbl===q||full===q)) exact=true; });
-    createBtn.style.display=(q&&!exact)?"":"none";
-    if(q&&!exact) createBtn.textContent="+ Create “"+search.value.trim()+"”";
-    emptyEl.style.display=(!folders.length&&!q)?"":"none";
+    const before=snapshotTags(p); setPhotoFolder(p,name,true); recordTagChange(p,before); noteRecentTag(name); afterFolderChange(); openFolderPop(); };
+  const build=()=>{
+    const q=search.value.trim().toLowerCase();
+    let exact=false, html="";
+    if(!q){   // empty query: quick-picks — the last 3 tags assigned (bulk-tagging helper)
+      const rec=recentTags.filter(f=>folders.includes(f)).slice(0,3);
+      if(rec.length) html='<div class="fp-hint">Recent</div>'+rec.map(f=>'<button class="fp-tag'+(photoInFolder(p,f)?" on":"")+'" data-folder="'+esc(f)+'" title="'+esc(f)+'">'+esc(folderLabel(f))+'</button>').join("");
+    } else {
+      for(const f of folders){ const full=f.toLowerCase(), lbl=folderLabel(f).toLowerCase();
+        if(full.includes(q)||lbl.includes(q)){ if(lbl===q||full===q) exact=true;
+          html+='<button class="fp-tag'+(photoInFolder(p,f)?" on":"")+'" data-folder="'+esc(f)+'" title="'+esc(f)+'">'+esc(folderLabel(f))+'</button>'; } }
+      if(!exact) html+='<button class="fp-create" id="fpCreate">+ Create “'+esc(search.value.trim())+'”</button>';
+    }
+    res.innerHTML=html;
+    res.querySelectorAll(".fp-tag").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); const f=b.dataset.folder; const now=!photoInFolder(p,f); const before=snapshotTags(p); setPhotoFolder(p,f,now); recordTagChange(p,before); if(now) noteRecentTag(f); b.classList.toggle("on",now); afterFolderChange(); }));
+    const cb=res.querySelector("#fpCreate"); if(cb) cb.addEventListener("click",e=>{ e.stopPropagation(); addNew(search.value); });
   };
-  createBtn.addEventListener("click",e=>{ e.stopPropagation(); addNew(search.value); });
-  search.addEventListener("input",doFilter);
-  search.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); if(createBtn.style.display!=="none") addNew(search.value); } });
-  wireClearX(search); doFilter();
+  build();   // show the recent quick-picks immediately on open
+  search.addEventListener("input",build);
+  search.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); const cb=res.querySelector("#fpCreate"); if(cb) addNew(search.value); } });
+  wireClearX(search);
   setTimeout(()=>search.focus(),0);   // ready to type immediately
+}
+/* Undo/redo for tag changes. Each add/remove/create records a before/after snapshot of the photo's
+   tag memberships; Ctrl+Z / Ctrl+Y (or Ctrl+Shift+Z) walk the history. Interleaves with markup
+   undo by timestamp so "undo" always reverts whichever edit happened most recently. */
+let tagUndoStack=[], tagRedoStack=[], recentTags=[];   // recentTags: last folders assigned via the UI, newest first (speeds up bulk tagging)
+function noteRecentTag(f){ if(!f) return; recentTags=[f].concat(recentTags.filter(x=>x!==f)).slice(0,10); }
+function snapshotTags(p){ return {paths:physPaths(p).slice(), vpaths:virtPaths(p).slice()}; }
+function recordTagChange(p,before){
+  const after=snapshotTags(p);
+  if(JSON.stringify(before)===JSON.stringify(after)) return;
+  tagUndoStack.push({id:p.id,before,after,t:Date.now()}); if(tagUndoStack.length>200) tagUndoStack.shift();
+  tagRedoStack=[];
+}
+function applyTagSnapshot(id,snap){ const p=photoById(id); if(!p) return; p.paths=snap.paths.slice(); p.vpaths=snap.vpaths.slice(); afterFolderChange(); if(folderPopShown) openFolderPop(); }
+function undoTag(){ const a=tagUndoStack.pop(); if(!a) return false; tagRedoStack.push(a); applyTagSnapshot(a.id,a.before); return true; }
+function redoTag(){ const a=tagRedoStack.pop(); if(!a) return false; tagUndoStack.push(a); applyTagSnapshot(a.id,a.after); return true; }
+function undoLatest(open){
+  const ms=open?curMarks():null;
+  const markT=(ms&&ms.length)?(ms[ms.length-1]._t||0):null;
+  const tagT=tagUndoStack.length?tagUndoStack[tagUndoStack.length-1].t:null;
+  if(markT===null&&tagT===null){ undoDelete(); return; }
+  if(tagT===null||(markT!==null&&markT>=tagT)){ redoMarks.push(ms.pop()); redrawMarks(); persistState(); }   // markup was the most recent edit
+  else undoTag();
+}
+function redoLatest(open){
+  const markRT=(open&&redoMarks.length)?(redoMarks[redoMarks.length-1]._t||0):null;
+  const tagRT=tagRedoStack.length?tagRedoStack[tagRedoStack.length-1].t:null;
+  if(markRT===null&&tagRT===null) return;
+  if(tagRT===null||(markRT!==null&&markRT<=tagRT)){ curMarks().push(redoMarks.pop()); redrawMarks(); persistState(); }   // replay forward in time
+  else redoTag();
 }
 function afterFolderChange(){ updateGallery(); buildCluster(); renderClusters(); renderPhotoTags(curPhoto()); idbSet("lastState",serializeState(false)).catch(()=>{});
   ensureJsonWrite(true).then(()=>scheduleAutoSave());   // grant write in the click gesture, then debounce so rapid tag toggles batch into ONE small file write
@@ -1445,15 +1519,16 @@ function setSaveStatus(txt,cls){ const el=document.getElementById("saveStatus");
 // Content signature excluding volatile fields (timestamp, map view) so only real changes trigger a write.
 function metaSignature(){ const st=serializeState(false); delete st.savedAt; if(st.settings) delete st.settings.view; return JSON.stringify(st); }
 function scheduleAutoSave(){ if(!jsonHandle||autoDisabled) return; autoPending=true; clearTimeout(autoTimer); autoTimer=setTimeout(()=>flushAutoSave(false),900); }
-async function flushAutoSave(interactive){
+async function flushAutoSave(interactive, force){
   if(!jsonHandle) return {status:"no-file"};
   if(!photos.length) return {status:"empty"};   // never auto-write an EMPTY map over the .json (e.g. right after Clear)
   if(autoDisabled) return {status:"disabled"};   // a prior write failed -> stop auto-writing so we don't keep corrupting the file
   // Serialize once: `data` is what gets written; `sig` is the same object minus volatile fields.
   const st=serializeState(false); const data=JSON.stringify(st);
   delete st.savedAt; if(st.settings) delete st.settings.view; const sig=JSON.stringify(st);
-  // Nothing substantive changed since the last write -> skip entirely (no file rewrite, instant).
-  if(sig===lastWrittenSig){ autoPending=false; setSaveStatus("Saved","ok"); return {status:"unchanged"}; }
+  // Nothing substantive changed since the last write -> skip (no file rewrite). A manual Save
+  // FORCES the write anyway so the current map view + timestamp always land in the file.
+  if(!force && sig===lastWrittenSig){ autoPending=false; setSaveStatus("Saved","ok"); return {status:"unchanged"}; }
   if(autoBusy){ autoPending=true; return {status:"busy"}; }   // a write is already in flight -> coalesce, don't treat as failure
   if(!(await ensureJsonWrite(interactive))){ setSaveStatus("Save pending…",""); autoPending=true; return {status:"no-permission"}; }
   autoBusy=true; autoPending=false; let err=null;
@@ -1525,8 +1600,8 @@ document.getElementById("btnSave").addEventListener("click",async()=>{
   if(!photos.length){ alert("Nothing to save yet."); return; }
   if(!jsonHandle){ adoptNewJson(); return; }
   if(autoDisabled){ autoDisabled=false; }   // Save = user explicitly retrying; clear the paused state and try once
-  let r=await flushAutoSave(true);
-  if(r.status==="busy"){ await new Promise(res=>setTimeout(res,1200)); r=await flushAutoSave(true); }   // a background save was mid-flight; wait and retry once
+  let r=await flushAutoSave(true,true);   // manual Save always writes (captures current view, bumps last-saved)
+  if(r.status==="busy"){ await new Promise(res=>setTimeout(res,1200)); r=await flushAutoSave(true,true); }   // a background save was mid-flight; wait and retry once
   if(r.status==="error"){
     const msg=(r.error&&(r.error.message||r.error.name))||"unknown error";
     alert("Could not write to "+(loadedJsonName||"the file")+" — auto-save is paused.\n\nReason: "+msg+"\n\nThis file is on the P: network drive; browser file-writing there is unreliable. Best fix: click Save As and choose a LOCAL folder (e.g. Documents). Also delete any leftover Photos2.json.crswap, and close the file if it's open elsewhere.");
@@ -1552,6 +1627,7 @@ function serializeState(includeImages){
       thumb:getComputedStyle(document.documentElement).getPropertyValue("--thumb").trim(),
       galleryW:getComputedStyle(document.documentElement).getPropertyValue("--gallery-w").trim(), dateLo, dateHi,
       box: boxBounds?[boxBounds.getSouth(),boxBounds.getWest(),boxBounds.getNorth(),boxBounds.getEast()]:null,
+      recentTags: recentTags.slice(0,10),
       view:{ center:[map.getCenter().lat, map.getCenter().lng], zoom:map.getZoom() } },
     photos: photos.map(p=>{ const o={path:p.path,name:p.name,lat:p.lat,lng:p.lng,time:p.time,dir:p.dir,size:p.size,isHeic:p.isHeic};
       if(Array.isArray(p.paths)&&(p.paths.length!==1||p.paths[0]!==p.path))o.paths=p.paths;   // physical locations (incl. empty when pruned from disk)
@@ -1587,6 +1663,7 @@ function applyState(st){
   if(s.galleryW) document.documentElement.style.setProperty("--gallery-w",s.galleryW);
   if(s.baseLayer==="esri"){ map.removeLayer(google); esri.addTo(map); } else if(s.baseLayer==="none"){ map.removeLayer(google); }
   showNoGeo=!!s.showNoGeo; document.getElementById("showNoGeo").checked=showNoGeo;
+  if(Array.isArray(s.recentTags)) recentTags=s.recentTags.slice(0,10);
   currentSort=s.sortBy||"date_desc"; document.getElementById("sortSel").value=currentSort;
   buildDateFilter(); if(s.dateLo!=null&&dateMin!=null){ dateLo=s.dateLo; dateHi=s.dateHi; syncSliderUI(); }
   if(boxRect){map.removeLayer(boxRect);boxRect=null;} boxBounds=null;
