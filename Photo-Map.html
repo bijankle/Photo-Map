@@ -1104,7 +1104,9 @@ function openFolderPop(){
   pop.querySelector("#fpAdd").addEventListener("click",addNew);
   pop.querySelector("#fpNew").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addNew(); } });
 }
-function afterFolderChange(){ updateGallery(); buildCluster(); renderClusters(); idbSet("lastState",serializeState(false)).catch(()=>{}); flushAutoSave(true); }   // write folder change straight onto the .json (this runs inside the click gesture, so it can grant write permission)
+function afterFolderChange(){ updateGallery(); buildCluster(); renderClusters(); idbSet("lastState",serializeState(false)).catch(()=>{});
+  ensureJsonWrite(true).then(()=>scheduleAutoSave());   // grant write in the click gesture, then debounce so rapid tag toggles batch into ONE small file write
+}
 document.getElementById("lbFolder").addEventListener("click",e=>{ e.stopPropagation(); if(folderPopShown) closeFolderPop(); else openFolderPop(); });
 document.addEventListener("mousedown",e=>{ if(folderPopShown && !e.target.closest("#folderPop") && e.target.id!=="lbFolder"){ closeFolderPop(); } },true);
 
@@ -1192,20 +1194,21 @@ function setSaveStatus(txt,cls){ const el=document.getElementById("saveStatus");
 function metaSignature(){ const st=serializeState(false); delete st.savedAt; if(st.settings) delete st.settings.view; return JSON.stringify(st); }
 function scheduleAutoSave(){ if(!jsonHandle) return; autoPending=true; clearTimeout(autoTimer); autoTimer=setTimeout(()=>flushAutoSave(false),900); }
 async function flushAutoSave(interactive){
-  if(!jsonHandle || autoBusy) return false;
+  if(!jsonHandle) return {status:"no-file"};
   const sig=metaSignature();
   // Nothing substantive changed since the last write -> skip entirely (no file rewrite, instant).
-  if(sig===lastWrittenSig){ autoPending=false; setSaveStatus("Saved","ok"); return true; }
-  if(!(await ensureJsonWrite(interactive))){ setSaveStatus("Save pending…",""); return false; }   // write permission needs a prior user-gesture grant
-  autoBusy=true; autoPending=false; let ok=false;
+  if(sig===lastWrittenSig){ autoPending=false; setSaveStatus("Saved","ok"); return {status:"unchanged"}; }
+  if(autoBusy){ autoPending=true; return {status:"busy"}; }   // a write is already in flight -> coalesce, don't treat as failure
+  if(!(await ensureJsonWrite(interactive))){ setSaveStatus("Save pending…",""); autoPending=true; return {status:"no-permission"}; }
+  autoBusy=true; autoPending=false; let err=null;
   setSaveStatus("Saving…","busy");
   const data=serializeMeta();
-  try{ const w=await jsonHandle.createWritable(); await w.write(data); await w.close(); lastWrittenSig=sig; loadedJsonName=jsonHandle.name||loadedJsonName; ok=true; }
-  catch(e){ console.warn("auto-save failed",e); }
+  try{ const w=await jsonHandle.createWritable(); await w.write(data); await w.close(); lastWrittenSig=sig; loadedJsonName=jsonHandle.name||loadedJsonName; }
+  catch(e){ err=e; console.warn("auto-save failed",e); }
   autoBusy=false;
-  setSaveStatus(ok?("Saved · "+fmtSize(data.length)):"Save failed", ok?"ok":"bad");
+  setSaveStatus(err?"Save failed":("Saved · "+fmtSize(data.length)), err?"bad":"ok");
   if(autoPending) scheduleAutoSave();   // a change landed mid-write; write again
-  return ok;
+  return err?{status:"error",error:err}:{status:"saved"};
 }
 // Fill images into the file-loaded (metadata-only) photos from the browser-local image cache.
 function overlayImagesFromCache(cache){
@@ -1258,8 +1261,16 @@ async function adoptNewJson(){
 // Save = flush the auto-save immediately onto the current file (or pick one). Auto-save means it's optional.
 document.getElementById("btnSave").addEventListener("click",async()=>{
   if(!photos.length){ alert("Nothing to save yet."); return; }
-  if(jsonHandle){ if(!(await flushAutoSave(true))) alert("Could not write to the file. Use Save As to choose where to keep it."); }
-  else adoptNewJson();
+  if(!jsonHandle){ adoptNewJson(); return; }
+  let r=await flushAutoSave(true);
+  if(r.status==="busy"){ await new Promise(res=>setTimeout(res,1200)); r=await flushAutoSave(true); }   // a background save was mid-flight; wait and retry once
+  if(r.status==="error"){
+    const msg=(r.error&&(r.error.message||r.error.name))||"unknown error";
+    alert("Could not write to "+(loadedJsonName||"the file")+".\n\nReason: "+msg+"\n\nCommon causes:\n• The file is on a network drive (P:) — try Save As to a local folder.\n• The file (or its .crswap) is open/locked in another program — close it and retry.\n• A leftover Photos2.json.crswap — delete it and retry.");
+  } else if(r.status==="no-permission"){
+    alert("The browser didn't grant write access to the file. Click Save again and choose Allow when prompted, or use Save As.");
+  }
+  // unchanged / saved / busy(after retry) -> no alert
 });
 document.getElementById("btnSaveAs").addEventListener("click",adoptNewJson);
 function downloadJson(data,name){ const blob=new Blob([data],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name||((folderName||"photomap")+".json"); a.click(); setTimeout(()=>URL.revokeObjectURL(url),500); }
