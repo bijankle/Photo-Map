@@ -1181,10 +1181,41 @@ async function flushAutoSave(interactive){
   if(autoPending) scheduleAutoSave();   // a change landed mid-write; write again
   return ok;
 }
-// On reopen the file's write permission needs a user gesture to re-grant — do it on first interaction, then flush.
-function armJsonWrite(){
+// Fill images into the file-loaded (metadata-only) photos from the browser-local image cache.
+function overlayImagesFromCache(cache){
+  if(!cache||!Array.isArray(cache.photos)) return; const m=new Map();
+  for(const c of cache.photos){ const k=metaKey(c); if(!m.has(k)) m.set(k,c); }
+  for(const p of photos){ const c=m.get(metaKey(p)); if(!c) continue; if(!p.thumb&&c.thumb)p.thumb=c.thumb; if(!p.preview&&c.preview)p.preview=c.preview; if(!p.full&&c.full)p.full=c.full; }
+}
+// Load the latest straight from the .json file (the source of truth), using the cache only for images.
+let fileLoadedOnce=false, lastFullCache=null;
+async function loadFromJsonFile(fromGesture){
+  if(!jsonHandle) return false;
+  try{
+    let perm = jsonHandle.queryPermission ? await jsonHandle.queryPermission({mode:"read"}) : "granted";
+    if(perm!=="granted"){ if(!fromGesture) return false; perm=await jsonHandle.requestPermission({mode:"read"}); if(perm!=="granted") return false; }
+    const f=await jsonHandle.getFile(); const text=await f.text();
+    if(!text||!text.trim()) return false;
+    let st; try{ st=JSON.parse(text); }catch(e){ return false; }
+    if(!st||!Array.isArray(st.photos)||!st.photos.length) return false;
+    applyState(st);                          // the FILE is authoritative for folders/locations/markup
+    overlayImagesFromCache(lastFullCache);   // reuse locally-cached images so photos still show
+    if(photos.some(p=>p.thumb||p.preview)) hideBanner();
+    buildCluster(); renderClusters(); updateGallery(); cacheFullSession();
+    saveFileHandle=jsonHandle; loadedJsonName=jsonHandle.name||loadedJsonName; fileLoadedOnce=true;
+    return true;
+  }catch(e){ console.warn("open-from-file failed",e); return false; }
+}
+// On reopen, reading/writing the file needs a user gesture — on first interaction pull the latest from
+// the file (if not already) and grant write so auto-save resumes.
+function armFileSync(){
   if(!jsonHandle) return;
-  const once=async()=>{ window.removeEventListener("pointerdown",once,true); window.removeEventListener("keydown",once,true); if(await ensureJsonWrite(true) && autoPending) flushAutoSave(true); };
+  const once=async(ev)=>{ window.removeEventListener("pointerdown",once,true); window.removeEventListener("keydown",once,true);
+    const inEdit = ev&&ev.target&&ev.target.closest&&ev.target.closest("#folderPop,.imgpanel");   // don't clobber an in-progress edit
+    if(!fileLoadedOnce && !inEdit) await loadFromJsonFile(true);
+    await ensureJsonWrite(true);
+    if(autoPending) flushAutoSave(true);
+  };
   window.addEventListener("pointerdown",once,true); window.addEventListener("keydown",once,true);
 }
 async function adoptNewJson(){
@@ -1207,7 +1238,7 @@ document.getElementById("btnSaveAs").addEventListener("click",adoptNewJson);
 function downloadJson(data,name){ const blob=new Blob([data],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name||((folderName||"photomap")+".json"); a.click(); setTimeout(()=>URL.revokeObjectURL(url),500); }
 document.getElementById("btnOpenJson").addEventListener("click",async()=>{
   if(hasFSA&&window.showOpenFilePicker){
-    try{ const [h]=await window.showOpenFilePicker({types:[{description:"JSON",accept:{"application/json":[".json"]}}]}); saveFileHandle=h; jsonHandle=h; loadedJsonName=h.name; try{await idbSet("jsonHandle",h);}catch(e){} const f=await h.getFile(); loadStateText(await f.text()); armJsonWrite(); }
+    try{ const [h]=await window.showOpenFilePicker({types:[{description:"JSON",accept:{"application/json":[".json"]}}]}); saveFileHandle=h; jsonHandle=h; loadedJsonName=h.name; try{await idbSet("jsonHandle",h);}catch(e){} const f=await h.getFile(); loadStateText(await f.text()); fileLoadedOnce=true; armFileSync(); }
     catch(err){ if(err&&err.name==="AbortError") return; console.warn(err); document.getElementById("jsonInput").click(); }   // FSA picker can fail (e.g. file:// pages); fall back to the file input
   } else document.getElementById("jsonInput").click();
 });
@@ -1353,16 +1384,22 @@ function parseShareHash(){
   try{ last=await idbGet("lastState"); }catch(e){}
   try{ jsonHandle=await idbGet("jsonHandle"); }catch(e){}
   try{ dirHandle=await idbGet("dirHandle"); }catch(e){}
-  if(full && full.photos && full.photos.length){
-    applyState(full);
-    // The image-free autosave (lastState) is written on every folder/markup change, so if it is
-    // newer than the last full Save, overlay its fresh folder membership so nothing is lost.
-    if(last && Array.isArray(last.photos) && last.savedAt && (!full.savedAt || last.savedAt>full.savedAt)){
-      applyMetaMap(snapshotMeta(last.photos)); buildCluster(); renderClusters(); updateGallery(); persistState();
+  lastFullCache=full||null;
+  // Prefer the last opened .json FILE as the source of truth (so it's always the latest); the browser
+  // cache is used only to fill in images. This works silently if read permission is still granted.
+  let opened=false;
+  if(jsonHandle){ opened=await loadFromJsonFile(false); }
+  if(!opened){
+    if(full && full.photos && full.photos.length){
+      applyState(full);
+      // lastState (image-free autosave) is written on every change; if newer than the cached full snapshot, overlay its fresh folders.
+      if(last && Array.isArray(last.photos) && last.savedAt && (!full.savedAt || last.savedAt>full.savedAt)){
+        applyMetaMap(snapshotMeta(last.photos)); buildCluster(); renderClusters(); updateGallery(); persistState();
+      }
     }
+    else if(last && last.photos && last.photos.length){ applyState(last); }
   }
-  else if(last && last.photos && last.photos.length){ applyState(last); if(jsonHandle) showBanner('Reopen last session <b>'+esc(jsonHandle.name||"file")+'</b> to load the images.',reopenLastJson); }
-  if(jsonHandle) armJsonWrite();   // grant write permission on first interaction so auto-save resumes onto the .json
+  if(jsonHandle) armFileSync();   // on first interaction, pull the latest from the file and enable auto-save
   if(dirHandle){ try{ if((await dirHandle.queryPermission({mode:"read"}))!=="granted") armFolderPermission(); }catch(e){} }
 })();
 </script>
