@@ -78,8 +78,10 @@
   .ip-close{position:absolute;top:10px;right:12px;z-index:6;background:#ffffffe6;border:1px solid var(--line);color:var(--text);font-size:22px;line-height:1;width:32px;height:32px;border-radius:8px;cursor:pointer;box-shadow:0 2px 8px #1e1f221f;}
   .ip-close:hover{color:var(--accent);border-color:var(--accent);}
   .ip-topright{position:absolute;top:10px;right:52px;z-index:6;display:flex;gap:8px;}
-  .ip-iconbtn{width:32px;height:32px;border-radius:8px;background:#ffffffe6;border:1px solid var(--line);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px #1e1f221f;transition:color .12s,border-color .12s,background .12s;}
-  .ip-iconbtn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+  .ip-iconbtn{width:34px;height:32px;border-radius:8px;background:#ffffffe6;border:1px solid var(--line);color:var(--text);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;box-shadow:0 2px 8px #1e1f221f;transition:color .12s,border-color .12s,background .12s;padding:2px 0 1px;}
+  .ip-iconbtn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+  .ip-iconbtn .pct{font:700 7px var(--mono);letter-spacing:.2px;color:var(--dim);line-height:1;}
+  .ip-iconbtn:hover .pct{color:inherit;}
   .ip-iconbtn:hover{color:var(--accent);border-color:var(--accent);}
   .ip-iconbtn.ok{background:var(--good);border-color:var(--good);color:#fff;}
   .folder-pop{display:none;position:absolute;bottom:60px;left:50%;transform:translateX(-50%);z-index:7;width:340px;max-width:calc(100% - 24px);max-height:60vh;overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:0 12px 40px #1e1f2233;padding:10px;}
@@ -310,8 +312,8 @@
       <div class="lb-ref" id="lbRef"><img id="lbRefImg" src="" alt="" /><div class="box" id="lbRefBox"></div></div>
     </div>
     <div class="ip-topright">
-      <button class="ip-iconbtn" id="lbCopy" title="Copy current view to clipboard"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></button>
-      <button class="ip-iconbtn" id="lbDownload" title="Download current view"><svg viewBox="0 0 24 24"><path d="M12 3v11M7 10l5 5 5-5M5 20h14"/></svg></button>
+      <button class="ip-iconbtn" id="lbCopy" title="Copy current view to clipboard — screen quality (fast)"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><b class="pct">50%</b></button>
+      <button class="ip-iconbtn" id="lbDownload" title="Download current view — full quality"><svg viewBox="0 0 24 24"><path d="M12 3v11M7 10l5 5 5-5M5 20h14"/></svg><b class="pct">100%</b></button>
     </div>
     <button class="ip-close" id="lbClose">&times;</button>
     <button class="ip-arrow left" id="lbPrev">&#8249;</button>
@@ -1045,8 +1047,9 @@ function currentViewFrac(){
   if(fx<0)fx=0; if(fy<0)fy=0; if(fx+fw>1)fx=1-fw; if(fy+fh>1)fy=1-fh; if(fx<0)fx=0; if(fy<0)fy=0;
   return {fx,fy,fw,fh};
 }
-// Render exactly what the user sees (current zoom/pan crop + markup) to a canvas.
-function renderViewCanvas(p){
+// Render what the user sees (current zoom/pan crop + markup) to a canvas.
+// maxDim caps the output: screen size for clipboard (fast, screenshot-quality), 4096 for download (full quality).
+function renderViewCanvas(p,maxDim){
   return new Promise((resolve,reject)=>{
     const src=(curPhoto()===p && lb.classList.contains("open") && lbImg.src)?lbImg.src:p.thumb;   // whatever is on screen (full-res if streamed in)
     if(!src){ reject(new Error("no image")); return; }
@@ -1056,7 +1059,7 @@ function renderViewCanvas(p){
       const f=(curPhoto()===p)?currentViewFrac():{fx:0,fy:0,fw:1,fh:1};
       const sx=f.fx*natW, sy=f.fy*natH, sw=f.fw*natW, sh=f.fh*natH;
       let outW=Math.max(1,Math.round(sw)), outH=Math.max(1,Math.round(sh));
-      const MAX=4096, cap=Math.min(1,MAX/Math.max(outW,outH));
+      const cap=Math.min(1,(maxDim||4096)/Math.max(outW,outH));
       outW=Math.max(1,Math.round(outW*cap)); outH=Math.max(1,Math.round(outH*cap));
       const c=document.createElement("canvas"); c.width=outW; c.height=outH; const cx=c.getContext("2d");
       cx.drawImage(img,sx,sy,sw,sh,0,0,outW,outH);
@@ -1069,10 +1072,11 @@ function renderViewCanvas(p){
     img.src=src;
   });
 }
+function screenshotDim(){ return Math.max(640, Math.ceil(Math.max(fitW||0,fitH||0)*(window.devicePixelRatio||1))); }
 function copyCurrentView(btn){
   if(selMark) deselectText();
   const p=curPhoto(); if(!p) return;
-  renderViewCanvas(p).then(c=>c.toBlob(async blob=>{
+  renderViewCanvas(p,screenshotDim()).then(c=>c.toBlob(async blob=>{   // screen resolution — light and instant to paste
     if(!blob){ alert("Could not render the image."); return; }
     try{ await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]); flashIcon(btn); }
     catch(err){ alert("The browser blocked clipboard access here. Use the Download button instead."); }
@@ -1081,12 +1085,12 @@ function copyCurrentView(btn){
 function downloadCurrentView(btn){
   if(selMark) deselectText();
   const p=curPhoto(); if(!p) return;
-  renderViewCanvas(p).then(c=>c.toBlob(blob=>{
+  renderViewCanvas(p,4096).then(c=>c.toBlob(blob=>{   // full source resolution of the current view
     if(!blob){ alert("Could not render the image."); return; }
     const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
-    a.download=(p.name||"image").replace(/\.[^.]+$/,"")+"-view.png";
+    a.download=(p.name||"image").replace(/\.[^.]+$/,"")+"-view.jpg";
     document.body.appendChild(a); a.click(); setTimeout(()=>{ a.remove(); URL.revokeObjectURL(a.href); },500); flashIcon(btn);
-  },"image/png")).catch(()=>alert("No image to download yet."));
+  },"image/jpeg",0.95)).catch(()=>alert("No image to download yet."));
 }
 document.addEventListener("keydown",e=>{
   if(document.activeElement===tbText) return;
