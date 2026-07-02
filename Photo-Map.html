@@ -88,12 +88,11 @@
   .folder-pop .fp-title{font:600 12px var(--font);color:var(--ink);margin:0 2px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .folder-pop .fp-search{width:100%;box-sizing:border-box;margin:0 0 8px;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;font:12px var(--mono);color:var(--text);padding:6px 9px;}
   .folder-pop .fp-search:focus{outline:none;border-color:var(--accent);}
-  .folder-pop .fp-list{display:flex;flex-direction:column;gap:2px;margin-bottom:8px;}
+  .folder-pop .fp-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
   .folder-pop .fp-empty{font:12px var(--font);color:var(--dim);padding:4px 2px;}
-  .folder-pop .fp-item{display:flex;align-items:flex-start;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer;font:13px var(--font);color:var(--text);}
-  .folder-pop .fp-item:hover{background:var(--panel2);}
-  .folder-pop .fp-item input{margin-top:2px;flex:none;}
-  .folder-pop .fp-item span{white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.3;}
+  .folder-pop .fp-tag{font:600 11px var(--font);color:var(--accent2);background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:4px 10px;cursor:pointer;opacity:.45;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:opacity .12s,border-color .12s;}
+  .folder-pop .fp-tag:hover{border-color:var(--accent);opacity:.85;}
+  .folder-pop .fp-tag.on{opacity:1;background:var(--accent-tint);border-color:var(--accent);}
   .folder-pop .fp-new{display:flex;gap:6px;border-top:1px solid var(--line);padding-top:8px;}
   .folder-pop .fp-new input{flex:1;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;font:12px var(--mono);color:var(--text);padding:5px 8px;}
   .folder-pop .fp-new button{background:var(--accent);color:#fff;border:none;border-radius:6px;font:600 11px var(--font);padding:0 12px;cursor:pointer;}
@@ -110,6 +109,12 @@
   .fileinfo-pop .fik{flex:none;width:74px;color:var(--dim);}
   .fileinfo-pop .fiv{color:var(--text);word-break:break-all;user-select:text;}
   .ip-tools{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:8px;background:#ffffffe8;border:1px solid var(--line);padding:7px 10px;border-radius:10px;box-shadow:0 4px 16px #1e1f2226;}
+  .ip-tags{position:absolute;left:50%;transform:translateX(-50%);bottom:64px;z-index:6;display:flex;flex-direction:column;align-items:center;gap:6px;max-width:60%;max-height:42%;overflow:auto;scrollbar-width:none;}
+  .ip-tags::-webkit-scrollbar{display:none;}
+  .ip-tag{font:600 11px var(--font);color:var(--accent2);background:#ffffffe8;border:1px solid var(--line2);border-radius:6px;padding:4px 10px;cursor:pointer;box-shadow:0 2px 8px #1e1f221a;transition:opacity .15s,border-color .12s;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
+  .ip-tag:hover{border-color:var(--accent);}
+  .ip-tags.filtered .ip-tag{opacity:.35;}
+  .ip-tags.filtered .ip-tag.on{opacity:1;border-color:var(--accent);background:var(--accent-tint);}
   .ip-marktools{position:absolute;top:46px;left:50%;transform:translateX(-50%);z-index:6;display:flex;flex-wrap:wrap;justify-content:center;gap:5px;background:#ffffffe8;border:1px solid var(--line);padding:6px 8px;border-radius:10px;max-width:90%;box-shadow:0 4px 16px #1e1f2226;}
   .ip-marktools .mk{position:relative;background:var(--panel);border:1px solid var(--line2);color:var(--text);border-radius:8px;cursor:pointer;width:41px;height:38px;display:flex;align-items:center;justify-content:center;}
   .ip-marktools .mk svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
@@ -338,9 +343,10 @@
       <button class="mk" data-tool="erase" title="Eraser (E)"><svg viewBox="0 0 24 24"><path d="M4 15l7-7 6 6-4 4H8zM11 8l6 6"/></svg><b class="hk">E</b></button>
       <button class="mk clear" id="mkClear" title="Remove every markup on this photo"><svg viewBox="0 0 24 24"><path d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12"/></svg><b class="hk">Clear</b></button>
     </div>
+    <div class="ip-tags" id="lbTags"></div>
     <div class="ip-tools">
       <label class="lb-fullchk" id="lbFullWrap"><input type="checkbox" id="lbFull" /><span>Full quality</span></label>
-      <button class="lb-textbtn" id="lbFolder">Add to folder</button>
+      <button class="lb-textbtn" id="lbFolder">Add tag</button>
     </div>
     <div class="folder-pop" id="folderPop"></div>
     <div class="tbed" id="tbEditor" style="display:none">
@@ -674,7 +680,7 @@ setMeasureBtn();
 /* gallery */
 document.getElementById("showNoGeo").addEventListener("change",e=>{ showNoGeo=e.target.checked; updateGallery(); persistState(); });
 document.getElementById("sortSel").addEventListener("change",e=>{ currentSort=e.target.value; updateGallery(); persistState(); });
-document.getElementById("nameFilter").addEventListener("input",e=>{ nameFilter=e.target.value.trim().toLowerCase(); buildCluster(); renderClusters(); updateGallery(); });
+document.getElementById("nameFilter").addEventListener("input",e=>{ nameFilter=e.target.value.trim().toLowerCase(); buildCluster(); renderClusters(); updateGallery(); renderPhotoTags(curPhoto()); });
 document.getElementById("thumbSize").addEventListener("input",e=>{ document.documentElement.style.setProperty("--thumb",e.target.value+"px"); persistState(); });
 function deletePhoto(id){
   const i=photos.findIndex(p=>p.id===id); if(i<0) return;
@@ -766,7 +772,32 @@ function loadViewer(){
   draft=null; polyPrev=null; redoMarks=[];
   showPreview(p);
   autoLoadFull(p);   // stream the original in the background; thumb shows meanwhile
+  renderPhotoTags(p);
   highlightCurrent();
+}
+/* Folder tags in the bottom-left of the viewer: one pill per folder this photo belongs to.
+   Clicking a tag filters the whole app (gallery + map dots) to that folder via the sidebar
+   search; clicking the active tag clears the filter. Active = full opacity, rest dimmed. */
+function renderPhotoTags(p){
+  const el=document.getElementById("lbTags"); if(!el) return;
+  if(!p){ el.innerHTML=""; return; }
+  const folders=[...new Set(pathsOf(p).map(pa=>pathFolder(pa)).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const q=(nameFilter||"").trim();
+  let active=false, html="";
+  for(const f of folders){
+    const on=!!q && f.toLowerCase()===q; if(on) active=true;
+    html+='<button class="ip-tag'+(on?" on":"")+'" data-folder="'+esc(f)+'" title="'+esc(f)+'">'+esc(folderLabel(f))+'</button>';
+  }
+  el.innerHTML=html;
+  el.classList.toggle("filtered",active);
+  el.querySelectorAll(".ip-tag").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); toggleTagFilter(b.dataset.folder); }));
+}
+function toggleTagFilter(folder){
+  const inp=document.getElementById("nameFilter");
+  const next=((nameFilter||"").trim()===folder.toLowerCase())?"":folder;   // clicking the active tag clears the filter
+  inp.value=next; nameFilter=next.trim().toLowerCase();
+  buildCluster(); renderClusters(); updateGallery();
+  renderPhotoTags(curPhoto());
 }
 function showPreview(p,keepView){
   if(curUrl){ URL.revokeObjectURL(curUrl); curUrl=null; }
@@ -1141,19 +1172,19 @@ function openFolderPop(){
   const p=curPhoto(); if(!p) return;
   const pop=document.getElementById("folderPop");
   const folders=allFolders();
-  let html='<div class="fp-title">Folders for '+esc(p.name)+'</div>';
-  if(folders.length>1) html+='<input type="text" class="fp-search" id="fpSearch" placeholder="Filter folders…" autocomplete="off"/>';
+  let html='<div class="fp-title">Tags for '+esc(p.name)+'</div>';
+  if(folders.length>1) html+='<input type="text" class="fp-search" id="fpSearch" placeholder="Filter tags…" autocomplete="off"/>';
   html+='<div class="fp-list">';
-  if(!folders.length) html+='<div class="fp-empty">No folders yet — create one below.</div>';
-  for(const f of folders){ const on=photoInFolder(p,f); html+='<label class="fp-item" title="'+esc(f)+'"><input type="checkbox" data-folder="'+esc(f)+'"'+(on?" checked":"")+'/><span>'+esc(folderLabel(f))+'</span></label>'; }
-  html+='<div class="fp-empty" id="fpNoMatch" style="display:none">No folders match.</div>';
-  html+='</div><div class="fp-new"><input type="text" id="fpNew" placeholder="New folder name" autocomplete="off"/><button id="fpAdd">Create</button></div>';
+  if(!folders.length) html+='<div class="fp-empty">No tags yet — create one below.</div>';
+  for(const f of folders){ const on=photoInFolder(p,f); html+='<button class="fp-tag'+(on?" on":"")+'" data-folder="'+esc(f)+'" title="'+esc(f)+'">'+esc(folderLabel(f))+'</button>'; }
+  html+='<div class="fp-empty" id="fpNoMatch" style="display:none">No tags match.</div>';
+  html+='</div><div class="fp-new"><input type="text" id="fpNew" placeholder="New tag name" autocomplete="off"/><button id="fpAdd">Create</button></div>';
   pop.innerHTML=html; pop.style.display="block"; folderPopShown=true;
-  pop.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.addEventListener("change",()=>{ setPhotoFolder(p,cb.dataset.folder,cb.checked); afterFolderChange(); }));
+  pop.querySelectorAll(".fp-tag").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); const f=b.dataset.folder; const now=!photoInFolder(p,f); setPhotoFolder(p,f,now); b.classList.toggle("on",now); afterFolderChange(); }));
   const search=pop.querySelector("#fpSearch");
   if(search){
     const doFilter=()=>{ const q=search.value.trim().toLowerCase(); let any=false;
-      pop.querySelectorAll(".fp-item").forEach(el=>{ const cb=el.querySelector("input"); const hay=((cb&&cb.dataset.folder||"")+" "+el.textContent).toLowerCase(); const show=!q||hay.includes(q); el.style.display=show?"":"none"; if(show)any=true; });
+      pop.querySelectorAll(".fp-tag").forEach(el=>{ const hay=((el.dataset.folder||"")+" "+el.textContent).toLowerCase(); const show=!q||hay.includes(q); el.style.display=show?"":"none"; if(show)any=true; });
       const nm=pop.querySelector("#fpNoMatch"); if(nm) nm.style.display=any?"none":"block";
     };
     search.addEventListener("input",doFilter);
@@ -1165,7 +1196,7 @@ function openFolderPop(){
   pop.querySelector("#fpAdd").addEventListener("click",addNew);
   pop.querySelector("#fpNew").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addNew(); } });
 }
-function afterFolderChange(){ updateGallery(); buildCluster(); renderClusters(); idbSet("lastState",serializeState(false)).catch(()=>{});
+function afterFolderChange(){ updateGallery(); buildCluster(); renderClusters(); renderPhotoTags(curPhoto()); idbSet("lastState",serializeState(false)).catch(()=>{});
   ensureJsonWrite(true).then(()=>scheduleAutoSave());   // grant write in the click gesture, then debounce so rapid tag toggles batch into ONE small file write
 }
 document.getElementById("lbFolder").addEventListener("click",e=>{ e.stopPropagation(); if(folderPopShown) closeFolderPop(); else openFolderPop(); });
