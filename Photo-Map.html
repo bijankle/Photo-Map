@@ -47,8 +47,6 @@
   .sharerow .btn{flex:1;text-align:center;}
   .sep{width:1px;height:24px;background:var(--line);margin:0 2px;}
 
-  .savestat{font-family:var(--mono);font-size:10px;letter-spacing:.3px;color:var(--dim);white-space:nowrap;align-self:center;padding:0 4px;min-width:56px;}
-  .savestat.ok{color:var(--good);} .savestat.busy{color:var(--accent);} .savestat.bad{color:var(--bad);}
   .stats{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel);}
   .stat{padding:5px 12px;border-right:1px solid var(--line);min-width:66px;}
   .stat:last-child{border-right:none;}
@@ -234,6 +232,8 @@
   .leaflet-bar a:hover{background:var(--panel2)!important;color:var(--accent)!important;}
   .leaflet-control-attribution{background:#ffffffcc!important;color:var(--dim)!important;font-size:10px;}
   .leaflet-control-attribution a{color:var(--muted)!important;}
+  .leaflet-control-scale-line{background:#ffffffe8!important;border:1px solid var(--line2)!important;border-top:none!important;color:var(--muted)!important;font:600 10px var(--mono)!important;letter-spacing:.4px;padding:3px 8px!important;border-radius:0 0 7px 7px;box-shadow:0 2px 8px #1e1f221a;text-shadow:none!important;}
+  .leaflet-control-scale-line:not(:first-child){border-top:1px solid var(--line2)!important;margin-top:-1px;border-radius:7px 7px 0 0;}
 
   .lightbox{position:fixed;inset:0;z-index:3000;display:none;align-items:center;justify-content:center;background:rgba(28,30,38,.55);backdrop-filter:blur(3px);}
   .lightbox.open{display:flex;animation:fade .15s ease;}
@@ -307,7 +307,6 @@
     <button class="btn grpL" id="btnOpenJson">Open .JSON</button>
     <button class="btn grpL" id="btnSave" title="Changes auto-save onto the loaded .json — click to force an immediate save">Save</button>
     <button class="btn grpL" id="btnSaveAs" title="Choose a new .json to keep this project in (metadata only — no embedded photos)">Save As</button>
-    <span class="savestat" id="saveStatus"></span>
     <span class="sep"></span>
     <button class="btn grpR" id="btnClear">Clear</button>
     <button class="btn grpR" id="btnRefresh" title="Re-scan the main photos folder: add what's new, remove what's gone">Refresh</button>
@@ -470,7 +469,11 @@ let hlMarker=null;
 function highlightDot(p){ clearHighlight(); if(!p||p.lat==null)return; hlMarker=L.circleMarker([p.lat,p.lng],{radius:13,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.45,interactive:false,className:"hl-dot"}).addTo(highlightLayer); }
 function clearHighlight(){ if(hlMarker){ highlightLayer.removeLayer(hlMarker); hlMarker=null; } }
 function highlightCurrent(){ if(lb.classList.contains("open")&&lightboxList[lightboxIndex]) highlightDot(lightboxList[lightboxIndex]); else clearHighlight(); }
-map.on("moveend zoomend",()=>{ renderClusters(); updateGallery(); persistState(); });
+// Keep the dots in sync immediately, but debounce the heavy work (full gallery DOM rebuild +
+// state serialization) until the map has settled — wheel/pinch zooms fire many end events in a
+// burst, and rebuilding the gallery for each one is what caused zoom lag.
+let mapIdleTimer=null;
+map.on("moveend zoomend",()=>{ renderClusters(); clearTimeout(mapIdleTimer); mapIdleTimer=setTimeout(()=>{ updateGallery(); persistState(); },180); });
 
 /* proximity clustering */
 // Shared search predicate (folder path + filename; space-separated terms are AND) used by
@@ -735,7 +738,16 @@ function dUp(e){
   map.off("mousemove",dMove); map.off("mouseup",dUp);
   if(tempRect){map.removeLayer(tempRect);tempRect=null;}
   const tiny=Math.abs(b.getNorth()-b.getSouth())<1e-7 && Math.abs(b.getEast()-b.getWest())<1e-7;
-  if(mode==="zoom"){ if(!tiny) map.fitBounds(b); setAreaBtn(); return; }   // stay armed until Escape
+  if(mode==="zoom"){   // stay armed until Escape
+    if(!tiny){
+      // Smart zoom: if the window contains photos (under the current filters), zoom to the extent
+      // of that cluster; an empty window zooms precisely to what was drawn.
+      const inWin=photos.filter(p=>p.lat!=null&&passDate(p)&&passSearch(p)&&passTags(p)&&(!boxBounds||boxBounds.contains([p.lat,p.lng]))&&b.contains([p.lat,p.lng]));
+      if(inWin.length) map.fitBounds(L.latLngBounds(inWin.map(p=>[p.lat,p.lng])),{padding:[46,46],maxZoom:19});
+      else map.fitBounds(b);
+    }
+    setAreaBtn(); return;
+  }
   map.off("mousedown",dDown); drawing=false; drawMode=null; map.dragging.enable(); map.getContainer().style.cursor="";
   if(tiny){ setAreaBtn(); return; }
   boxBounds=b; boxRect=L.rectangle(b,{color:"#5865F2",weight:2,fill:false,dashArray:"6 4"}).addTo(map);
