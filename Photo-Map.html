@@ -242,9 +242,6 @@
   .lb-stage.drawing{cursor:crosshair;}
   .lb-textbtn.on{background:var(--accent);color:#fff;border-color:var(--accent);}
   .lb-close{z-index:8;}
-  .cardel{position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:5px;border:1px solid var(--line);background:#ffffffe0;color:var(--bad);font-size:14px;line-height:1;cursor:pointer;display:none;align-items:center;justify-content:center;z-index:3;padding:0;}
-  .card:hover .cardel{display:flex;}
-  .cardel:hover{background:var(--bad);color:#fff;border-color:var(--bad);}
   .lb-copyloc:hover{border-color:var(--accent);color:var(--accent);}
   .lb-copyloc.ok{color:var(--good);border-color:var(--good);}
   .lb-enhance:hover{background:var(--accent2);}
@@ -277,6 +274,7 @@
     <button class="btn grpL" id="btnOpenJson">Open .JSON</button>
     <button class="btn grpL" id="btnSave">Save</button>
     <button class="btn grpL" id="btnSaveAs">Save As</button>
+    <button class="btn grpL" id="btnSaveLite" title="Save a small file with folders, locations, dates & markup only — no embedded photos. Reconnect the source folder to see images.">Save Folders</button>
     <span class="sep"></span>
     <button class="btn grpR" id="btnClear">Clear Map</button>
     <button class="btn grpR" id="btnNew">New</button>
@@ -699,7 +697,6 @@ function updateGallery(){
   if(!html) html='<div class="empty-msg"><b>No photos in this view.</b><br/>Pan or zoom the map, widen the date range, or load another folder.</div>';
   body.innerHTML=html;
   body.querySelectorAll(".card").forEach(el=>{ const p=photoById(Number(el.dataset.id)); el.addEventListener("click",()=>openViewer(p)); el.addEventListener("mouseenter",()=>highlightDot(p)); el.addEventListener("mouseleave",highlightCurrent); });
-  body.querySelectorAll(".cardel").forEach(el=>{ el.addEventListener("click",ev=>{ ev.stopPropagation(); deletePhoto(Number(el.dataset.del)); }); });
   document.getElementById("galCount").textContent=lightboxList.length+" shown";
   document.getElementById("stView").textContent=inView.length;
 }
@@ -712,7 +709,7 @@ function cardHtml(p,isNoGeo){
   const img=src?'<img class="thumb" src="'+src+'" loading="lazy" alt="">':'<div class="ph">no image</div>';
   const paths=pathsOf(p); const title=esc(paths.length?paths.join("\n"):p.name);   // all folders this photo was found in
   const dupe=paths.length>1?'<div class="hq" style="left:auto;right:5px;background:#4752C4;color:#fff;border-color:#4752C4" title="In '+paths.length+' folders">\u00D7'+paths.length+'</div>':"";
-  return '<div class="card" data-id="'+p.id+'" title="'+title+'">'+flag+hq+dupe+'<button class="cardel" data-del="'+p.id+'" title="Delete photo">\u00D7</button>'+img+'<div class="meta"><div class="fn">'+esc(p.name)+'</div><div class="sub">'+esc(sub)+'</div></div></div>';
+  return '<div class="card" data-id="'+p.id+'" title="'+title+'">'+flag+hq+dupe+img+'<div class="meta"><div class="fn">'+esc(p.name)+'</div><div class="sub">'+esc(sub)+'</div></div></div>';
 }
 function sortPhotos(arr,center){ const a=arr.slice();
   if(currentSort==="name") a.sort((x,y)=>x.name.localeCompare(y.name));
@@ -1150,28 +1147,36 @@ function clearAll(redraw){
 }
 document.getElementById("btnSave").addEventListener("click",()=>saveState(false));
 document.getElementById("btnSaveAs").addEventListener("click",()=>saveState(true));
-async function saveState(asNew){
+document.getElementById("btnSaveLite").addEventListener("click",()=>saveState(true,true));
+async function saveState(asNew, lite){
   if(!photos.length){ alert("Nothing to save yet."); return; }
   let stateObj,data;
-  try{ stateObj=serializeState(true); data=JSON.stringify(stateObj); }
+  // lite = folders/locations/dates/markup only, NO embedded photos -> a tiny file that just
+  // captures the folder-filtering organization (no big image data is ever written).
+  try{ stateObj=serializeState(!lite); data=JSON.stringify(stateObj); }
   catch(err){
     alert("This session is too large to write as one self contained file (the browser's text size limit). Narrow it with the date filter, enhance fewer images, or split the library into smaller session files.");
     return;
   }
+  const suggested=(folderName||"photomap")+(lite?"-folders":"")+".json";
   if(hasFSA&&window.showSaveFilePicker){
     try{
-      if(asNew||!saveFileHandle){ saveFileHandle=await window.showSaveFilePicker({suggestedName:(folderName||"photomap")+".json",types:[{description:"PhotoMap state",accept:{"application/json":[".json"]}}]}); }
-      const w=await saveFileHandle.createWritable();
+      let handle;
+      if(lite){ handle=await window.showSaveFilePicker({suggestedName:suggested,types:[{description:"PhotoMap folders",accept:{"application/json":[".json"]}}]}); }
+      else { if(asNew||!saveFileHandle){ saveFileHandle=await window.showSaveFilePicker({suggestedName:suggested,types:[{description:"PhotoMap state",accept:{"application/json":[".json"]}}]}); } handle=saveFileHandle; }
+      const w=await handle.createWritable();
       const CH=8*1024*1024;
       for(let i=0;i<data.length;i+=CH){ await w.write(data.slice(i,i+CH)); }
       await w.close();
-      try{ const f2=await saveFileHandle.getFile(); if(f2.size < data.length*0.5){ alert("Warning: the file may not have written completely because it is very large. Narrow the session with the date filter, enhance fewer images, then save again."); } }catch(e){}
-      jsonHandle=saveFileHandle; try{ await idbSet("jsonHandle",jsonHandle); }catch(e){}
-    }catch(err){ if(err&&err.name!=="AbortError") downloadJson(data); }
-  } else downloadJson(data);
-  try{ await idbSet("lastFull",stateObj); }catch(e){}   // cache full session so it auto loads next launch
+      if(!lite){
+        try{ const f2=await handle.getFile(); if(f2.size < data.length*0.5){ alert("Warning: the file may not have written completely because it is very large. Narrow the session with the date filter, enhance fewer images, then save again."); } }catch(e){}
+        jsonHandle=saveFileHandle; try{ await idbSet("jsonHandle",jsonHandle); }catch(e){}
+      }
+    }catch(err){ if(err&&err.name!=="AbortError") downloadJson(data,suggested); }
+  } else downloadJson(data,suggested);
+  if(!lite){ try{ await idbSet("lastFull",stateObj); }catch(e){} }   // cache full session so it auto loads next launch
 }
-function downloadJson(data){ const blob=new Blob([data],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=(folderName||"photomap")+".json"; a.click(); setTimeout(()=>URL.revokeObjectURL(url),500); }
+function downloadJson(data,name){ const blob=new Blob([data],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name||((folderName||"photomap")+".json"); a.click(); setTimeout(()=>URL.revokeObjectURL(url),500); }
 document.getElementById("btnOpenJson").addEventListener("click",async()=>{
   if(hasFSA&&window.showOpenFilePicker){
     try{ const [h]=await window.showOpenFilePicker({types:[{description:"JSON",accept:{"application/json":[".json"]}}]}); saveFileHandle=h; jsonHandle=h; try{await idbSet("jsonHandle",h);}catch(e){} const f=await h.getFile(); loadStateText(await f.text()); }
@@ -1189,7 +1194,7 @@ function serializeState(includeImages){
       box: boxBounds?[boxBounds.getSouth(),boxBounds.getWest(),boxBounds.getNorth(),boxBounds.getEast()]:null,
       view:{ center:[map.getCenter().lat, map.getCenter().lng], zoom:map.getZoom() } },
     photos: photos.map(p=>{ const o={path:p.path,name:p.name,lat:p.lat,lng:p.lng,time:p.time,dir:p.dir,size:p.size,isHeic:p.isHeic};
-      if(Array.isArray(p.paths)&&p.paths.length>1)o.paths=p.paths;   // preserve extra folder paths from de-duped overlaps
+      if(Array.isArray(p.paths)&&p.paths.length&&(p.paths.length>1||p.paths[0]!==p.path))o.paths=p.paths;   // preserve folder membership (de-duped overlaps + moves)
       if(p.marks&&p.marks.length)o.marks=p.marks;
       if(includeImages){ if(p.thumb)o.thumb=p.thumb; if(p.preview)o.preview=p.preview; if(p.full)o.full=p.full; } return o; })
   };
