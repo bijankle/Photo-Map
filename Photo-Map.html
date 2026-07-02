@@ -84,6 +84,8 @@
   .ip-iconbtn.ok{background:var(--good);border-color:var(--good);color:#fff;}
   .folder-pop{display:none;position:absolute;bottom:60px;left:50%;transform:translateX(-50%);z-index:7;width:340px;max-width:calc(100% - 24px);max-height:60vh;overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:0 12px 40px #1e1f2233;padding:10px;}
   .folder-pop .fp-title{font:600 12px var(--font);color:var(--ink);margin:0 2px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .folder-pop .fp-search{width:100%;box-sizing:border-box;margin:0 0 8px;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;font:12px var(--mono);color:var(--text);padding:6px 9px;}
+  .folder-pop .fp-search:focus{outline:none;border-color:var(--accent);}
   .folder-pop .fp-list{display:flex;flex-direction:column;gap:2px;margin-bottom:8px;}
   .folder-pop .fp-empty{font:12px var(--font);color:var(--dim);padding:4px 2px;}
   .folder-pop .fp-item{display:flex;align-items:flex-start;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer;font:13px var(--font);color:var(--text);}
@@ -1078,12 +1080,24 @@ function openFolderPop(){
   const p=curPhoto(); if(!p) return;
   const pop=document.getElementById("folderPop");
   const folders=allFolders();
-  let html='<div class="fp-title">Folders for '+esc(p.name)+'</div><div class="fp-list">';
+  let html='<div class="fp-title">Folders for '+esc(p.name)+'</div>';
+  if(folders.length>1) html+='<input type="text" class="fp-search" id="fpSearch" placeholder="Filter folders…" autocomplete="off"/>';
+  html+='<div class="fp-list">';
   if(!folders.length) html+='<div class="fp-empty">No folders yet — create one below.</div>';
   for(const f of folders){ const on=photoInFolder(p,f); html+='<label class="fp-item" title="'+esc(f)+'"><input type="checkbox" data-folder="'+esc(f)+'"'+(on?" checked":"")+'/><span>'+esc(folderLabel(f))+'</span></label>'; }
+  html+='<div class="fp-empty" id="fpNoMatch" style="display:none">No folders match.</div>';
   html+='</div><div class="fp-new"><input type="text" id="fpNew" placeholder="New folder name" autocomplete="off"/><button id="fpAdd">Create</button></div>';
   pop.innerHTML=html; pop.style.display="block"; folderPopShown=true;
   pop.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.addEventListener("change",()=>{ setPhotoFolder(p,cb.dataset.folder,cb.checked); afterFolderChange(); }));
+  const search=pop.querySelector("#fpSearch");
+  if(search){
+    const doFilter=()=>{ const q=search.value.trim().toLowerCase(); let any=false;
+      pop.querySelectorAll(".fp-item").forEach(el=>{ const cb=el.querySelector("input"); const hay=((cb&&cb.dataset.folder||"")+" "+el.textContent).toLowerCase(); const show=!q||hay.includes(q); el.style.display=show?"":"none"; if(show)any=true; });
+      const nm=pop.querySelector("#fpNoMatch"); if(nm) nm.style.display=any?"none":"block";
+    };
+    search.addEventListener("input",doFilter);
+    setTimeout(()=>search.focus(),0);   // ready to type immediately
+  }
   const addNew=()=>{ const inp=document.getElementById("fpNew"); let name=(inp.value||"").trim().replace(/^\/+|\/+$/g,""); if(!name) return;
     const r=rootPrefix(); if(r&&name!==r&&!name.startsWith(r+"/")) name=r+"/"+name;   // create new folders inside the linked root
     setPhotoFolder(p,name,true); afterFolderChange(); openFolderPop(); };
