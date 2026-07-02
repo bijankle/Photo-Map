@@ -75,6 +75,22 @@
   .imgpanel.open + .imgsplit{display:block;}
   .ip-close{position:absolute;top:10px;right:12px;z-index:6;background:#ffffffe6;border:1px solid var(--line);color:var(--text);font-size:22px;line-height:1;width:32px;height:32px;border-radius:8px;cursor:pointer;box-shadow:0 2px 8px #1e1f221f;}
   .ip-close:hover{color:var(--accent);border-color:var(--accent);}
+  .ip-topright{position:absolute;top:10px;right:52px;z-index:6;display:flex;gap:8px;}
+  .ip-iconbtn{width:32px;height:32px;border-radius:8px;background:#ffffffe6;border:1px solid var(--line);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px #1e1f221f;transition:color .12s,border-color .12s,background .12s;}
+  .ip-iconbtn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+  .ip-iconbtn:hover{color:var(--accent);border-color:var(--accent);}
+  .ip-iconbtn.ok{background:var(--good);border-color:var(--good);color:#fff;}
+  .folder-pop{display:none;position:absolute;bottom:60px;left:50%;transform:translateX(-50%);z-index:7;width:280px;max-height:46vh;overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:0 12px 40px #1e1f2233;padding:10px;}
+  .folder-pop .fp-title{font:600 12px var(--font);color:var(--ink);margin:0 2px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .folder-pop .fp-list{display:flex;flex-direction:column;gap:2px;margin-bottom:8px;}
+  .folder-pop .fp-empty{font:12px var(--font);color:var(--dim);padding:4px 2px;}
+  .folder-pop .fp-item{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer;font:13px var(--font);color:var(--text);}
+  .folder-pop .fp-item:hover{background:var(--panel2);}
+  .folder-pop .fp-item span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .folder-pop .fp-new{display:flex;gap:6px;border-top:1px solid var(--line);padding-top:8px;}
+  .folder-pop .fp-new input{flex:1;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;font:12px var(--mono);color:var(--text);padding:5px 8px;}
+  .folder-pop .fp-new button{background:var(--accent);color:#fff;border:none;border-radius:6px;font:600 11px var(--font);padding:0 12px;cursor:pointer;}
+  .folder-pop .fp-new button:hover{background:var(--accent2);}
   .ip-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:6;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:#ffffffe6;color:var(--text);font-size:26px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s;box-shadow:0 2px 10px #1e1f2226;}
   .ip-arrow:hover{background:var(--accent);color:#fff;border-color:var(--accent);}
   .ip-arrow.left{left:14px;} .ip-arrow.right{right:14px;}
@@ -203,8 +219,6 @@
   .lb-fullchk{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#fff;background:var(--accent);border-radius:7px;padding:7px 11px;cursor:pointer;box-shadow:0 2px 10px #1e1f2226;user-select:none;}
   .lb-fullchk input{width:14px;height:14px;accent-color:#fff;cursor:pointer;margin:0;}
   .lb-fullchk.busy{opacity:.65;cursor:wait;}
-  .lb-del{font-family:var(--mono);font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--bad);background:var(--panel2);border:1px solid #EDB5B6;border-radius:7px;padding:7px 11px;cursor:pointer;box-shadow:0 2px 10px #1e1f221a;}
-  .lb-del:hover{background:var(--bad);color:#fff;border-color:var(--bad);}
   .fsview{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:#ECEEF1;z-index:4;}
   .fsview.show{display:flex;}
   .fs-strip{display:flex;align-items:center;justify-content:center;gap:14px;width:100%;height:82vh;overflow:visible;}
@@ -292,6 +306,10 @@
       <canvas class="lb-mark" id="lbMark"></canvas>
       <div class="lb-ref" id="lbRef"><img id="lbRefImg" src="" alt="" /><div class="box" id="lbRefBox"></div></div>
     </div>
+    <div class="ip-topright">
+      <button class="ip-iconbtn" id="lbCopy" title="Copy current view to clipboard"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></button>
+      <button class="ip-iconbtn" id="lbDownload" title="Download current view"><svg viewBox="0 0 24 24"><path d="M12 3v11M7 10l5 5 5-5M5 20h14"/></svg></button>
+    </div>
     <button class="ip-close" id="lbClose">&times;</button>
     <button class="ip-arrow left" id="lbPrev">&#8249;</button>
     <button class="ip-arrow right" id="lbNext">&#8250;</button>
@@ -317,9 +335,9 @@
     </div>
     <div class="ip-tools">
       <label class="lb-fullchk" id="lbFullWrap"><input type="checkbox" id="lbFull" /><span>Full quality</span></label>
-      <button class="lb-textbtn" id="lbCopy">Copy image</button>
-      <button class="lb-del" id="lbDel">Delete</button>
+      <button class="lb-textbtn" id="lbFolder">Add to folder</button>
     </div>
+    <div class="folder-pop" id="folderPop"></div>
     <div class="tbed" id="tbEditor" style="display:none">
       <div class="tbctrl"><button id="tbDel" class="tbdel" title="Delete text box">&times;</button><button id="tbMinus" title="Smaller">A&minus;</button><button id="tbPlus" title="Larger">A+</button><span class="tbmove" id="tbMove" title="Drag to move">&#10021;</span></div>
       <div class="tbtext" id="tbText" contenteditable="true" spellcheck="false"></div>
@@ -373,6 +391,7 @@ const PREVIEW_PX = 1024;  // embedded zoom preview
 /* state */
 let photos=[], nextId=1, folderName="";
 let sizeIndex=new Map();   // byte size -> kept photo, for de-duplicating overlapping folders on load
+let existingPaths=new Set();   // paths already loaded, so re-opening a folder only processes what's new
 let currentSort="date_desc", showNoGeo=false, nameFilter="";
 let dateMin=null,dateMax=null,dateLo=null,dateHi=null;
 let lightboxList=[], lightboxIndex=0;
@@ -438,11 +457,11 @@ document.getElementById("folderInput").addEventListener("change",e=>{
   const fl=Array.from(e.target.files||[]);
   const items=fl.filter(f=>IMG_RE.test(f.name)).map(f=>({name:f.name,path:f.webkitRelativePath||f.name,getFile:async()=>f}));
   folderName=(fl[0]&&(fl[0].webkitRelativePath||"").split("/")[0])||"folder";
-  ingest(items);
+  ingest(items,true);   // additive + incremental: only new files are processed
 });
 async function openFolder(){
   if(hasFSA){
-    try{ dirHandle=await window.showDirectoryPicker(); await idbSet("dirHandle",dirHandle); folderName=dirHandle.name; await loadFromHandle(dirHandle); }
+    try{ dirHandle=await window.showDirectoryPicker(); await idbSet("dirHandle",dirHandle); folderName=dirHandle.name; await loadFromHandle(dirHandle,true); }
     catch(err){ if(err&&err.name==="AbortError")return; console.warn("picker fallback",err); document.getElementById("folderInput").click(); }
   } else { document.getElementById("folderInput").click(); }
 }
@@ -459,7 +478,7 @@ async function loadFromHandle(handle, append){
   await ingest(items, append);
 }
 const progress=document.getElementById("progress");
-function rebuildSizeIndex(){ sizeIndex=new Map(); for(const p of photos){ if(p.size!=null && !sizeIndex.has(p.size)) sizeIndex.set(p.size,p); } }
+function rebuildSizeIndex(){ sizeIndex=new Map(); existingPaths=new Set(); for(const p of photos){ if(p.size!=null && !sizeIndex.has(p.size)) sizeIndex.set(p.size,p); for(const pa of pathsOf(p)) existingPaths.add(pa); } }
 function addPath(p,path){ if(!path) return; if(!Array.isArray(p.paths)) p.paths=p.path?[p.path]:[]; if(!p.paths.includes(path)) p.paths.push(path); }
 async function ingest(items, append){
   if(!items.length){ alert("No image files found in that drop."); return; }
@@ -473,15 +492,19 @@ async function ingest(items, append){
   finishLoad(!append || wasEmpty); setTimeout(()=>progress.style.width="0%",600);
 }
 async function processOne(it){
+  // Incremental load: a file already present (same path) is skipped without even reading it,
+  // so re-opening a folder after adding one photo only processes the new file.
+  if(it.path && existingPaths.has(it.path)) return;
   const file=await it.getFile();
   const sz=file.size;
   // De-dupe by exact byte size: identical file from an overlapping folder -> keep one pin,
   // just record the extra folder path so it stays searchable under either folder name.
   // The check-and-reserve below runs synchronously (no await between), so it is race-safe
   // across the concurrent worker pool.
-  if(sz!=null && sizeIndex.has(sz)){ addPath(sizeIndex.get(sz),it.path); return; }
+  if(sz!=null && sizeIndex.has(sz)){ addPath(sizeIndex.get(sz),it.path); if(it.path) existingPaths.add(it.path); return; }
   const p={id:nextId++,path:it.path,name:it.name,file,size:sz,isHeic:false,thumb:null,preview:null,full:null,lat:null,lng:null,time:null,dir:null,marks:[],paths:[it.path]};
   if(sz!=null) sizeIndex.set(sz,p);
+  if(it.path) existingPaths.add(it.path);
   photos.push(p);
   try{
     const ex=await exifr.parse(file,{tiff:true,ifd0:true,exif:true,gps:true});
@@ -732,7 +755,7 @@ function bestSource(p){
 function loadViewer(){
   const p=lightboxList[lightboxIndex]; if(!p)return;
   if(selMark) deselectText();
-  closeFileInfo();
+  closeFileInfo(); if(typeof closeFolderPop==="function") closeFolderPop();
   if(curUrl){ URL.revokeObjectURL(curUrl); curUrl=null; }
   document.getElementById("lbName").textContent=p.name;
   lbFull.checked=false; lbFullWrap.classList.remove("busy");
@@ -788,7 +811,7 @@ lbStage.addEventListener("wheel",e=>{ e.preventDefault(); const r=lbStage.getBou
 let panning=false,panX=0,panY=0;
 /* pointer handling consolidated in the markup engine below */
 function vStep(d){ if(!lightboxList.length)return; lightboxIndex=(lightboxIndex+d+lightboxList.length)%lightboxList.length; loadViewer(); }
-function closeViewer(){ if(!lb.classList.contains("open")) return; if(selMark) deselectText(); closeFileInfo(); setMarkTool("none"); draft=null; polyPrev=null; clearHighlight(); lb.classList.remove("open"); if(curUrl){URL.revokeObjectURL(curUrl);curUrl=null;} lbImg.src=""; setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); },30); }
+function closeViewer(){ if(!lb.classList.contains("open")) return; if(selMark) deselectText(); closeFileInfo(); if(typeof closeFolderPop==="function") closeFolderPop(); setMarkTool("none"); draft=null; polyPrev=null; clearHighlight(); lb.classList.remove("open"); if(curUrl){URL.revokeObjectURL(curUrl);curUrl=null;} lbImg.src=""; setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); },30); }
 document.getElementById("lbClose").addEventListener("click",closeViewer);
 document.getElementById("lbPrev").addEventListener("click",e=>{e.stopPropagation();vStep(-1);});
 document.getElementById("lbNext").addEventListener("click",e=>{e.stopPropagation();vStep(1);});
@@ -833,7 +856,8 @@ setColor(markColor);
 function setMarkTool(t){ if(selMark) deselectText(); markTool=t; draft=null; polyPrev=null; lbStage.classList.toggle("drawing",t!=="none"); document.getElementById("markPalette").classList.toggle("show",t!=="none"); document.querySelectorAll(".ip-marktools .mk[data-tool]").forEach(b=>b.classList.toggle("on",b.dataset.tool===t)); redrawMarks(); }
 document.querySelectorAll(".ip-marktools .mk[data-tool]").forEach(b=>{ b.addEventListener("click",e=>{ e.stopPropagation(); setMarkTool(b.dataset.tool===markTool?"none":b.dataset.tool); }); });
 document.getElementById("mkClear").addEventListener("click",e=>{ e.stopPropagation(); if(selMark) deselectText(); const p=curPhoto(); if(p){ p.marks=[]; draft=null; polyPrev=null; afterMarkChange(); } });
-document.getElementById("lbCopy").addEventListener("click",e=>{ e.stopPropagation(); copyImage(e.currentTarget); });
+document.getElementById("lbCopy").addEventListener("click",e=>{ e.stopPropagation(); copyCurrentView(e.currentTarget); });
+document.getElementById("lbDownload").addEventListener("click",e=>{ e.stopPropagation(); downloadCurrentView(e.currentTarget); });
 
 function evToNorm(e){ const r=lbStage.getBoundingClientRect(); return { x:((e.clientX-r.left-vTx)/vScale)/fitW, y:((e.clientY-r.top-vTy)/vScale)/fitH }; }
 function orthoNorm(last,pt){ const dxp=(pt[0]-last[0])*fitW, dyp=(pt[1]-last[1])*fitH; return (Math.abs(dxp)>=Math.abs(dyp))?[pt[0],last[1]]:[last[0],pt[1]]; }
@@ -947,14 +971,56 @@ function buildInfoHTML(p){ const rows=[["Name",p.name||""]]; if(p.time)rows.push
 document.getElementById("fileInfoBtn").addEventListener("click",e=>{ e.stopPropagation(); const fi=document.getElementById("fileInfo"); if(fileInfoShown){ closeFileInfo(); return; } const p=curPhoto(); if(!p)return; fi.innerHTML=buildInfoHTML(p); fi.style.display="block"; fileInfoShown=true; });
 document.addEventListener("mousedown",e=>{ if(fileInfoShown && !e.target.closest("#fileInfo") && e.target.id!=="fileInfoBtn"){ closeFileInfo(); } },true);
 
-function btnFlash(btn,txt){ const o=btn.textContent; btn.textContent=txt; setTimeout(()=>{btn.textContent=o;},1300); }
-function copyImage(btn){
+function flashIcon(btn){ if(!btn)return; btn.classList.add("ok"); setTimeout(()=>btn.classList.remove("ok"),900); }
+// Fraction [fx,fy,fw,fh] of the image currently visible in the stage, from the live zoom/pan.
+function currentViewFrac(){
+  if(!(vScale>0)||!fitW||!fitH) return {fx:0,fy:0,fw:1,fh:1};
+  let fw=Math.min(1,1/vScale), fh=Math.min(1,1/vScale);
+  let fx=(-vTx/vScale)/fitW, fy=(-vTy/vScale)/fitH;
+  if(fx<0)fx=0; if(fy<0)fy=0; if(fx+fw>1)fx=1-fw; if(fy+fh>1)fy=1-fh; if(fx<0)fx=0; if(fy<0)fy=0;
+  return {fx,fy,fw,fh};
+}
+// Render exactly what the user sees (current zoom/pan crop + markup) to a canvas.
+function renderViewCanvas(p){
+  return new Promise((resolve,reject)=>{
+    const src=p.full||p.preview||p.thumb; if(!src){ reject(new Error("no image")); return; }
+    const img=new Image();
+    img.onload=()=>{
+      const natW=img.naturalWidth||img.width, natH=img.naturalHeight||img.height;
+      const f=(curPhoto()===p)?currentViewFrac():{fx:0,fy:0,fw:1,fh:1};
+      const sx=f.fx*natW, sy=f.fy*natH, sw=f.fw*natW, sh=f.fh*natH;
+      let outW=Math.max(1,Math.round(sw)), outH=Math.max(1,Math.round(sh));
+      const MAX=4096, cap=Math.min(1,MAX/Math.max(outW,outH));
+      outW=Math.max(1,Math.round(outW*cap)); outH=Math.max(1,Math.round(outH*cap));
+      const c=document.createElement("canvas"); c.width=outW; c.height=outH; const cx=c.getContext("2d");
+      cx.drawImage(img,sx,sy,sw,sh,0,0,outW,outH);
+      // marks are normalized to the whole image; map them into the cropped output
+      const mx=outW/f.fw, my=outH/f.fh, ox=-f.fx*mx, oy=-f.fy*my;
+      paintMarks(cx,ox,oy,mx,my,Math.min(mx,my)*0.0012,(p.marks||[]));
+      resolve(c);
+    };
+    img.onerror=()=>reject(new Error("load failed"));
+    img.src=src;
+  });
+}
+function copyCurrentView(btn){
   if(selMark) deselectText();
-  const p=curPhoto(); if(!p)return; const src=p.full||p.preview||p.thumb; if(!src){ alert("No image to copy yet."); return; }
-  const img=new Image();
-  img.onload=()=>{ const W=img.naturalWidth||img.width, H=img.naturalHeight||img.height; const c=document.createElement("canvas"); c.width=W; c.height=H; const cx=c.getContext("2d"); cx.drawImage(img,0,0,W,H); paintMarks(cx,0,0,W,H,Math.min(W,H)*0.0012,(p.marks||[])); c.toBlob(async(blob)=>{ if(!blob){ alert("Could not render the image."); return; } try{ await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]); btnFlash(btn,"Copied"); }catch(err){ const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=(p.name||"image").replace(/\.[^.]+$/,"")+"-markup.png"; document.body.appendChild(a); a.click(); a.remove(); btnFlash(btn,"Downloaded"); } },"image/png"); };
-  img.onerror=()=>alert("Could not load the image for copying.");
-  img.src=src;
+  const p=curPhoto(); if(!p) return;
+  renderViewCanvas(p).then(c=>c.toBlob(async blob=>{
+    if(!blob){ alert("Could not render the image."); return; }
+    try{ await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]); flashIcon(btn); }
+    catch(err){ alert("The browser blocked clipboard access here. Use the Download button instead."); }
+  },"image/png")).catch(()=>alert("No image to copy yet."));
+}
+function downloadCurrentView(btn){
+  if(selMark) deselectText();
+  const p=curPhoto(); if(!p) return;
+  renderViewCanvas(p).then(c=>c.toBlob(blob=>{
+    if(!blob){ alert("Could not render the image."); return; }
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download=(p.name||"image").replace(/\.[^.]+$/,"")+"-view.png";
+    document.body.appendChild(a); a.click(); setTimeout(()=>{ a.remove(); URL.revokeObjectURL(a.href); },500); flashIcon(btn);
+  },"image/png")).catch(()=>alert("No image to download yet."));
 }
 document.addEventListener("keydown",e=>{
   if(document.activeElement===tbText) return;
@@ -987,13 +1053,34 @@ lbFull.addEventListener("change",async ()=>{
     showPreview(p,true);
   }
 });
-document.getElementById("lbDel").addEventListener("click",e=>{
-  e.stopPropagation();
-  const p=lightboxList[lightboxIndex]; if(!p) return;
-  deletePhoto(p.id);
-  if(lightboxList.length){ lightboxIndex=Math.min(lightboxIndex,lightboxList.length-1); loadViewer(); }
-  else closeViewer();
-});
+/* ---- Add to folder (virtual organization; drives search + de-dupe grouping) ---- */
+function pathFolder(pa){ const i=String(pa||"").lastIndexOf("/"); return i>0?pa.slice(0,i):""; }
+function allFolders(){ const s=new Set(); for(const p of photos) for(const pa of pathsOf(p)){ const f=pathFolder(pa); if(f) s.add(f); } return Array.from(s).sort((a,b)=>a.localeCompare(b)); }
+function photoInFolder(p,F){ return pathsOf(p).some(pa=>pathFolder(pa)===F); }
+function setPhotoFolder(p,F,on){
+  if(!Array.isArray(p.paths)) p.paths=p.path?[p.path]:[];
+  if(on){ const np=F?F+"/"+p.name:p.name; if(!p.paths.includes(np)) p.paths.push(np); }
+  else { p.paths=p.paths.filter(pa=>pathFolder(pa)!==F); if(!p.paths.length) p.paths=[p.name||""]; }
+}
+let folderPopShown=false;
+function closeFolderPop(){ folderPopShown=false; document.getElementById("folderPop").style.display="none"; }
+function openFolderPop(){
+  const p=curPhoto(); if(!p) return;
+  const pop=document.getElementById("folderPop");
+  const folders=allFolders();
+  let html='<div class="fp-title">Folders for '+esc(p.name)+'</div><div class="fp-list">';
+  if(!folders.length) html+='<div class="fp-empty">No folders yet — create one below.</div>';
+  for(const f of folders){ const on=photoInFolder(p,f); html+='<label class="fp-item"><input type="checkbox" data-folder="'+esc(f)+'"'+(on?" checked":"")+'/><span>'+esc(f)+'</span></label>'; }
+  html+='</div><div class="fp-new"><input type="text" id="fpNew" placeholder="New folder name" autocomplete="off"/><button id="fpAdd">Create</button></div>';
+  pop.innerHTML=html; pop.style.display="block"; folderPopShown=true;
+  pop.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.addEventListener("change",()=>{ setPhotoFolder(p,cb.dataset.folder,cb.checked); afterFolderChange(); }));
+  const addNew=()=>{ const inp=document.getElementById("fpNew"); const name=(inp.value||"").trim().replace(/^\/+|\/+$/g,""); if(!name) return; setPhotoFolder(p,name,true); afterFolderChange(); openFolderPop(); };
+  pop.querySelector("#fpAdd").addEventListener("click",addNew);
+  pop.querySelector("#fpNew").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addNew(); } });
+}
+function afterFolderChange(){ updateGallery(); persistState(); }
+document.getElementById("lbFolder").addEventListener("click",e=>{ e.stopPropagation(); if(folderPopShown) closeFolderPop(); else openFolderPop(); });
+document.addEventListener("mousedown",e=>{ if(folderPopShown && !e.target.closest("#folderPop") && e.target.id!=="lbFolder"){ closeFolderPop(); } },true);
 
 /* In-memory index of originals (filename -> File) from a folder connected via the
    webkitdirectory input. This works even when the File System Access API is blocked
