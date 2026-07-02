@@ -266,7 +266,6 @@
     <span class="sep"></span>
     <button class="btn grpR" id="btnClear">Clear Map</button>
     <button class="btn grpR" id="btnNew">New</button>
-    <button class="btn grpR" id="btnDedupe">Remove Duplicates</button>
   </div>
   <input id="folderInput" type="file" webkitdirectory directory multiple style="display:none" />
   <input id="origInput" type="file" webkitdirectory directory multiple style="display:none" />
@@ -373,6 +372,7 @@ const PREVIEW_PX = 1024;  // embedded zoom preview
 
 /* state */
 let photos=[], nextId=1, folderName="";
+let sizeIndex=new Map();   // byte size -> kept photo, for de-duplicating overlapping folders on load
 let currentSort="date_desc", showNoGeo=false, nameFilter="";
 let dateMin=null,dateMax=null,dateLo=null,dateHi=null;
 let lightboxList=[], lightboxIndex=0;
@@ -459,10 +459,13 @@ async function loadFromHandle(handle, append){
   await ingest(items, append);
 }
 const progress=document.getElementById("progress");
+function rebuildSizeIndex(){ sizeIndex=new Map(); for(const p of photos){ if(p.size!=null && !sizeIndex.has(p.size)) sizeIndex.set(p.size,p); } }
+function addPath(p,path){ if(!path) return; if(!Array.isArray(p.paths)) p.paths=p.path?[p.path]:[]; if(!p.paths.includes(path)) p.paths.push(path); }
 async function ingest(items, append){
   if(!items.length){ alert("No image files found in that drop."); return; }
   const wasEmpty=photos.length===0;
   if(!append) clearAll(false);
+  rebuildSizeIndex();   // de-dupe new files against everything already loaded (appends, JSON sessions)
   let done=0; const total=items.length; progress.style.width="0%";
   let idx=0; const POOL=6;
   async function worker(){ while(idx<items.length){ const it=items[idx++]; try{ await processOne(it); }catch(e){} done++; progress.style.width=(done/total*100).toFixed(1)+"%"; } }
@@ -471,20 +474,28 @@ async function ingest(items, append){
 }
 async function processOne(it){
   const file=await it.getFile();
-  let lat=null,lng=null,time=null,dir=null;
+  const sz=file.size;
+  // De-dupe by exact byte size: identical file from an overlapping folder -> keep one pin,
+  // just record the extra folder path so it stays searchable under either folder name.
+  // The check-and-reserve below runs synchronously (no await between), so it is race-safe
+  // across the concurrent worker pool.
+  if(sz!=null && sizeIndex.has(sz)){ addPath(sizeIndex.get(sz),it.path); return; }
+  const p={id:nextId++,path:it.path,name:it.name,file,size:sz,isHeic:false,thumb:null,preview:null,full:null,lat:null,lng:null,time:null,dir:null,marks:[],paths:[it.path]};
+  if(sz!=null) sizeIndex.set(sz,p);
+  photos.push(p);
   try{
     const ex=await exifr.parse(file,{tiff:true,ifd0:true,exif:true,gps:true});
     if(ex){
-      if(typeof ex.latitude==="number"&&typeof ex.longitude==="number"){ lat=ex.latitude; lng=ex.longitude; }
-      const d=ex.DateTimeOriginal||ex.CreateDate||ex.ModifyDate; if(d instanceof Date&&!isNaN(d)) time=d.getTime();
-      if(typeof ex.GPSImgDirection==="number") dir=ex.GPSImgDirection;
+      if(typeof ex.latitude==="number"&&typeof ex.longitude==="number"){ p.lat=ex.latitude; p.lng=ex.longitude; }
+      const d=ex.DateTimeOriginal||ex.CreateDate||ex.ModifyDate; if(d instanceof Date&&!isNaN(d)) p.time=d.getTime();
+      if(typeof ex.GPSImgDirection==="number") p.dir=ex.GPSImgDirection;
     }
   }catch(e){}
-  const heic=isHeic(file);
+  p.isHeic=isHeic(file);
   let disp=file;
-  if(heic){ try{ disp=await heicToJpegBlob(file,0.82); }catch(e){} }
+  if(p.isHeic){ try{ disp=await heicToJpegBlob(file,0.82); }catch(e){} }
   const imgs=await makePreviews(disp).catch(()=>({thumb:null,preview:null}));
-  photos.push({id:nextId++,path:it.path,name:it.name,file,size:file.size,isHeic:heic,thumb:imgs.thumb,preview:imgs.preview,full:null,lat,lng,time,dir,marks:[]});
+  p.thumb=imgs.thumb; p.preview=imgs.preview;
 }
 function isHeic(file){ return /\.(heic|heif)$/i.test(file.name||"") || /heic|heif/i.test(file.type||""); }
 async function heicToJpegBlob(file,quality){
@@ -647,7 +658,7 @@ function updateGallery(){
   const bounds=map.getBounds(), center=map.getCenter();
   const spatial=boxBounds||bounds;
   const terms=nameFilter?nameFilter.split(/\s+/).filter(Boolean):[];   // match across folder path + filename; space-separated terms are AND
-  const passName=p=>{ if(!terms.length) return true; const hay=((p.path||"")+" "+(p.name||"")).toLowerCase(); return terms.every(t=>hay.includes(t)); };
+  const passName=p=>{ if(!terms.length) return true; const hay=((Array.isArray(p.paths)&&p.paths.length?p.paths.join(" "):(p.path||""))+" "+(p.name||"")).toLowerCase(); return terms.every(t=>hay.includes(t)); };
   let inView=sortPhotos(photos.filter(p=>p.lat!=null&&passDate(p)&&passName(p)&&spatial.contains([p.lat,p.lng])),center);
   let noGeo=showNoGeo?sortPhotos(photos.filter(p=>p.lat==null&&passDate(p)&&passName(p)),center):[];
   /* keep the open viewer pinned to the same photo across re-sorts (lightboxIndex is positional) */
@@ -669,15 +680,16 @@ function updateGallery(){
   document.getElementById("galCount").textContent=lightboxList.length+" shown";
   document.getElementById("stView").textContent=inView.length;
 }
-function folderOf(p){ const i=String(p.path||"").lastIndexOf("/"); return i>0?p.path.slice(0,i):""; }
+function pathsOf(p){ return (Array.isArray(p.paths)&&p.paths.length)?p.paths:(p.path?[p.path]:[]); }
 function cardHtml(p,isNoGeo){
   const sub=p.time?fmtDate(p.time):(p.lat!=null?fmtCoord(p.lat,p.lng):"no metadata");
   const flag=isNoGeo?'<div class="flag">NO GPS</div>':"";
   const hq=p.full?'<div class="hq">HQ</div>':"";
   const src=p.thumb||p.preview;
   const img=src?'<img class="thumb" src="'+src+'" loading="lazy" alt="">':'<div class="ph">no image</div>';
-  const folder=folderOf(p); const title=folder?esc(folder+"/"+p.name):esc(p.name);
-  return '<div class="card" data-id="'+p.id+'" title="'+title+'">'+flag+hq+'<button class="cardel" data-del="'+p.id+'" title="Delete photo">\u00D7</button>'+img+'<div class="meta"><div class="fn">'+esc(p.name)+'</div><div class="sub">'+esc(sub)+'</div></div></div>';
+  const paths=pathsOf(p); const title=esc(paths.length?paths.join("\n"):p.name);   // all folders this photo was found in
+  const dupe=paths.length>1?'<div class="hq" style="left:auto;right:5px;background:#4752C4;color:#fff;border-color:#4752C4" title="In '+paths.length+' folders">\u00D7'+paths.length+'</div>':"";
+  return '<div class="card" data-id="'+p.id+'" title="'+title+'">'+flag+hq+dupe+'<button class="cardel" data-del="'+p.id+'" title="Delete photo">\u00D7</button>'+img+'<div class="meta"><div class="fn">'+esc(p.name)+'</div><div class="sub">'+esc(sub)+'</div></div></div>';
 }
 function sortPhotos(arr,center){ const a=arr.slice();
   if(currentSort==="name") a.sort((x,y)=>x.name.localeCompare(y.name));
@@ -1035,23 +1047,6 @@ window.addEventListener("mouseup",()=>{ if(resizing){resizing=false;document.bod
 
 /* file ops */
 document.getElementById("btnClear").addEventListener("click",()=>clearAll(true));
-document.getElementById("btnDedupe").addEventListener("click",removeDuplicates);
-function removeDuplicates(){
-  if(!photos.length){ alert("No photos loaded."); return; }
-  const groups=new Map();
-  for(const p of photos){ if(p.size==null) continue; if(!groups.has(p.size)) groups.set(p.size,[]); groups.get(p.size).push(p); }
-  const removeIds=new Set(); let dup=0;
-  for(const grp of groups.values()){
-    if(grp.length<2) continue;
-    const keeper=grp.find(p=>p.lat!=null)||grp[0];
-    for(const p of grp){ if(p!==keeper){ removeIds.add(p.id); dup++; } }
-  }
-  if(!dup){ alert("No duplicates found. Matched on exact byte size; photos with unknown size are skipped."); return; }
-  if(!confirm("Found "+dup+" duplicate photo"+(dup>1?"s":"")+" by identical byte size. Remove "+(dup>1?"them":"it")+" from the map? Your source files are not touched.")) return;
-  photos=photos.filter(p=>!removeIds.has(p.id));
-  buildDateFilter(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState();
-  alert("Removed "+dup+" duplicate photo"+(dup>1?"s":"")+".");
-}
 document.getElementById("btnNew").addEventListener("click",async()=>{
   if(!confirm("Start a new map? This clears the current photos and the saved state."))return;
   clearAll(true); saveFileHandle=null; jsonHandle=null; dirHandle=null; folderName="";
@@ -1060,7 +1055,7 @@ document.getElementById("btnNew").addEventListener("click",async()=>{
 });
 function clearAll(redraw){
   if(boxRect){map.removeLayer(boxRect);boxRect=null;} boxBounds=null; setAreaBtn();
-  photos=[]; nextId=1; cluster=null; markerLayer.clearLayers(); undoStack=[]; lightboxList=[]; lightboxIndex=0;
+  photos=[]; nextId=1; cluster=null; markerLayer.clearLayers(); undoStack=[]; lightboxList=[]; lightboxIndex=0; sizeIndex=new Map();
   if(measuring) stopMeasure();
   dateMin=dateMax=dateLo=dateHi=null; document.getElementById("datebar").classList.add("hidden");
   if(redraw){ updateStats(); document.getElementById("galCount").textContent="0 shown"; document.getElementById("stView").textContent="0";
@@ -1107,6 +1102,7 @@ function serializeState(includeImages){
       box: boxBounds?[boxBounds.getSouth(),boxBounds.getWest(),boxBounds.getNorth(),boxBounds.getEast()]:null,
       view:{ center:[map.getCenter().lat, map.getCenter().lng], zoom:map.getZoom() } },
     photos: photos.map(p=>{ const o={path:p.path,name:p.name,lat:p.lat,lng:p.lng,time:p.time,dir:p.dir,size:p.size,isHeic:p.isHeic};
+      if(Array.isArray(p.paths)&&p.paths.length>1)o.paths=p.paths;   // preserve extra folder paths from de-duped overlaps
       if(p.marks&&p.marks.length)o.marks=p.marks;
       if(includeImages){ if(p.thumb)o.thumb=p.thumb; if(p.preview)o.preview=p.preview; if(p.full)o.full=p.full; } return o; })
   };
@@ -1123,7 +1119,7 @@ function loadStateText(text){
 }
 function applyState(st){
   clearAll(false); folderName=st.folderName||"";
-  (st.photos||[]).forEach(m=>photos.push({id:nextId++,path:m.path,name:m.name,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,full:m.full||null,lat:m.lat,lng:m.lng,time:m.time,dir:m.dir,marks:Array.isArray(m.marks)?m.marks:[]}));
+  (st.photos||[]).forEach(m=>photos.push({id:nextId++,path:m.path,name:m.name,paths:Array.isArray(m.paths)&&m.paths.length?m.paths:(m.path?[m.path]:[]),file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,full:m.full||null,lat:m.lat,lng:m.lng,time:m.time,dir:m.dir,marks:Array.isArray(m.marks)?m.marks:[]}));
   const s=st.settings||{};
   if(s.thumb){ document.documentElement.style.setProperty("--thumb",s.thumb); document.getElementById("thumbSize").value=parseInt(s.thumb)||120; }
   if(s.galleryW) document.documentElement.style.setProperty("--gallery-w",s.galleryW);
@@ -1204,7 +1200,7 @@ function applyShared(P){
   if(!P||!Array.isArray(P.p))return false;
   if(boxRect){map.removeLayer(boxRect);boxRect=null;} boxBounds=null; setAreaBtn();
   photos=[]; nextId=1; undoStack=[];
-  P.p.forEach(m=>photos.push({id:nextId++,path:m[2]||"",name:m[2]||"",file:null,size:null,isHeic:false,thumb:null,preview:null,full:null,lat:(m[0]!=null?m[0]:null),lng:(m[1]!=null?m[1]:null),time:m[3]||null,dir:null,marks:[]}));
+  P.p.forEach(m=>photos.push({id:nextId++,path:m[2]||"",name:m[2]||"",paths:m[2]?[m[2]]:[],file:null,size:null,isHeic:false,thumb:null,preview:null,full:null,lat:(m[0]!=null?m[0]:null),lng:(m[1]!=null?m[1]:null),time:m[3]||null,dir:null,marks:[]}));
   buildDateFilter(); buildCluster(); renderClusters(); updateStats();
   if(P.vw){ try{ map.setView([P.vw[0],P.vw[1]],P.vw[2]); }catch(e){} }
   updateGallery();
