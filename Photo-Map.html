@@ -273,9 +273,8 @@
   <div class="toolbar">
     <button class="btn grpL" id="btnFolder">Open Folder</button>
     <button class="btn grpL" id="btnOpenJson">Open .JSON</button>
-    <button class="btn grpL" id="btnSave">Save</button>
-    <button class="btn grpL" id="btnSaveAs">Save As</button>
-    <button class="btn grpL" id="btnSaveLite" title="Save a small file with folders, locations, dates & markup only — no embedded photos. Reconnect the source folder to see images.">Save Folders</button>
+    <button class="btn grpL" id="btnSave" title="Changes auto-save onto the loaded .json — click to force an immediate save">Save</button>
+    <button class="btn grpL" id="btnSaveAs" title="Choose a new .json to keep this project in (metadata only — no embedded photos)">Save As</button>
     <span class="sep"></span>
     <button class="btn grpR" id="btnClear">Clear Map</button>
     <button class="btn grpR" id="btnNew">New</button>
@@ -547,7 +546,7 @@ function scaleToDataURL(img,max,q){
   const c=document.createElement("canvas"); c.width=w; c.height=h; c.getContext("2d").drawImage(img,0,0,w,h);
   try{ return c.toDataURL("image/jpeg",q); }catch(e){ return null; }
 }
-function finishLoad(refit){ buildDateFilter(); buildCluster(); if(refit) fitToPhotos(); renderClusters(); updateStats(); updateGallery(); persistState(); hideBanner(); }
+function finishLoad(refit){ buildDateFilter(); buildCluster(); if(refit) fitToPhotos(); renderClusters(); updateStats(); updateGallery(); persistState(); cacheFullSession(); hideBanner(); }
 function fitToPhotos(){
   let geo=photos.filter(p=>p.lat!=null && passDate(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng])));
   if(!geo.length) geo=photos.filter(p=>p.lat!=null);
@@ -1088,7 +1087,7 @@ function openFolderPop(){
   pop.querySelector("#fpAdd").addEventListener("click",addNew);
   pop.querySelector("#fpNew").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addNew(); } });
 }
-function afterFolderChange(){ updateGallery(); buildCluster(); renderClusters(); idbSet("lastState",serializeState(false)).catch(()=>{}); }   // write folder change immediately (not debounced) so it survives a quick close
+function afterFolderChange(){ updateGallery(); buildCluster(); renderClusters(); idbSet("lastState",serializeState(false)).catch(()=>{}); flushAutoSave(true); }   // write folder change straight onto the .json (this runs inside the click gesture, so it can grant write permission)
 document.getElementById("lbFolder").addEventListener("click",e=>{ e.stopPropagation(); if(folderPopShown) closeFolderPop(); else openFolderPop(); });
 document.addEventListener("mousedown",e=>{ if(folderPopShown && !e.target.closest("#folderPop") && e.target.id!=="lbFolder"){ closeFolderPop(); } },true);
 
@@ -1158,42 +1157,57 @@ function clearAll(redraw){
   if(redraw){ updateStats(); document.getElementById("galCount").textContent="0 shown"; document.getElementById("stView").textContent="0";
     document.getElementById("galleryBody").innerHTML='<div class="empty-msg"><b>Map cleared.</b><br/>Open a folder to load photos again.</div>'; persistState(); }
 }
-document.getElementById("btnSave").addEventListener("click",()=>saveState(false));
-document.getElementById("btnSaveAs").addEventListener("click",()=>saveState(true));
-document.getElementById("btnSaveLite").addEventListener("click",()=>saveState(true,true));
-async function saveState(asNew, lite){
-  if(!photos.length){ alert("Nothing to save yet."); return; }
-  let stateObj,data;
-  // lite = folders/locations/dates/markup only, NO embedded photos -> a tiny file that just
-  // captures the folder-filtering organization (no big image data is ever written).
-  try{ stateObj=serializeState(!lite); data=JSON.stringify(stateObj); }
-  catch(err){
-    alert("This session is too large to write as one self contained file (the browser's text size limit). Narrow it with the date filter, enhance fewer images, or split the library into smaller session files.");
-    return;
-  }
-  const suggested=(loadedJsonName||folderName||"photomap").replace(/\.json$/i,"")+(lite?"-folders":"")+".json";
-  if(hasFSA&&window.showSaveFilePicker){
-    try{
-      let handle;
-      if(lite){ handle=await window.showSaveFilePicker({suggestedName:suggested,types:[{description:"PhotoMap folders",accept:{"application/json":[".json"]}}]}); }
-      // plain Save reuses the handle of the file it was loaded from (saveFileHandle or jsonHandle) so it OVERWRITES that file
-      else { let target=asNew?null:(saveFileHandle||jsonHandle); if(!target){ target=await window.showSaveFilePicker({suggestedName:suggested,types:[{description:"PhotoMap state",accept:{"application/json":[".json"]}}]}); } saveFileHandle=target; handle=saveFileHandle; }
-      const w=await handle.createWritable();
-      const CH=8*1024*1024;
-      for(let i=0;i<data.length;i+=CH){ await w.write(data.slice(i,i+CH)); }
-      await w.close();
-      if(!lite){
-        try{ const f2=await handle.getFile(); if(f2.size < data.length*0.5){ alert("Warning: the file may not have written completely because it is very large. Narrow the session with the date filter, enhance fewer images, then save again."); } }catch(e){}
-        jsonHandle=saveFileHandle; try{ await idbSet("jsonHandle",jsonHandle); }catch(e){}
-      }
-    }catch(err){ if(err&&err.name!=="AbortError") downloadJson(data,suggested); }
-  } else downloadJson(data,suggested);
-  if(!lite){ try{ await idbSet("lastFull",stateObj); }catch(e){} }   // cache full session so it auto loads next launch
+/* ---- Auto-save: tiny metadata-only writes straight onto the loaded .json, no button needed ----
+   The .json holds folders/locations/dates/markup (no embedded photos), so each write is small and
+   fast and its temporary .crswap is tiny and cleaned up on close. Images come from the source folder. */
+function serializeMeta(){ return JSON.stringify(serializeState(false)); }
+async function ensureJsonWrite(interactive){
+  if(!jsonHandle||!jsonHandle.queryPermission) return false;
+  try{
+    if((await jsonHandle.queryPermission({mode:"readwrite"}))==="granted") return true;
+    if(interactive && (await jsonHandle.requestPermission({mode:"readwrite"}))==="granted") return true;
+  }catch(e){}
+  return false;
 }
+let autoTimer=null, autoPending=false, autoBusy=false;
+function scheduleAutoSave(){ if(!jsonHandle) return; autoPending=true; clearTimeout(autoTimer); autoTimer=setTimeout(()=>flushAutoSave(false),900); }
+async function flushAutoSave(interactive){
+  if(!jsonHandle || autoBusy) return false;
+  if(!(await ensureJsonWrite(interactive))) return false;   // write permission needs a prior user-gesture grant
+  autoBusy=true; autoPending=false; let ok=false;
+  try{ const data=serializeMeta(); const w=await jsonHandle.createWritable(); await w.write(data); await w.close(); loadedJsonName=jsonHandle.name||loadedJsonName; ok=true; }
+  catch(e){ console.warn("auto-save failed",e); }
+  autoBusy=false;
+  if(autoPending) scheduleAutoSave();   // a change landed mid-write; write again
+  return ok;
+}
+// On reopen the file's write permission needs a user gesture to re-grant — do it on first interaction, then flush.
+function armJsonWrite(){
+  if(!jsonHandle) return;
+  const once=async()=>{ window.removeEventListener("pointerdown",once,true); window.removeEventListener("keydown",once,true); if(await ensureJsonWrite(true) && autoPending) flushAutoSave(true); };
+  window.addEventListener("pointerdown",once,true); window.addEventListener("keydown",once,true);
+}
+async function adoptNewJson(){
+  if(!photos.length){ alert("Nothing to save yet."); return; }
+  const suggested=(loadedJsonName||folderName||"photomap").replace(/\.json$/i,"")+".json";
+  if(hasFSA&&window.showSaveFilePicker){
+    try{ const h=await window.showSaveFilePicker({suggestedName:suggested,types:[{description:"PhotoMap project",accept:{"application/json":[".json"]}}]});
+      jsonHandle=h; saveFileHandle=h; loadedJsonName=h.name; try{await idbSet("jsonHandle",h);}catch(e){}
+      await flushAutoSave(true);
+    }catch(err){ if(err&&err.name!=="AbortError") downloadJson(serializeMeta(),suggested); }
+  } else downloadJson(serializeMeta(),suggested);
+}
+// Save = flush the auto-save immediately onto the current file (or pick one). Auto-save means it's optional.
+document.getElementById("btnSave").addEventListener("click",async()=>{
+  if(!photos.length){ alert("Nothing to save yet."); return; }
+  if(jsonHandle){ if(!(await flushAutoSave(true))) alert("Could not write to the file. Use Save As to choose where to keep it."); }
+  else adoptNewJson();
+});
+document.getElementById("btnSaveAs").addEventListener("click",adoptNewJson);
 function downloadJson(data,name){ const blob=new Blob([data],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name||((folderName||"photomap")+".json"); a.click(); setTimeout(()=>URL.revokeObjectURL(url),500); }
 document.getElementById("btnOpenJson").addEventListener("click",async()=>{
   if(hasFSA&&window.showOpenFilePicker){
-    try{ const [h]=await window.showOpenFilePicker({types:[{description:"JSON",accept:{"application/json":[".json"]}}]}); saveFileHandle=h; jsonHandle=h; loadedJsonName=h.name; try{await idbSet("jsonHandle",h);}catch(e){} const f=await h.getFile(); loadStateText(await f.text()); }
+    try{ const [h]=await window.showOpenFilePicker({types:[{description:"JSON",accept:{"application/json":[".json"]}}]}); saveFileHandle=h; jsonHandle=h; loadedJsonName=h.name; try{await idbSet("jsonHandle",h);}catch(e){} const f=await h.getFile(); loadStateText(await f.text()); armJsonWrite(); }
     catch(err){ if(err&&err.name==="AbortError") return; console.warn(err); document.getElementById("jsonInput").click(); }   // FSA picker can fail (e.g. file:// pages); fall back to the file input
   } else document.getElementById("jsonInput").click();
 });
@@ -1239,7 +1253,7 @@ function applyState(st){
   buildCluster(); renderClusters(); updateStats(); updateGallery(); map.invalidateSize();
   if(s.view && Array.isArray(s.view.center)) map.setView(s.view.center, (s.view.zoom!=null?s.view.zoom:map.getZoom()));
   else fitToPhotos();
-  maybeOfferReconnect();
+  maybeOfferReconnect(); cacheFullSession();
 }
 /* Folder membership + markup are lightweight and are autosaved (lastState) on every change,
    even when the heavy image Save fails or goes stale. These helpers let us re-apply that fresh
@@ -1254,7 +1268,11 @@ async function idbSet(k,v){ const db=await idbOpen(); return new Promise((res,re
 async function idbGet(k){ const db=await idbOpen(); return new Promise((res,rej)=>{ const t=db.transaction("kv","readonly"); const r=t.objectStore("kv").get(k); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 async function idbDel(k){ const db=await idbOpen(); return new Promise((res,rej)=>{ const t=db.transaction("kv","readwrite"); t.objectStore("kv").delete(k); t.oncomplete=()=>res(); t.onerror=()=>rej(t.error); }); }
 let persistTimer=null;
-function persistState(){ clearTimeout(persistTimer); persistTimer=setTimeout(()=>{ idbSet("lastState",serializeState(false)).catch(()=>{}); },400); }
+function persistState(){ clearTimeout(persistTimer); persistTimer=setTimeout(()=>{ idbSet("lastState",serializeState(false)).catch(()=>{}); scheduleAutoSave(); },400); }
+// Cache the image-bearing session to IndexedDB (browser-local, no .crswap) so reopen shows photos
+// instantly without reconnecting the folder. The .json file itself stays small (metadata only).
+let fullCacheTimer=null;
+function cacheFullSession(){ clearTimeout(fullCacheTimer); fullCacheTimer=setTimeout(()=>{ try{ if(photos.some(p=>p.thumb||p.preview)) idbSet("lastFull",serializeState(true)).catch(()=>{}); }catch(e){} },1500); }
 
 /* banner */
 function showBanner(html,action){ document.getElementById("rcMsg").innerHTML=html; bannerAction=action; document.getElementById("reconnect").classList.add("show"); }
@@ -1344,6 +1362,7 @@ function parseShareHash(){
     }
   }
   else if(last && last.photos && last.photos.length){ applyState(last); if(jsonHandle) showBanner('Reopen last session <b>'+esc(jsonHandle.name||"file")+'</b> to load the images.',reopenLastJson); }
+  if(jsonHandle) armJsonWrite();   // grant write permission on first interaction so auto-save resumes onto the .json
   if(dirHandle){ try{ if((await dirHandle.queryPermission({mode:"read"}))!=="granted") armFolderPermission(); }catch(e){} }
 })();
 </script>
