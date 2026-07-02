@@ -344,7 +344,7 @@
     <div class="controls">
       <div class="ctl-row"><label for="sortSel">Sort</label>
         <select id="sortSel"><option value="date_desc">Newest first</option><option value="date_asc">Oldest first</option><option value="name">Filename</option><option value="dist">Nearest to center</option></select></div>
-      <div class="ctl-row"><label for="nameFilter">Search</label><input type="text" id="nameFilter" placeholder="Filename keyword" autocomplete="off" /></div>
+      <div class="ctl-row"><label for="nameFilter">Search</label><input type="text" id="nameFilter" placeholder="Search folder or filename" autocomplete="off" /></div>
       <div class="ctl-row"><label for="thumbSize">Size</label><input type="range" id="thumbSize" min="64" max="260" value="120" /></div>
     </div>
     <div class="gallery-body" id="galleryBody">
@@ -646,7 +646,8 @@ function updateGallery(){
   const body=document.getElementById("galleryBody"); if(!photos.length) return;
   const bounds=map.getBounds(), center=map.getCenter();
   const spatial=boxBounds||bounds;
-  const passName=p=>!nameFilter||((p.name||"").toLowerCase().includes(nameFilter));
+  const terms=nameFilter?nameFilter.split(/\s+/).filter(Boolean):[];   // match across folder path + filename; space-separated terms are AND
+  const passName=p=>{ if(!terms.length) return true; const hay=((p.path||"")+" "+(p.name||"")).toLowerCase(); return terms.every(t=>hay.includes(t)); };
   let inView=sortPhotos(photos.filter(p=>p.lat!=null&&passDate(p)&&passName(p)&&spatial.contains([p.lat,p.lng])),center);
   let noGeo=showNoGeo?sortPhotos(photos.filter(p=>p.lat==null&&passDate(p)&&passName(p)),center):[];
   /* keep the open viewer pinned to the same photo across re-sorts (lightboxIndex is positional) */
@@ -668,13 +669,15 @@ function updateGallery(){
   document.getElementById("galCount").textContent=lightboxList.length+" shown";
   document.getElementById("stView").textContent=inView.length;
 }
+function folderOf(p){ const i=String(p.path||"").lastIndexOf("/"); return i>0?p.path.slice(0,i):""; }
 function cardHtml(p,isNoGeo){
   const sub=p.time?fmtDate(p.time):(p.lat!=null?fmtCoord(p.lat,p.lng):"no metadata");
   const flag=isNoGeo?'<div class="flag">NO GPS</div>':"";
   const hq=p.full?'<div class="hq">HQ</div>':"";
   const src=p.thumb||p.preview;
   const img=src?'<img class="thumb" src="'+src+'" loading="lazy" alt="">':'<div class="ph">no image</div>';
-  return '<div class="card" data-id="'+p.id+'">'+flag+hq+'<button class="cardel" data-del="'+p.id+'" title="Delete photo">\u00D7</button>'+img+'<div class="meta"><div class="fn">'+esc(p.name)+'</div><div class="sub">'+esc(sub)+'</div></div></div>';
+  const folder=folderOf(p); const title=folder?esc(folder+"/"+p.name):esc(p.name);
+  return '<div class="card" data-id="'+p.id+'" title="'+title+'">'+flag+hq+'<button class="cardel" data-del="'+p.id+'" title="Delete photo">\u00D7</button>'+img+'<div class="meta"><div class="fn">'+esc(p.name)+'</div><div class="sub">'+esc(sub)+'</div></div></div>';
 }
 function sortPhotos(arr,center){ const a=arr.slice();
   if(currentSort==="name") a.sort((x,y)=>x.name.localeCompare(y.name));
