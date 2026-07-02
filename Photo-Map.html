@@ -123,6 +123,8 @@
   .ip-tag:hover{border-color:var(--accent);}
   .ip-tags.filtered .ip-tag{opacity:.35;}
   .ip-tags.filtered .ip-tag.on{opacity:1;border-color:var(--accent);background:var(--accent-tint);}
+  .ip-tag.clearall{opacity:1!important;color:var(--bad);}
+  .ip-tag.clearall:hover{border-color:var(--bad);}
   .ip-fullbox{position:absolute;right:12px;bottom:14px;z-index:6;}
   .ip-marktools{position:absolute;top:46px;left:12px;z-index:6;display:flex;flex-direction:column;gap:5px;background:#ffffffe8;border:1px solid var(--line);padding:8px 6px;border-radius:10px;max-height:calc(100% - 120px);overflow:auto;scrollbar-width:none;box-shadow:0 4px 16px #1e1f2226;}
   .ip-marktools::-webkit-scrollbar{display:none;}
@@ -418,6 +420,7 @@ let photos=[], nextId=1, folderName="";
 let sizeIndex=new Map();   // byte size -> kept photo, for de-duplicating overlapping folders on load
 let existingPaths=new Set();   // paths already loaded, so re-opening a folder only processes what's new
 let currentSort="date_desc", showNoGeo=false, nameFilter="";
+let tagFilters=new Set();   // active tag filters (folder paths) — photos must be in ALL of them (intersection)
 let dateMin=null,dateMax=null,dateLo=null,dateHi=null;
 let lightboxList=[], lightboxIndex=0;
 let undoStack=[];
@@ -469,8 +472,10 @@ function passSearch(p){
   const hay=((Array.isArray(p.paths)&&p.paths.length?p.paths.join(" "):(p.path||""))+" "+(p.name||"")).toLowerCase();
   return terms.every(t=>hay.includes(t));
 }
+// Multi-tag filter: a photo passes only if it is in EVERY active tag (overlap/intersection).
+function passTags(p){ if(!tagFilters.size) return true; for(const f of tagFilters) if(!photoInFolder(p,f)) return false; return true; }
 function buildCluster(){
-  const feats=photos.filter(p=>p.lat!=null && passDate(p) && passSearch(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng]))).map(p=>({type:"Feature",properties:{pid:p.id},geometry:{type:"Point",coordinates:[p.lng,p.lat]}}));
+  const feats=photos.filter(p=>p.lat!=null && passDate(p) && passSearch(p) && passTags(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng]))).map(p=>({type:"Feature",properties:{pid:p.id},geometry:{type:"Point",coordinates:[p.lng,p.lat]}}));
   cluster=new Supercluster({radius:64,maxZoom:21,minPoints:2});
   cluster.load(feats);
 }
@@ -738,7 +743,7 @@ function updateGallery(){
   const body=document.getElementById("galleryBody"); if(!photos.length) return;
   const bounds=map.getBounds(), center=map.getCenter();
   const spatial=boxBounds||bounds;
-  const passName=passSearch;   // shared with the map so gallery + dots stay in sync
+  const passName=p=>passSearch(p)&&passTags(p);   // shared with the map so gallery + dots stay in sync
   let inView=sortPhotos(photos.filter(p=>p.lat!=null&&passDate(p)&&passName(p)&&spatial.contains([p.lat,p.lng])),center);
   let noGeo=showNoGeo?sortPhotos(photos.filter(p=>p.lat==null&&passDate(p)&&passName(p)),center):[];
   /* keep the open viewer pinned to the same photo across re-sorts (lightboxIndex is positional) */
@@ -817,30 +822,37 @@ function loadViewer(){
   renderPhotoTags(p);
   highlightCurrent();
 }
-/* Folder tags in the bottom-left of the viewer: one pill per folder this photo belongs to.
-   Clicking a tag filters the whole app (gallery + map dots) to that folder via the sidebar
-   search; clicking the active tag clears the filter. Active = full opacity, rest dimmed. */
+/* Tag pills. Clicking toggles that tag in the active filter set — several tags can be active at
+   once and photos must be in ALL of them (overlap). Active = full opacity, rest dimmed. Works the
+   same from the photo's pills and the map rail. */
+function tagPillsHtml(folders){
+  let html="";
+  for(const f of folders){ const on=tagFilters.has(f);
+    html+='<button class="ip-tag'+(on?" on":"")+'" data-folder="'+esc(f)+'" title="'+esc(f)+'">'+esc(folderLabel(f))+'</button>'; }
+  if(tagFilters.size>1) html+='<button class="ip-tag clearall" title="Remove all tag filters">Clear filters &times;</button>';
+  return html;
+}
+function wireTagPills(el){
+  el.querySelectorAll(".ip-tag").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation();
+    if(b.classList.contains("clearall")){ tagFilters.clear(); refreshTagFilter(); }
+    else toggleTagFilter(b.dataset.folder);
+  }));
+}
+function refreshTagFilter(){ buildCluster(); renderClusters(); updateGallery(); renderPhotoTags(curPhoto()); }
+function toggleTagFilter(folder){
+  if(tagFilters.has(folder)) tagFilters.delete(folder); else tagFilters.add(folder);
+  refreshTagFilter();
+}
 function renderPhotoTags(p){
   const el=document.getElementById("lbTags"); if(!el) return;
   if(!p){ el.innerHTML=""; return; }
   const folders=[...new Set(pathsOf(p).map(pa=>pathFolder(pa)).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-  const q=(nameFilter||"").trim();
-  let active=false, html="";
-  for(const f of folders){
-    const on=!!q && f.toLowerCase()===q; if(on) active=true;
-    html+='<button class="ip-tag'+(on?" on":"")+'" data-folder="'+esc(f)+'" title="'+esc(f)+'">'+esc(folderLabel(f))+'</button>';
-  }
-  el.innerHTML=html;
-  el.classList.toggle("filtered",active);
-  el.querySelectorAll(".ip-tag").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); toggleTagFilter(b.dataset.folder); }));
-}
-function toggleTagFilter(folder){
-  const inp=document.getElementById("nameFilter");
-  inp.value=((nameFilter||"").trim()===folder.toLowerCase())?"":folder;   // clicking the active tag clears the filter
-  inp.dispatchEvent(new Event("input",{bubbles:true}));   // one path: runs the filter, refreshes tags, syncs the clear ×
+  el.innerHTML=tagPillsHtml(folders);
+  el.classList.toggle("filtered",tagFilters.size>0);
+  wireTagPills(el);
 }
 /* Tag rail on the MAP (bottom-left): every existing tag, filter-only — shown ONLY while no large
-   photo is open. Click to filter, active tag full opacity + others dimmed; no create here. */
+   photo is open. No create here. */
 function renderMapTags(){
   let el=document.getElementById("mapTags");
   if(!el){ el=document.createElement("div"); el.id="mapTags"; el.className="map-tags"; map.getContainer().appendChild(el);
@@ -848,11 +860,9 @@ function renderMapTags(){
   const folders=allFolders();
   if(lb.classList.contains("open")||!folders.length){ el.style.display="none"; return; }
   el.style.display="";
-  const q=(nameFilter||"").trim(); let active=false, html="";
-  for(const f of folders){ const on=!!q&&f.toLowerCase()===q; if(on) active=true;
-    html+='<button class="ip-tag'+(on?" on":"")+'" data-folder="'+esc(f)+'" title="'+esc(f)+'">'+esc(folderLabel(f))+'</button>'; }
-  el.innerHTML=html; el.classList.toggle("filtered",active);
-  el.querySelectorAll(".ip-tag").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); toggleTagFilter(b.dataset.folder); }));
+  el.innerHTML=tagPillsHtml(folders);
+  el.classList.toggle("filtered",tagFilters.size>0);
+  wireTagPills(el);
 }
 function showPreview(p,keepView){
   if(curUrl){ URL.revokeObjectURL(curUrl); curUrl=null; }
