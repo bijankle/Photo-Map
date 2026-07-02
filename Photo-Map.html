@@ -388,8 +388,7 @@
 "use strict";
 
 /* config */
-const THUMB_PX = 200;     // gallery + hover
-const PREVIEW_PX = 1024;  // embedded zoom preview
+const THUMB_PX = 270;     // gallery + hover — the ONLY cached rendition; full quality always streams from disk
 
 /* state */
 let photos=[], nextId=1, folderName="";
@@ -513,7 +512,7 @@ async function processOne(it){
   // The check-and-reserve below runs synchronously (no await between), so it is race-safe
   // across the concurrent worker pool.
   if(sz!=null && sizeIndex.has(sz)){ addPath(sizeIndex.get(sz),it.path); if(it.path) existingPaths.add(it.path); return; }
-  const p={id:nextId++,path:it.path,name:it.name,file,size:sz,isHeic:false,thumb:null,preview:null,full:null,lat:null,lng:null,time:null,dir:null,marks:[],paths:[it.path]};
+  const p={id:nextId++,path:it.path,name:it.name,file,size:sz,isHeic:false,thumb:null,lat:null,lng:null,time:null,dir:null,marks:[],paths:[it.path]};
   if(sz!=null) sizeIndex.set(sz,p);
   if(it.path) existingPaths.add(it.path);
   photos.push(p);
@@ -528,8 +527,8 @@ async function processOne(it){
   p.isHeic=isHeic(file);
   let disp=file;
   if(p.isHeic){ try{ disp=await heicToJpegBlob(file,0.82); }catch(e){} }
-  const imgs=await makePreviews(disp).catch(()=>({thumb:null,preview:null}));
-  p.thumb=imgs.thumb; p.preview=imgs.preview;
+  const imgs=await makePreviews(disp).catch(()=>({thumb:null}));
+  p.thumb=imgs.thumb;
 }
 function isHeic(file){ return /\.(heic|heif)$/i.test(file.name||"") || /heic|heif/i.test(file.type||""); }
 async function heicToJpegBlob(file,quality){
@@ -540,8 +539,8 @@ async function heicToJpegBlob(file,quality){
 function makePreviews(file){
   return new Promise(res=>{
     const url=URL.createObjectURL(file); const img=new Image();
-    img.onload=()=>{ const thumb=scaleToDataURL(img,THUMB_PX,0.504); const preview=scaleToDataURL(img,PREVIEW_PX,0.56); URL.revokeObjectURL(url); res({thumb,preview}); };
-    img.onerror=()=>{ URL.revokeObjectURL(url); res({thumb:null,preview:null}); };
+    img.onload=()=>{ const thumb=scaleToDataURL(img,THUMB_PX,0.6); URL.revokeObjectURL(url); res({thumb}); };
+    img.onerror=()=>{ URL.revokeObjectURL(url); res({thumb:null}); };
     img.src=url;
   });
 }
@@ -698,7 +697,7 @@ function updateGallery(){
   const openP=lb.classList.contains("open")?lightboxList[lightboxIndex]:null;
   lightboxList=inView.concat(noGeo);
   if(openP){ let i=lightboxList.indexOf(openP); if(i<0){ lightboxList=[openP].concat(lightboxList); i=0; } lightboxIndex=i; }
-  const anyImg=photos.some(p=>p.thumb||p.preview);
+  const anyImg=photos.some(p=>p.thumb);
   if(!anyImg){
     body.innerHTML='<div class="empty-msg"><b>Locations loaded without images.</b><br/>Open the source folder or a saved .JSON to see thumbnails.</div>';
     document.getElementById("galCount").textContent="0 shown"; document.getElementById("stView").textContent=inView.length; return;
@@ -716,12 +715,11 @@ function pathsOf(p){ return (Array.isArray(p.paths)&&p.paths.length)?p.paths:(p.
 function cardHtml(p,isNoGeo){
   const sub=p.time?fmtDate(p.time):(p.lat!=null?fmtCoord(p.lat,p.lng):"no metadata");
   const flag=isNoGeo?'<div class="flag">NO GPS</div>':"";
-  const hq=p.full?'<div class="hq">HQ</div>':"";
-  const src=p.thumb||p.preview;
-  const img=src?'<img class="thumb" src="'+src+'" loading="lazy" alt="">':'<div class="ph">no image</div>';
+  const src=p.thumb;
+  const img=src?'<img class="thumb" src="'+src+'" loading="lazy" decoding="async" alt="">':'<div class="ph">no image</div>';
   const paths=pathsOf(p); const title=esc(paths.length?paths.join("\n"):p.name);   // all folders this photo was found in
   const dupe=paths.length>1?'<div class="hq" style="left:auto;right:5px;background:#4752C4;color:#fff;border-color:#4752C4" title="In '+paths.length+' folders">\u00D7'+paths.length+'</div>':"";
-  return '<div class="card" data-id="'+p.id+'" title="'+title+'">'+flag+hq+dupe+img+'<div class="meta"><div class="fn">'+esc(p.name)+'</div><div class="sub">'+esc(sub)+'</div></div></div>';
+  return '<div class="card" data-id="'+p.id+'" title="'+title+'">'+flag+dupe+img+'<div class="meta"><div class="fn">'+esc(p.name)+'</div><div class="sub">'+esc(sub)+'</div></div></div>';
 }
 function sortPhotos(arr,center){ const a=arr.slice();
   if(currentSort==="name") a.sort((x,y)=>x.name.localeCompare(y.name));
@@ -734,7 +732,7 @@ function dist(p,c){ if(p.lat==null)return Infinity; const dx=p.lat-c.lat,dy=p.ln
 
 /* hover preview top left */
 const hoverview=document.getElementById("hoverview"),hvImg=document.getElementById("hvImg"),hvCap=document.getElementById("hvCap");
-function showHover(p,ev){ const src=p&&(p.preview||p.thumb); if(!src)return; hvImg.src=src; hvCap.textContent=p.time?fmtDate(p.time):p.name; hoverview.classList.add("show"); if(ev) positionHover(ev); }
+function showHover(p,ev){ const src=p&&p.thumb; if(!src)return; hvImg.src=src; hvCap.textContent=p.time?fmtDate(p.time):p.name; hoverview.classList.add("show"); if(ev) positionHover(ev); }
 function positionHover(ev){ const w=hoverview.offsetWidth||220,h=hoverview.offsetHeight||200; let x=ev.clientX-w/2, y=ev.clientY-h-16; x=Math.max(6,Math.min(x,window.innerWidth-w-6)); if(y<6) y=ev.clientY+20; hoverview.style.left=x+"px"; hoverview.style.top=y+"px"; }
 function hideHover(){ hoverview.classList.remove("show"); }
 
@@ -754,28 +752,23 @@ function openViewer(p){
   lb.classList.add("open"); loadViewer();
   if(!wasOpen){ setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); },30); }
 }
-function bestSource(p){
-  if(p.full) return {src:p.full,obj:false};
-  if(p.file && !p.isHeic){ const u=URL.createObjectURL(p.file); return {src:u,obj:true}; }
-  if(p.preview) return {src:p.preview,obj:false};
-  if(p.thumb) return {src:p.thumb,obj:false};
-  return {src:"",obj:false};
-}
+/* Opening a photo streams the ORIGINAL file from disk (object URL — no data-URL copies are ever
+   cached), showing the low-res thumb while it loads. Only thumbs live in the cache. */
+let fullToken=0;
 function loadViewer(){
   const p=lightboxList[lightboxIndex]; if(!p)return;
   if(selMark) deselectText();
   closeFileInfo(); if(typeof closeFolderPop==="function") closeFolderPop();
-  if(curUrl){ URL.revokeObjectURL(curUrl); curUrl=null; }
   document.getElementById("lbName").textContent=p.name;
   lbFull.checked=false; lbFullWrap.classList.remove("busy");
   draft=null; polyPrev=null; redoMarks=[];
   showPreview(p);
+  autoLoadFull(p);   // stream the original in the background; thumb shows meanwhile
   highlightCurrent();
 }
 function showPreview(p,keepView){
-  let s=p.preview||p.thumb;
-  if(!s && p.file && !p.isHeic){ s=curUrl=URL.createObjectURL(p.file); }
-  if(!s) s="";
+  if(curUrl){ URL.revokeObjectURL(curUrl); curUrl=null; }
+  let s=p.thumb||"";
   lbImg.onload=()=>setupFit(lbImg.naturalWidth,lbImg.naturalHeight,keepView);
   lbImg.src=s; lbRefImg.src=s;
 }
@@ -783,15 +776,36 @@ function swapViewer(src){
   if(curUrl){ URL.revokeObjectURL(curUrl); curUrl=null; }
   lbImg.onload=()=>setupFit(lbImg.naturalWidth,lbImg.naturalHeight,true);
   lbImg.src=src; lbRefImg.src=src;
+  curUrl=src;   // object URL — revoked when the next image replaces it or the viewer closes
+}
+// Original file without prompting: in-memory file, connected-folder index, or a granted FSA handle.
+async function getOriginalFileSilent(p){
+  if(p.file) return p.file;
+  const idx=fromIndex(p); if(idx){ p.file=idx; return idx; }
+  if(!dirHandle){ try{ dirHandle=await idbGet("dirHandle"); }catch(e){} }
+  try{ if(dirHandle && (await dirHandle.queryPermission({mode:"read"}))==="granted"){ const f=await resolveFileByPath(dirHandle,p.path); if(f){ p.file=f; return f; } } }catch(e){}
+  return null;
+}
+async function originalToURL(p,file){
+  let src=file;
+  if(p.isHeic||isHeic(file)){ try{ src=await heicToJpegBlob(file,0.92); }catch(e){} }
+  return URL.createObjectURL(src);
+}
+async function autoLoadFull(p){
+  const tok=++fullToken;
+  let file=null; try{ file=await getOriginalFileSilent(p); }catch(e){}
+  if(!file) return;   // no silent access — thumb stays; the Full quality tick can prompt
+  const url=await originalToURL(p,file);
+  if(tok!==fullToken || curPhoto()!==p || !lb.classList.contains("open")){ URL.revokeObjectURL(url); return; }
+  swapViewer(url); lbFull.checked=true;
 }
 async function showFull(p){
   const stay=()=>lightboxList[lightboxIndex]===p;
-  if(p.full){ if(stay()) swapViewer(p.full); return true; }
-  let file=p.file; if(!file){ file=await fetchOriginal(p); if(file) p.file=file; }
+  let file=null; try{ file=await getOriginalFileSilent(p); }catch(e){}
+  if(!file){ file=await fetchOriginal(p); if(file) p.file=file; }
   if(!file) return false;
-  let srcFile=file; if(p.isHeic){ try{ srcFile=await heicToJpegBlob(file,0.92); }catch(e){} }
-  const data=await fileToDataURL(srcFile); p.full=data; persistState();
-  if(stay()) swapViewer(p.full);
+  const url=await originalToURL(p,file);
+  if(stay()&&lb.classList.contains("open")) swapViewer(url); else URL.revokeObjectURL(url);
   return true;
 }
 function setupFit(natW,natH,keepView){
@@ -992,7 +1006,8 @@ function currentViewFrac(){
 // Render exactly what the user sees (current zoom/pan crop + markup) to a canvas.
 function renderViewCanvas(p){
   return new Promise((resolve,reject)=>{
-    const src=p.full||p.preview||p.thumb; if(!src){ reject(new Error("no image")); return; }
+    const src=(curPhoto()===p && lb.classList.contains("open") && lbImg.src)?lbImg.src:p.thumb;   // whatever is on screen (full-res if streamed in)
+    if(!src){ reject(new Error("no image")); return; }
     const img=new Image();
     img.onload=()=>{
       const natW=img.naturalWidth||img.width, natH=img.naturalHeight||img.height;
@@ -1152,7 +1167,6 @@ async function resolveFileByPath(dir,path){
   let h=dir; for(let i=0;i<segs.length-1;i++) h=await h.getDirectoryHandle(segs[i]);
   const fh=await h.getFileHandle(segs[segs.length-1]); return await fh.getFile();
 }
-function fileToDataURL(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(r.error); r.readAsDataURL(file); }); }
 
 /* sidebar resize */
 const splitter=document.getElementById("splitter"); let resizing=false;
@@ -1196,14 +1210,15 @@ function scheduleAutoSave(){ if(!jsonHandle||autoDisabled) return; autoPending=t
 async function flushAutoSave(interactive){
   if(!jsonHandle) return {status:"no-file"};
   if(autoDisabled) return {status:"disabled"};   // a prior write failed -> stop auto-writing so we don't keep corrupting the file
-  const sig=metaSignature();
+  // Serialize once: `data` is what gets written; `sig` is the same object minus volatile fields.
+  const st=serializeState(false); const data=JSON.stringify(st);
+  delete st.savedAt; if(st.settings) delete st.settings.view; const sig=JSON.stringify(st);
   // Nothing substantive changed since the last write -> skip entirely (no file rewrite, instant).
   if(sig===lastWrittenSig){ autoPending=false; setSaveStatus("Saved","ok"); return {status:"unchanged"}; }
   if(autoBusy){ autoPending=true; return {status:"busy"}; }   // a write is already in flight -> coalesce, don't treat as failure
   if(!(await ensureJsonWrite(interactive))){ setSaveStatus("Save pending…",""); autoPending=true; return {status:"no-permission"}; }
   autoBusy=true; autoPending=false; let err=null;
   setSaveStatus("Saving…","busy");
-  const data=serializeMeta();
   try{
     const w=await jsonHandle.createWritable(); await w.write(data); await w.close();
     const chk=await jsonHandle.getFile(); if(chk.size < data.length*0.9) throw new Error("the file did not write completely (network drive?) — got "+chk.size+" of "+data.length+" bytes");
@@ -1219,7 +1234,7 @@ async function flushAutoSave(interactive){
 function overlayImagesFromCache(cache){
   if(!cache||!Array.isArray(cache.photos)) return; const m=new Map();
   for(const c of cache.photos){ const k=metaKey(c); if(!m.has(k)) m.set(k,c); }
-  for(const p of photos){ const c=m.get(metaKey(p)); if(!c) continue; if(!p.thumb&&c.thumb)p.thumb=c.thumb; if(!p.preview&&c.preview)p.preview=c.preview; if(!p.full&&c.full)p.full=c.full; }
+  for(const p of photos){ const c=m.get(metaKey(p)); if(!c) continue; if(!p.thumb&&c.thumb)p.thumb=c.thumb; }
 }
 // Load the latest straight from the .json file (the source of truth), using the cache only for images.
 let fileLoadedOnce=false, lastFullCache=null;
@@ -1234,7 +1249,7 @@ async function loadFromJsonFile(fromGesture){
     if(!st||!Array.isArray(st.photos)||!st.photos.length) return false;
     applyState(st);                          // the FILE is authoritative for folders/locations/markup
     overlayImagesFromCache(lastFullCache);   // reuse locally-cached images so photos still show
-    if(photos.some(p=>p.thumb||p.preview)) hideBanner();
+    if(photos.some(p=>p.thumb)) hideBanner();
     buildCluster(); renderClusters(); updateGallery(); cacheFullSession();
     saveFileHandle=jsonHandle; loadedJsonName=jsonHandle.name||loadedJsonName; fileLoadedOnce=true; fileCorrupt=false; autoDisabled=false;
     lastWrittenSig=metaSignature(); setSaveStatus("Saved","ok");   // loaded state already matches the file on disk
@@ -1300,7 +1315,8 @@ function serializeState(includeImages){
     photos: photos.map(p=>{ const o={path:p.path,name:p.name,lat:p.lat,lng:p.lng,time:p.time,dir:p.dir,size:p.size,isHeic:p.isHeic};
       if(Array.isArray(p.paths)&&p.paths.length&&(p.paths.length>1||p.paths[0]!==p.path))o.paths=p.paths;   // preserve folder membership (de-duped overlaps + moves)
       if(p.marks&&p.marks.length)o.marks=p.marks;
-      if(includeImages){ if(p.thumb)o.thumb=p.thumb; if(p.preview)o.preview=p.preview; if(p.full)o.full=p.full; } return o; })
+      if(includeImages && p.thumb)o.thumb=p.thumb;   // thumbs are the only cached rendition — full quality always comes from disk
+      return o; })
   };
 }
 function loadStateText(text){
@@ -1315,7 +1331,7 @@ function loadStateText(text){
 }
 function applyState(st){
   clearAll(false); folderName=st.folderName||"";
-  (st.photos||[]).forEach(m=>photos.push({id:nextId++,path:m.path,name:m.name,paths:Array.isArray(m.paths)&&m.paths.length?m.paths:(m.path?[m.path]:[]),file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,full:m.full||null,lat:m.lat,lng:m.lng,time:m.time,dir:m.dir,marks:Array.isArray(m.marks)?m.marks:[]}));
+  (st.photos||[]).forEach(m=>photos.push({id:nextId++,path:m.path,name:m.name,paths:Array.isArray(m.paths)&&m.paths.length?m.paths:(m.path?[m.path]:[]),file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,lat:m.lat,lng:m.lng,time:m.time,dir:m.dir,marks:Array.isArray(m.marks)?m.marks:[]}));   // old files' preview/full renditions are intentionally dropped — thumbs only
   const s=st.settings||{};
   if(s.thumb){ document.documentElement.style.setProperty("--thumb",s.thumb); document.getElementById("thumbSize").value=parseInt(s.thumb)||120; }
   if(s.galleryW) document.documentElement.style.setProperty("--gallery-w",s.galleryW);
@@ -1348,14 +1364,14 @@ function persistState(){ clearTimeout(persistTimer); persistTimer=setTimeout(()=
 // Cache the image-bearing session to IndexedDB (browser-local, no .crswap) so reopen shows photos
 // instantly without reconnecting the folder. The .json file itself stays small (metadata only).
 let fullCacheTimer=null;
-function cacheFullSession(){ clearTimeout(fullCacheTimer); fullCacheTimer=setTimeout(()=>{ try{ if(photos.some(p=>p.thumb||p.preview)) idbSet("lastFull",serializeState(true)).catch(()=>{}); }catch(e){} },1500); }
+function cacheFullSession(){ clearTimeout(fullCacheTimer); fullCacheTimer=setTimeout(()=>{ try{ if(photos.some(p=>p.thumb)) idbSet("lastFull",serializeState(true)).catch(()=>{}); }catch(e){} },1500); }
 
 /* banner */
 function showBanner(html,action){ document.getElementById("rcMsg").innerHTML=html; bannerAction=action; document.getElementById("reconnect").classList.add("show"); }
 function hideBanner(){ document.getElementById("reconnect").classList.remove("show"); bannerAction=null; }
 document.getElementById("btnReconnect").addEventListener("click",()=>{ if(bannerAction) bannerAction(); });
 function maybeOfferReconnect(){
-  const haveImg=photos.some(p=>p.thumb||p.preview);
+  const haveImg=photos.some(p=>p.thumb);
   if(photos.length && !haveImg && dirHandle){ showBanner('Reconnect folder <b>'+esc(dirHandle.name||folderName||"folder")+'</b> to load images.',reconnectFolder); }
 }
 async function reconnectFolder(){ if(!dirHandle)return; if(!(await ensurePermission(dirHandle))){ alert("Permission to read the folder was not granted."); return; } folderName=dirHandle.name; hideBanner();
@@ -1410,7 +1426,7 @@ function applyShared(P){
   if(!P||!Array.isArray(P.p))return false;
   if(boxRect){map.removeLayer(boxRect);boxRect=null;} boxBounds=null; setAreaBtn();
   photos=[]; nextId=1; undoStack=[];
-  P.p.forEach(m=>photos.push({id:nextId++,path:m[2]||"",name:m[2]||"",paths:m[2]?[m[2]]:[],file:null,size:null,isHeic:false,thumb:null,preview:null,full:null,lat:(m[0]!=null?m[0]:null),lng:(m[1]!=null?m[1]:null),time:m[3]||null,dir:null,marks:[]}));
+  P.p.forEach(m=>photos.push({id:nextId++,path:m[2]||"",name:m[2]||"",paths:m[2]?[m[2]]:[],file:null,size:null,isHeic:false,thumb:null,lat:(m[0]!=null?m[0]:null),lng:(m[1]!=null?m[1]:null),time:m[3]||null,dir:null,marks:[]}));
   buildDateFilter(); buildCluster(); renderClusters(); updateStats();
   if(P.vw){ try{ map.setView([P.vw[0],P.vw[1]],P.vw[2]); }catch(e){} }
   updateGallery();
