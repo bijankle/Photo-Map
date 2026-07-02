@@ -539,9 +539,16 @@ function renderClusters(){
       const cnt=c.properties.point_count, size=cnt<10?34:cnt<100?42:cnt<1000?52:62, fs=cnt<100?13:cnt<1000?12:11;
       const icon=L.divIcon({className:"",html:'<div class="cl-bubble" style="width:'+size+'px;height:'+size+'px;font-size:'+fs+'px">'+c.properties.point_count_abbreviated+'</div>',iconSize:[size,size],iconAnchor:[size/2,size/2]});
       const m=L.marker([lat,lng],{icon}); const cid=c.properties.cluster_id;
-      m.on("click",()=>{   // zoom to the extent of ALL the photos in this cluster (like a zoom window on just them)
+      m.on("click",()=>{   // zoom to the extent of ALL the photos in this cluster — deep enough that only they fill the view
         try{ const leaves=cluster.getLeaves(cid,Infinity);
-          if(leaves.length){ map.flyToBounds(L.latLngBounds(leaves.map(f=>[f.geometry.coordinates[1],f.geometry.coordinates[0]])),{padding:[46,46],maxZoom:19,duration:.45}); return; } }catch(err){}
+          if(leaves.length){
+            const bb=L.latLngBounds(leaves.map(f=>[f.geometry.coordinates[1],f.geometry.coordinates[0]]));
+            const ez=Math.min(cluster.getClusterExpansionZoom(cid),22);   // zoom at which this cluster actually breaks apart
+            let z=map.getBoundsZoom(bb,false,L.point(46,46));             // zoom that fits the photos' extent
+            z=Math.min(Math.max(z,ez),22);                                 // never shallower than the break-apart zoom, never past useful tile depth
+            map.flyTo(bb.getCenter(),z,{duration:.45});
+            return;
+          } }catch(err){}
         const ez=Math.min(cluster.getClusterExpansionZoom(cid),map.getMaxZoom()); map.flyTo([lat,lng],ez,{duration:.45});   // fallback
       });
       markerLayer.addLayer(m);
@@ -782,7 +789,7 @@ function dUp(e){
       // Smart zoom: if the window contains photos (under the current filters), zoom to the extent
       // of that cluster; an empty window zooms precisely to what was drawn.
       const inWin=photos.filter(p=>p.lat!=null&&passDate(p)&&passSearch(p)&&passTags(p)&&(!boxBounds||boxBounds.contains([p.lat,p.lng]))&&b.contains([p.lat,p.lng]));
-      if(inWin.length) map.fitBounds(L.latLngBounds(inWin.map(p=>[p.lat,p.lng])),{padding:[46,46],maxZoom:19});
+      if(inWin.length) map.fitBounds(L.latLngBounds(inWin.map(p=>[p.lat,p.lng])),{padding:[46,46],maxZoom:20});
       else map.fitBounds(b);
     }
     setAreaBtn(); return;
