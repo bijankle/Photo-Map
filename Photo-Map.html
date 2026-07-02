@@ -184,6 +184,8 @@
   .gallery-body::-webkit-scrollbar{width:9px;}
   .gallery-body::-webkit-scrollbar-thumb{background:var(--line2);border-radius:5px;}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--thumb),1fr));gap:8px;}
+  .gal-more{display:block;width:100%;margin:10px 0 4px;padding:9px 0;background:var(--panel2);border:1px solid var(--line2);border-radius:8px;font:600 11px var(--mono);letter-spacing:.4px;color:var(--accent2);cursor:pointer;}
+  .gal-more:hover{border-color:var(--accent);color:var(--accent);}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;cursor:pointer;transition:border-color .12s,transform .1s,box-shadow .12s;position:relative;}
   .card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 6px 16px #1e1f2214;}
   .card .thumb{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:#ECEEF1;}
@@ -449,7 +451,8 @@ let boxBounds=null,boxRect=null,drawing=false,drawStart=null,tempRect=null,drawM
 let measuring=false, measurePts=[], measureLayer=null;
 
 /* map + layers */
-const map=L.map("map",{zoomControl:false,boxZoom:false,attributionControl:false,worldCopyJump:true,maxZoom:24,minZoom:2,zoomSnap:0}).setView([20,0],3);
+const map=L.map("map",{zoomControl:false,boxZoom:false,attributionControl:false,worldCopyJump:true,maxZoom:24,minZoom:2,zoomSnap:0.25,wheelDebounceTime:35}).setView([20,0],3);
+const dotRenderer=L.canvas({padding:0.5});   // photo dots on ONE canvas instead of hundreds of SVG nodes — far cheaper zoom animations
 const google=L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",{subdomains:["mt0","mt1","mt2","mt3"],maxZoom:24,maxNativeZoom:21,attribution:"Imagery &copy; Google"}).addTo(map);
 const esri=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:24,maxNativeZoom:19,attribution:"Imagery &copy; Esri, Maxar, Earthstar Geographics"});
 const none=L.layerGroup();
@@ -474,7 +477,7 @@ L.control.layers({ "Google":google, "Esri":esri, "None":none },null,{position:"t
     const lab=el.querySelector(".sb-labels"); lab.style.width=px+"px";
     lab.innerHTML='<span style="left:0">0</span><span style="left:25%">'+fmt(total/4,km)+'</span><span style="left:50%">'+fmt(total/2,km)+'</span><span style="left:100%">'+fmt(total,km)+'</span>';
   }
-  map.on("move zoom moveend zoomend resize",updateScale); setTimeout(updateScale,0);
+  map.on("zoomend moveend resize",updateScale); setTimeout(updateScale,0);   // end-events only — updating per animation frame caused zoom jitter
 })();
 const markerLayer=L.layerGroup().addTo(map);
 const highlightLayer=L.layerGroup().addTo(map);
@@ -500,11 +503,11 @@ let hlMarker=null;
 function highlightDot(p){ clearHighlight(); if(!p||p.lat==null)return; hlMarker=L.circleMarker([p.lat,p.lng],{radius:13,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.45,interactive:false,className:"hl-dot"}).addTo(highlightLayer); }
 function clearHighlight(){ if(hlMarker){ highlightLayer.removeLayer(hlMarker); hlMarker=null; } }
 function highlightCurrent(){ if(lb.classList.contains("open")&&lightboxList[lightboxIndex]) highlightDot(lightboxList[lightboxIndex]); else clearHighlight(); }
-// Zoom/pan smoothness: dots re-clustering, the gallery rebuild, and state persistence all wait
-// until the map has been completely still for 1 second — any motion resets the clock. Existing
-// dots keep tracking their positions during the motion; only the re-grouping is deferred.
+// Dots re-cluster immediately when the map settles on a new view (responsive, as originally);
+// only the heavy gallery rebuild + state persistence wait for 1 full second of no map motion.
+map.on("moveend zoomend",()=>renderClusters());
 let mapIdleTimer=null;
-const onMapMotion=()=>{ clearTimeout(mapIdleTimer); mapIdleTimer=setTimeout(()=>{ renderClusters(); updateGallery(); persistState(); },1000); };
+const onMapMotion=()=>{ clearTimeout(mapIdleTimer); mapIdleTimer=setTimeout(()=>{ updateGallery(); persistState(); },1000); };
 map.on("move zoom movestart zoomstart moveend zoomend",onMapMotion);
 
 /* proximity clustering */
@@ -544,9 +547,9 @@ function renderClusters(){
       markerLayer.addLayer(m);
     } else {
       const p=photoById(c.properties.pid); if(!p) continue;
-      const hit=L.circleMarker([lat,lng],{radius:15,stroke:false,fill:true,fillOpacity:0});
+      const hit=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:15,stroke:false,fill:true,fillOpacity:0});
       hit.on("mouseover",e=>showHover(p,e.originalEvent)); hit.on("mousemove",e=>positionHover(e.originalEvent)); hit.on("mouseout",hideHover); hit.on("click",()=>openViewer(p));
-      const dot=L.circleMarker([lat,lng],{radius:6,color:"#3A41B0",weight:2,fillColor:"#5865F2",fillOpacity:.95,interactive:false,className:"photo-dot"});
+      const dot=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:6,color:"#3A41B0",weight:2,fillColor:"#5865F2",fillOpacity:.95,interactive:false});
       markerLayer.addLayer(hit); markerLayer.addLayer(dot);
     }
   }
@@ -847,7 +850,13 @@ function undoDelete(){
   photos.splice(Math.min(last.index,photos.length),0,last.photo);
   buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState();
 }
-function updateGallery(){
+/* The gallery renders at most `galleryLimit` cards (default 50) — rendering thousands of thumbs at
+   once was the big filter-toggle/zoom lag. Scrolling near the bottom (or the Show more button)
+   loads the next chunk. Viewer navigation still covers EVERY matching photo. */
+const GALLERY_CHUNK=50;
+let galleryLimit=GALLERY_CHUNK;
+function updateGallery(keepLimit){
+  if(!keepLimit) galleryLimit=GALLERY_CHUNK;
   const body=document.getElementById("galleryBody"); if(!photos.length) return;
   const bounds=map.getBounds(), center=map.getCenter();
   const spatial=boxBounds||bounds;
@@ -863,12 +872,18 @@ function updateGallery(){
     body.innerHTML='<div class="empty-msg"><b>Locations loaded without images.</b><br/>Open the source folder or a saved .JSON to see thumbnails.</div>';
     document.getElementById("galCount").textContent="0 shown"; document.getElementById("stView").textContent=inView.length; return;
   }
+  const inShow=inView.slice(0,galleryLimit);
+  const geoShow=showNoGeo?noGeo.slice(0,Math.max(0,galleryLimit-inShow.length)):[];
+  const hidden=(inView.length-inShow.length)+((showNoGeo?noGeo.length:0)-geoShow.length);
   let html="";
-  if(inView.length) html+='<div class="section-label">On Map ('+inView.length+')</div><div class="grid">'+inView.map(p=>cardHtml(p,false)).join("")+'</div>';
-  if(showNoGeo&&noGeo.length) html+='<div class="section-label">No Location ('+noGeo.length+')</div><div class="grid">'+noGeo.map(p=>cardHtml(p,true)).join("")+'</div>';
+  if(inView.length) html+='<div class="section-label">On Map ('+inView.length+')</div><div class="grid">'+inShow.map(p=>cardHtml(p,false)).join("")+'</div>';
+  if(showNoGeo&&geoShow.length) html+='<div class="section-label">No Location ('+noGeo.length+')</div><div class="grid">'+geoShow.map(p=>cardHtml(p,true)).join("")+'</div>';
+  if(hidden>0) html+='<button class="gal-more" id="galMore">Show more ('+hidden.toLocaleString()+' remaining)</button>';
   if(!html) html='<div class="empty-msg"><b>No photos in this view.</b><br/>Pan or zoom the map, widen the date range, or load another folder.</div>';
   body.innerHTML=html;
   body.querySelectorAll(".card").forEach(el=>{ const p=photoById(Number(el.dataset.id)); el.addEventListener("click",()=>openViewer(p)); el.addEventListener("mouseenter",()=>highlightDot(p)); el.addEventListener("mouseleave",highlightCurrent); });
+  const more=body.querySelector("#galMore"); if(more) more.addEventListener("click",()=>{ galleryLimit+=GALLERY_CHUNK*2; updateGallery(true); });
+  if(!body._moreWired){ body._moreWired=true; body.addEventListener("scroll",()=>{ if(!document.getElementById("galMore")) return; if(body.scrollTop+body.clientHeight>body.scrollHeight-320){ galleryLimit+=GALLERY_CHUNK*2; updateGallery(true); } }); }
   document.getElementById("galCount").textContent=lightboxList.length+" shown";
   document.getElementById("stView").textContent=inView.length;
   renderMapTags();
