@@ -84,9 +84,10 @@
   .folder-pop .fp-title{font:600 12px var(--font);color:var(--ink);margin:0 2px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .folder-pop .fp-list{display:flex;flex-direction:column;gap:2px;margin-bottom:8px;}
   .folder-pop .fp-empty{font:12px var(--font);color:var(--dim);padding:4px 2px;}
-  .folder-pop .fp-item{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer;font:13px var(--font);color:var(--text);}
+  .folder-pop .fp-item{display:flex;align-items:flex-start;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer;font:13px var(--font);color:var(--text);}
   .folder-pop .fp-item:hover{background:var(--panel2);}
-  .folder-pop .fp-item span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .folder-pop .fp-item input{margin-top:2px;flex:none;}
+  .folder-pop .fp-item span{white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.3;}
   .folder-pop .fp-new{display:flex;gap:6px;border-top:1px solid var(--line);padding-top:8px;}
   .folder-pop .fp-new input{flex:1;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;font:12px var(--mono);color:var(--text);padding:5px 8px;}
   .folder-pop .fp-new button{background:var(--accent);color:#fff;border:none;border-radius:6px;font:600 11px var(--font);padding:0 12px;cursor:pointer;}
@@ -395,13 +396,13 @@ let dateMin=null,dateMax=null,dateLo=null,dateHi=null;
 let lightboxList=[], lightboxIndex=0;
 let undoStack=[];
 let cluster=null;
-let saveFileHandle=null, jsonHandle=null, dirHandle=null;
+let saveFileHandle=null, jsonHandle=null, dirHandle=null, loadedJsonName=null;
 let bannerAction=null;
 let boxBounds=null,boxRect=null,drawing=false,drawStart=null,tempRect=null,drawMode=null;
 let measuring=false, measurePts=[], measureLayer=null;
 
 /* map + layers */
-const map=L.map("map",{zoomControl:false,boxZoom:false,worldCopyJump:true,maxZoom:24,minZoom:2,zoomSnap:0}).setView([20,0],3);
+const map=L.map("map",{zoomControl:false,boxZoom:false,attributionControl:false,worldCopyJump:true,maxZoom:24,minZoom:2,zoomSnap:0}).setView([20,0],3);
 const google=L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",{subdomains:["mt0","mt1","mt2","mt3"],maxZoom:24,maxNativeZoom:21,attribution:"Imagery &copy; Google"}).addTo(map);
 const esri=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:24,maxNativeZoom:19,attribution:"Imagery &copy; Esri, Maxar, Earthstar Geographics"});
 const none=L.layerGroup();
@@ -417,8 +418,16 @@ function highlightCurrent(){ if(lb.classList.contains("open")&&lightboxList[ligh
 map.on("moveend zoomend",()=>{ renderClusters(); updateGallery(); persistState(); });
 
 /* proximity clustering */
+// Shared search predicate (folder path + filename; space-separated terms are AND) used by
+// both the map clustering and the gallery so the map only shows dots for the search results.
+function passSearch(p){
+  if(!nameFilter) return true;
+  const terms=nameFilter.split(/\s+/).filter(Boolean); if(!terms.length) return true;
+  const hay=((Array.isArray(p.paths)&&p.paths.length?p.paths.join(" "):(p.path||""))+" "+(p.name||"")).toLowerCase();
+  return terms.every(t=>hay.includes(t));
+}
 function buildCluster(){
-  const feats=photos.filter(p=>p.lat!=null && passDate(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng]))).map(p=>({type:"Feature",properties:{pid:p.id},geometry:{type:"Point",coordinates:[p.lng,p.lat]}}));
+  const feats=photos.filter(p=>p.lat!=null && passDate(p) && passSearch(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng]))).map(p=>({type:"Feature",properties:{pid:p.id},geometry:{type:"Point",coordinates:[p.lng,p.lat]}}));
   cluster=new Supercluster({radius:64,maxZoom:21,minPoints:2});
   cluster.load(feats);
 }
@@ -660,7 +669,7 @@ setMeasureBtn();
 /* gallery */
 document.getElementById("showNoGeo").addEventListener("change",e=>{ showNoGeo=e.target.checked; updateGallery(); persistState(); });
 document.getElementById("sortSel").addEventListener("change",e=>{ currentSort=e.target.value; updateGallery(); persistState(); });
-document.getElementById("nameFilter").addEventListener("input",e=>{ nameFilter=e.target.value.trim().toLowerCase(); updateGallery(); });
+document.getElementById("nameFilter").addEventListener("input",e=>{ nameFilter=e.target.value.trim().toLowerCase(); buildCluster(); renderClusters(); updateGallery(); });
 document.getElementById("thumbSize").addEventListener("input",e=>{ document.documentElement.style.setProperty("--thumb",e.target.value+"px"); persistState(); });
 function deletePhoto(id){
   const i=photos.findIndex(p=>p.id===id); if(i<0) return;
@@ -678,8 +687,7 @@ function updateGallery(){
   const body=document.getElementById("galleryBody"); if(!photos.length) return;
   const bounds=map.getBounds(), center=map.getCenter();
   const spatial=boxBounds||bounds;
-  const terms=nameFilter?nameFilter.split(/\s+/).filter(Boolean):[];   // match across folder path + filename; space-separated terms are AND
-  const passName=p=>{ if(!terms.length) return true; const hay=((Array.isArray(p.paths)&&p.paths.length?p.paths.join(" "):(p.path||""))+" "+(p.name||"")).toLowerCase(); return terms.every(t=>hay.includes(t)); };
+  const passName=passSearch;   // shared with the map so gallery + dots stay in sync
   let inView=sortPhotos(photos.filter(p=>p.lat!=null&&passDate(p)&&passName(p)&&spatial.contains([p.lat,p.lng])),center);
   let noGeo=showNoGeo?sortPhotos(photos.filter(p=>p.lat==null&&passDate(p)&&passName(p)),center):[];
   /* keep the open viewer pinned to the same photo across re-sorts (lightboxIndex is positional) */
@@ -1163,12 +1171,13 @@ async function saveState(asNew, lite){
     alert("This session is too large to write as one self contained file (the browser's text size limit). Narrow it with the date filter, enhance fewer images, or split the library into smaller session files.");
     return;
   }
-  const suggested=(folderName||"photomap")+(lite?"-folders":"")+".json";
+  const suggested=(loadedJsonName||folderName||"photomap").replace(/\.json$/i,"")+(lite?"-folders":"")+".json";
   if(hasFSA&&window.showSaveFilePicker){
     try{
       let handle;
       if(lite){ handle=await window.showSaveFilePicker({suggestedName:suggested,types:[{description:"PhotoMap folders",accept:{"application/json":[".json"]}}]}); }
-      else { if(asNew||!saveFileHandle){ saveFileHandle=await window.showSaveFilePicker({suggestedName:suggested,types:[{description:"PhotoMap state",accept:{"application/json":[".json"]}}]}); } handle=saveFileHandle; }
+      // plain Save reuses the handle of the file it was loaded from (saveFileHandle or jsonHandle) so it OVERWRITES that file
+      else { let target=asNew?null:(saveFileHandle||jsonHandle); if(!target){ target=await window.showSaveFilePicker({suggestedName:suggested,types:[{description:"PhotoMap state",accept:{"application/json":[".json"]}}]}); } saveFileHandle=target; handle=saveFileHandle; }
       const w=await handle.createWritable();
       const CH=8*1024*1024;
       for(let i=0;i<data.length;i+=CH){ await w.write(data.slice(i,i+CH)); }
@@ -1184,11 +1193,11 @@ async function saveState(asNew, lite){
 function downloadJson(data,name){ const blob=new Blob([data],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name||((folderName||"photomap")+".json"); a.click(); setTimeout(()=>URL.revokeObjectURL(url),500); }
 document.getElementById("btnOpenJson").addEventListener("click",async()=>{
   if(hasFSA&&window.showOpenFilePicker){
-    try{ const [h]=await window.showOpenFilePicker({types:[{description:"JSON",accept:{"application/json":[".json"]}}]}); saveFileHandle=h; jsonHandle=h; try{await idbSet("jsonHandle",h);}catch(e){} const f=await h.getFile(); loadStateText(await f.text()); }
+    try{ const [h]=await window.showOpenFilePicker({types:[{description:"JSON",accept:{"application/json":[".json"]}}]}); saveFileHandle=h; jsonHandle=h; loadedJsonName=h.name; try{await idbSet("jsonHandle",h);}catch(e){} const f=await h.getFile(); loadStateText(await f.text()); }
     catch(err){ if(err&&err.name==="AbortError") return; console.warn(err); document.getElementById("jsonInput").click(); }   // FSA picker can fail (e.g. file:// pages); fall back to the file input
   } else document.getElementById("jsonInput").click();
 });
-document.getElementById("jsonInput").addEventListener("change",async e=>{ const f=e.target.files[0]; if(f) loadStateText(await f.text()); });
+document.getElementById("jsonInput").addEventListener("change",async e=>{ const f=e.target.files[0]; if(f){ loadedJsonName=f.name; loadStateText(await f.text()); } });
 
 function serializeState(includeImages){
   return {
@@ -1257,7 +1266,7 @@ async function reopenLastJson(){
     let perm=await jsonHandle.queryPermission({mode:"read"});
     if(perm!=="granted"){ perm=await jsonHandle.requestPermission({mode:"read"}); }
     if(perm!=="granted") return;
-    saveFileHandle=jsonHandle; const f=await jsonHandle.getFile(); loadStateText(await f.text()); hideBanner();
+    saveFileHandle=jsonHandle; loadedJsonName=jsonHandle.name||loadedJsonName; const f=await jsonHandle.getFile(); loadStateText(await f.text()); hideBanner();
   }catch(e){ console.warn(e); }
 }
 async function ensurePermission(handle){ try{ const o={mode:"read"}; if((await handle.queryPermission(o))==="granted")return true; if((await handle.requestPermission(o))==="granted")return true; }catch(e){} return false; }
