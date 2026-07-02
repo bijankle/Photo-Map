@@ -1088,7 +1088,7 @@ function openFolderPop(){
   pop.querySelector("#fpAdd").addEventListener("click",addNew);
   pop.querySelector("#fpNew").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addNew(); } });
 }
-function afterFolderChange(){ updateGallery(); persistState(); }
+function afterFolderChange(){ updateGallery(); buildCluster(); renderClusters(); idbSet("lastState",serializeState(false)).catch(()=>{}); }   // write folder change immediately (not debounced) so it survives a quick close
 document.getElementById("lbFolder").addEventListener("click",e=>{ e.stopPropagation(); if(folderPopShown) closeFolderPop(); else openFolderPop(); });
 document.addEventListener("mousedown",e=>{ if(folderPopShown && !e.target.closest("#folderPop") && e.target.id!=="lbFolder"){ closeFolderPop(); } },true);
 
@@ -1241,6 +1241,12 @@ function applyState(st){
   else fitToPhotos();
   maybeOfferReconnect();
 }
+/* Folder membership + markup are lightweight and are autosaved (lastState) on every change,
+   even when the heavy image Save fails or goes stale. These helpers let us re-apply that fresh
+   metadata onto a reloaded session so folder additions are never lost. Matched by a stable key. */
+function metaKey(p){ return (p.name||"")+"|"+(p.size!=null?p.size:"")+"|"+(p.lat!=null?Number(p.lat).toFixed(5):"")+"|"+(p.lng!=null?Number(p.lng).toFixed(5):""); }
+function snapshotMeta(list){ const m=new Map(); for(const p of (list||[])){ const k=metaKey(p); if(!m.has(k)) m.set(k,{paths:Array.isArray(p.paths)?p.paths.slice():null, marks:Array.isArray(p.marks)&&p.marks.length?p.marks:null}); } return m; }
+function applyMetaMap(m){ if(!m||!m.size) return; for(const p of photos){ const meta=m.get(metaKey(p)); if(!meta) continue; if(meta.paths&&meta.paths.length) p.paths=meta.paths.slice(); if(meta.marks) p.marks=meta.marks; } }
 
 /* persistence (IndexedDB): metadata only, cheap */
 function idbOpen(){ return new Promise((res,rej)=>{ const o=indexedDB.open("photomap",1); o.onupgradeneeded=()=>o.result.createObjectStore("kv"); o.onsuccess=()=>res(o.result); o.onerror=()=>rej(o.error); }); }
@@ -1258,7 +1264,11 @@ function maybeOfferReconnect(){
   const haveImg=photos.some(p=>p.thumb||p.preview);
   if(photos.length && !haveImg && dirHandle){ showBanner('Reconnect folder <b>'+esc(dirHandle.name||folderName||"folder")+'</b> to load images.',reconnectFolder); }
 }
-async function reconnectFolder(){ if(!dirHandle)return; if(!(await ensurePermission(dirHandle))){ alert("Permission to read the folder was not granted."); return; } folderName=dirHandle.name; hideBanner(); await loadFromHandle(dirHandle); }
+async function reconnectFolder(){ if(!dirHandle)return; if(!(await ensurePermission(dirHandle))){ alert("Permission to read the folder was not granted."); return; } folderName=dirHandle.name; hideBanner();
+  const keep=snapshotMeta(photos);   // preserve folder additions + markup across the reload
+  await loadFromHandle(dirHandle);
+  applyMetaMap(keep); buildCluster(); renderClusters(); updateGallery(); persistState();
+}
 async function reopenLastJson(){
   if(!jsonHandle){ try{ jsonHandle=await idbGet("jsonHandle"); }catch(e){} }
   if(!jsonHandle)return;
@@ -1325,7 +1335,14 @@ function parseShareHash(){
   try{ last=await idbGet("lastState"); }catch(e){}
   try{ jsonHandle=await idbGet("jsonHandle"); }catch(e){}
   try{ dirHandle=await idbGet("dirHandle"); }catch(e){}
-  if(full && full.photos && full.photos.length){ applyState(full); }
+  if(full && full.photos && full.photos.length){
+    applyState(full);
+    // The image-free autosave (lastState) is written on every folder/markup change, so if it is
+    // newer than the last full Save, overlay its fresh folder membership so nothing is lost.
+    if(last && Array.isArray(last.photos) && last.savedAt && (!full.savedAt || last.savedAt>full.savedAt)){
+      applyMetaMap(snapshotMeta(last.photos)); buildCluster(); renderClusters(); updateGallery(); persistState();
+    }
+  }
   else if(last && last.photos && last.photos.length){ applyState(last); if(jsonHandle) showBanner('Reopen last session <b>'+esc(jsonHandle.name||"file")+'</b> to load the images.',reopenLastJson); }
   if(dirHandle){ try{ if((await dirHandle.queryPermission({mode:"read"}))!=="granted") armFolderPermission(); }catch(e){} }
 })();
