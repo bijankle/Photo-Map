@@ -84,19 +84,27 @@
   .ip-iconbtn:hover .pct{color:inherit;}
   .ip-iconbtn:hover{color:var(--accent);border-color:var(--accent);}
   .ip-iconbtn.ok{background:var(--good);border-color:var(--good);color:#fff;}
-  .folder-pop{display:none;position:absolute;bottom:60px;left:50%;transform:translateX(-50%);z-index:7;width:340px;max-width:calc(100% - 24px);max-height:60vh;overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:0 12px 40px #1e1f2233;padding:10px;}
+  .folder-pop{display:none;position:absolute;bottom:52px;left:12px;z-index:7;width:340px;max-width:calc(100% - 24px);max-height:60vh;overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:0 12px 40px #1e1f2233;padding:10px;}
   .folder-pop .fp-title{font:600 12px var(--font);color:var(--ink);margin:0 2px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .folder-pop .fp-search{width:100%;box-sizing:border-box;margin:0 0 8px;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;font:12px var(--mono);color:var(--text);padding:6px 9px;}
+  .folder-pop .fp-search{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;font:12px var(--mono);color:var(--text);padding:6px 22px 6px 9px;}
   .folder-pop .fp-search:focus{outline:none;border-color:var(--accent);}
+  .folder-pop .xwrap{margin:0 0 8px;}
+  .xwrap{position:relative;display:flex;flex:1;min-width:0;}
+  .xwrap input{flex:1;width:100%;padding-right:22px;}
+  .xclear{position:absolute;right:2px;top:50%;transform:translateY(-50%);border:none;background:none;color:var(--dim);font-size:14px;line-height:1;cursor:pointer;padding:2px 5px;display:none;}
+  .xwrap.has .xclear{display:block;}
+  .xclear:hover{color:var(--bad);}
   .folder-pop .fp-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
   .folder-pop .fp-empty{font:12px var(--font);color:var(--dim);padding:4px 2px;}
   .folder-pop .fp-tag{font:600 11px var(--font);color:var(--accent2);background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:4px 10px;cursor:pointer;opacity:.45;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:opacity .12s,border-color .12s;}
   .folder-pop .fp-tag:hover{border-color:var(--accent);opacity:.85;}
   .folder-pop .fp-tag.on{opacity:1;background:var(--accent-tint);border-color:var(--accent);}
-  .folder-pop .fp-new{display:flex;gap:6px;border-top:1px solid var(--line);padding-top:8px;}
-  .folder-pop .fp-new input{flex:1;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;font:12px var(--mono);color:var(--text);padding:5px 8px;}
-  .folder-pop .fp-new button{background:var(--accent);color:#fff;border:none;border-radius:6px;font:600 11px var(--font);padding:0 12px;cursor:pointer;}
-  .folder-pop .fp-new button:hover{background:var(--accent2);}
+  .folder-pop .fp-create{font:600 11px var(--font);color:#fff;background:var(--accent);border:none;border-radius:6px;padding:5px 10px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .folder-pop .fp-create:hover{background:var(--accent2);}
+  .map-tags{position:absolute;left:12px;bottom:14px;z-index:1000;display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:280px;max-height:48%;overflow:auto;scrollbar-width:none;}
+  .map-tags::-webkit-scrollbar{display:none;}
+  .map-tags.filtered .ip-tag{opacity:.35;}
+  .map-tags.filtered .ip-tag.on{opacity:1;border-color:var(--accent);background:var(--accent-tint);}
   .ip-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:6;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:#ffffffe6;color:var(--text);font-size:26px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s;box-shadow:0 2px 10px #1e1f2226;}
   .ip-arrow:hover{background:var(--accent);color:#fff;border-color:var(--accent);}
   .ip-arrow.left{left:14px;} .ip-arrow.right{right:14px;}
@@ -108,14 +116,16 @@
   .fileinfo-pop .firow{display:flex;gap:10px;padding:4px 12px;font-family:var(--mono);font-size:11.5px;}
   .fileinfo-pop .fik{flex:none;width:74px;color:var(--dim);}
   .fileinfo-pop .fiv{color:var(--text);word-break:break-all;user-select:text;}
-  .ip-tools{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:8px;background:#ffffffe8;border:1px solid var(--line);padding:7px 10px;border-radius:10px;box-shadow:0 4px 16px #1e1f2226;}
-  .ip-tags{position:absolute;left:50%;transform:translateX(-50%);bottom:64px;z-index:6;display:flex;flex-direction:column;align-items:center;gap:6px;max-width:60%;max-height:42%;overflow:auto;scrollbar-width:none;}
+  .ip-tagcol{position:absolute;left:12px;bottom:14px;z-index:6;display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:44%;}
+  .ip-tags{display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-height:38vh;overflow:auto;scrollbar-width:none;max-width:100%;}
   .ip-tags::-webkit-scrollbar{display:none;}
-  .ip-tag{font:600 11px var(--font);color:var(--accent2);background:#ffffffe8;border:1px solid var(--line2);border-radius:6px;padding:4px 10px;cursor:pointer;box-shadow:0 2px 8px #1e1f221a;transition:opacity .15s,border-color .12s;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
+  .ip-tag{font:600 11px var(--font);text-align:left;color:var(--accent2);background:#ffffffe8;border:1px solid var(--line2);border-radius:6px;padding:4px 10px;cursor:pointer;box-shadow:0 2px 8px #1e1f221a;transition:opacity .15s,border-color .12s;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
   .ip-tag:hover{border-color:var(--accent);}
   .ip-tags.filtered .ip-tag{opacity:.35;}
   .ip-tags.filtered .ip-tag.on{opacity:1;border-color:var(--accent);background:var(--accent-tint);}
-  .ip-marktools{position:absolute;top:46px;left:50%;transform:translateX(-50%);z-index:6;display:flex;flex-wrap:wrap;justify-content:center;gap:5px;background:#ffffffe8;border:1px solid var(--line);padding:6px 8px;border-radius:10px;max-width:90%;box-shadow:0 4px 16px #1e1f2226;}
+  .ip-fullbox{position:absolute;right:12px;bottom:14px;z-index:6;}
+  .ip-marktools{position:absolute;top:46px;left:12px;z-index:6;display:flex;flex-direction:column;gap:5px;background:#ffffffe8;border:1px solid var(--line);padding:8px 6px;border-radius:10px;max-height:calc(100% - 120px);overflow:auto;scrollbar-width:none;box-shadow:0 4px 16px #1e1f2226;}
+  .ip-marktools::-webkit-scrollbar{display:none;}
   .ip-marktools .mk{position:relative;background:var(--panel);border:1px solid var(--line2);color:var(--text);border-radius:8px;cursor:pointer;width:41px;height:38px;display:flex;align-items:center;justify-content:center;}
   .ip-marktools .mk svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
   .ip-marktools .mk .hk{position:absolute;right:3px;bottom:1px;font:800 11px var(--mono);color:var(--dim);pointer-events:none;}
@@ -125,7 +135,7 @@
   .ip-marktools .mk.clear{width:auto;padding:0 9px;color:var(--bad);border-color:#EDB5B6;}
   .ip-marktools .mk.clear .hk{position:static;font:600 11px var(--font);color:inherit;margin-left:4px;}
   .ip-marktools .mk.clear svg{width:18px;height:18px;}
-  .markpalette{position:absolute;top:46px;left:12px;z-index:7;display:none;flex-direction:column;align-items:center;gap:7px;background:#ffffffec;border:1px solid var(--line);padding:8px 7px;border-radius:11px;box-shadow:0 4px 16px #1e1f2226;}
+  .markpalette{position:absolute;top:46px;left:72px;z-index:7;display:none;flex-direction:column;align-items:center;gap:7px;background:#ffffffec;border:1px solid var(--line);padding:8px 7px;border-radius:11px;box-shadow:0 4px 16px #1e1f2226;}
   .markpalette.show{display:flex;}
   .markpalette .sw{width:24px;height:24px;border-radius:50%;background:var(--c);border:2px solid #00000022;cursor:pointer;padding:0;}
   .markpalette .sw:hover{border-color:#00000044;}
@@ -221,7 +231,7 @@
   .lb-stage{position:relative;overflow:hidden;background:#ECEEF1;cursor:grab;}
   .lb-stage.panning{cursor:grabbing;}
   .lb-stage img.main{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform;user-select:none;-webkit-user-drag:none;}
-  .lb-ref{position:absolute;top:12px;left:12px;border:1px solid var(--line2);border-radius:6px;overflow:hidden;box-shadow:0 6px 18px #1e1f2233;display:none;}
+  .lb-ref{position:absolute;top:50px;right:12px;border:1px solid var(--line2);border-radius:6px;overflow:hidden;box-shadow:0 6px 18px #1e1f2233;display:none;}
   .lb-ref.show{display:block;}
   .lb-ref img{display:block;}
   .lb-ref .box{position:absolute;border:2px solid var(--accent);background:#5865F222;box-shadow:0 0 0 9999px #1e1f2240;}
@@ -318,6 +328,7 @@
     </div>
     <div class="ip-topright">
       <button class="ip-iconbtn" id="lbCopy" title="Copy current view to clipboard — screen quality (fast)"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><b class="pct">50%</b></button>
+      <button class="ip-iconbtn" id="lbCopyHQ" title="Copy current view to clipboard — full quality (reads the original from disk)"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><b class="pct">100%</b></button>
       <button class="ip-iconbtn" id="lbDownload" title="Download current view — full quality"><svg viewBox="0 0 24 24"><path d="M12 3v11M7 10l5 5 5-5M5 20h14"/></svg><b class="pct">100%</b></button>
     </div>
     <button class="ip-close" id="lbClose">&times;</button>
@@ -343,10 +354,12 @@
       <button class="mk" data-tool="erase" title="Eraser (E)"><svg viewBox="0 0 24 24"><path d="M4 15l7-7 6 6-4 4H8zM11 8l6 6"/></svg><b class="hk">E</b></button>
       <button class="mk clear" id="mkClear" title="Remove every markup on this photo"><svg viewBox="0 0 24 24"><path d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12"/></svg><b class="hk">Clear</b></button>
     </div>
-    <div class="ip-tags" id="lbTags"></div>
-    <div class="ip-tools">
+    <div class="ip-tagcol">
+      <div class="ip-tags" id="lbTags"></div>
+      <button class="lb-textbtn" id="lbFolder" title="All tags — search or create">Add tag &#9652;</button>
+    </div>
+    <div class="ip-fullbox">
       <label class="lb-fullchk" id="lbFullWrap"><input type="checkbox" id="lbFull" /><span>Full quality</span></label>
-      <button class="lb-textbtn" id="lbFolder">Add tag</button>
     </div>
     <div class="folder-pop" id="folderPop"></div>
     <div class="tbed" id="tbEditor" style="display:none">
@@ -372,7 +385,7 @@
     <div class="controls">
       <div class="ctl-row"><label for="sortSel">Sort</label>
         <select id="sortSel"><option value="date_desc">Newest first</option><option value="date_asc">Oldest first</option><option value="name">Filename</option><option value="dist">Nearest to center</option></select></div>
-      <div class="ctl-row"><label for="nameFilter">Search</label><input type="text" id="nameFilter" placeholder="Search folder or filename" autocomplete="off" /></div>
+      <div class="ctl-row"><label for="nameFilter">Search</label><span class="xwrap"><input type="text" id="nameFilter" placeholder="Search folder or filename" autocomplete="off" /><button class="xclear" type="button" title="Clear search">&times;</button></span></div>
       <div class="ctl-row"><label for="thumbSize">Size</label><input type="range" id="thumbSize" min="64" max="260" value="120" /></div>
     </div>
     <div class="gallery-body" id="galleryBody">
@@ -396,7 +409,9 @@
 "use strict";
 
 /* config */
-const THUMB_PX = 480, THUMB_Q = 0.72, THUMB_VER = 2;   // gallery + hover — the ONLY cached rendition; full quality always streams from disk
+const THUMB_PX = 480, THUMB_Q = 0.72;        // gallery + hover
+const PREVIEW_PX = 1280, PREVIEW_Q = 0.72;   // viewer default — cached screenshot-quality rendition; full quality is opt-in from disk
+const THUMB_VER = 3;                         // bump when rendition sizes change so old photos regenerate organically
 
 /* state */
 let photos=[], nextId=1, folderName="";
@@ -422,6 +437,23 @@ L.control.scale({position:"bottomright",imperial:false,metric:true,maxWidth:170}
 const markerLayer=L.layerGroup().addTo(map);
 const highlightLayer=L.layerGroup().addTo(map);
 map.keyboard.disable();
+/* Middle-mouse (scroll-wheel button) drag pans the map even while the Zoom window / Filter area /
+   Measure tools are active — without changing the active tool. */
+(function(){
+  const cont=map.getContainer();
+  const block=e=>{ if(e.button===1){ e.preventDefault(); e.stopPropagation(); } };
+  cont.addEventListener("mousedown",block,true);
+  cont.addEventListener("auxclick",block,true);
+  cont.addEventListener("pointerdown",e=>{
+    if(e.button!==1) return;
+    e.preventDefault(); e.stopPropagation();
+    let mx=e.clientX,my=e.clientY;
+    const prevCursor=cont.style.cursor; cont.style.cursor="grabbing";
+    const mv=ev=>{ map.panBy([mx-ev.clientX,my-ev.clientY],{animate:false}); mx=ev.clientX; my=ev.clientY; };
+    const up=ev=>{ if(ev.button!==1) return; window.removeEventListener("pointermove",mv); window.removeEventListener("pointerup",up); cont.style.cursor=prevCursor; };
+    window.addEventListener("pointermove",mv); window.addEventListener("pointerup",up);
+  },true);
+})();
 let hlMarker=null;
 function highlightDot(p){ clearHighlight(); if(!p||p.lat==null)return; hlMarker=L.circleMarker([p.lat,p.lng],{radius:13,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.45,interactive:false,className:"hl-dot"}).addTo(highlightLayer); }
 function clearHighlight(){ if(hlMarker){ highlightLayer.removeLayer(hlMarker); hlMarker=null; } }
@@ -535,8 +567,8 @@ async function processOne(it){
   p.isHeic=isHeic(file);
   let disp=file;
   if(p.isHeic){ try{ disp=await heicToJpegBlob(file,0.82); }catch(e){} }
-  const imgs=await makePreviews(disp).catch(()=>({thumb:null}));
-  p.thumb=imgs.thumb; p.tv=THUMB_VER;
+  const imgs=await makePreviews(disp).catch(()=>({thumb:null,preview:null}));
+  p.thumb=imgs.thumb; p.preview=imgs.preview; p.tv=THUMB_VER;
 }
 function isHeic(file){ return /\.(heic|heif)$/i.test(file.name||"") || /heic|heif/i.test(file.type||""); }
 async function heicToJpegBlob(file,quality){
@@ -547,8 +579,8 @@ async function heicToJpegBlob(file,quality){
 function makePreviews(file){
   return new Promise(res=>{
     const url=URL.createObjectURL(file); const img=new Image();
-    img.onload=()=>{ const thumb=scaleToDataURL(img,THUMB_PX,THUMB_Q); URL.revokeObjectURL(url); res({thumb}); };
-    img.onerror=()=>{ URL.revokeObjectURL(url); res({thumb:null}); };
+    img.onload=()=>{ const thumb=scaleToDataURL(img,THUMB_PX,THUMB_Q); const preview=scaleToDataURL(img,PREVIEW_PX,PREVIEW_Q); URL.revokeObjectURL(url); res({thumb,preview}); };
+    img.onerror=()=>{ URL.revokeObjectURL(url); res({thumb:null,preview:null}); };
     img.src=url;
   });
 }
@@ -631,7 +663,7 @@ function toggleFilter(){ if(boxBounds){ clearArea(); return; } if(drawing&&drawM
 function toggleZoom(){ if(drawing&&drawMode==="zoom"){ stopDraw(); return; } if(drawing){ stopDraw(); } startDraw("zoom"); }
 function startDraw(mode){ if(measuring) stopMeasure(); drawing=true; drawMode=mode; map.dragging.disable(); map.getContainer().style.cursor="crosshair"; setAreaBtn(); map.on("mousedown",dDown); }
 function stopDraw(){ map.off("mousedown",dDown); map.off("mousemove",dMove); map.off("mouseup",dUp); if(tempRect){map.removeLayer(tempRect);tempRect=null;} drawing=false; drawMode=null; map.dragging.enable(); map.getContainer().style.cursor=""; setAreaBtn(); }
-function dDown(e){ drawStart=e.latlng; map.on("mousemove",dMove); map.on("mouseup",dUp); }
+function dDown(e){ if(e.originalEvent&&e.originalEvent.button!==0) return; drawStart=e.latlng; map.on("mousemove",dMove); map.on("mouseup",dUp); }
 function dMove(e){ const b=L.latLngBounds(drawStart,e.latlng); if(tempRect)tempRect.setBounds(b); else tempRect=L.rectangle(b,{color:"#5865F2",weight:2,fillColor:"#5865F2",fillOpacity:.08,dashArray:"5 4"}).addTo(map); }
 function dUp(e){
   const b=L.latLngBounds(drawStart,e.latlng); const mode=drawMode;
@@ -663,7 +695,7 @@ function startMeasure(){ measuring=true; measurePts=[]; if(measureLayer){map.rem
 function stopMeasure(){ measuring=false; map.off("mouseup",mAdd); map.off("mousemove",mMove); map.off("dblclick",mFinish); map.dragging.enable(); map.doubleClickZoom.enable(); map.getContainer().style.cursor=""; if(measureLayer){ map.removeLayer(measureLayer); measureLayer=null; } measurePts=[]; setMeasureBtn(); }
 function mFinish(e){ if(e&&e.originalEvent) L.DomEvent.stop(e.originalEvent); map.off("mouseup",mAdd); map.off("mousemove",mMove); map.off("dblclick",mFinish); map.dragging.enable(); map.doubleClickZoom.enable(); map.getContainer().style.cursor=""; measuring=false; drawMeasure(); setMeasureBtn(); }
 function snapOrtho(ll,ref){ const lp=map.latLngToContainerPoint(ref), cp=map.latLngToContainerPoint(ll); if(Math.abs(cp.x-lp.x)>=Math.abs(cp.y-lp.y)) cp.y=lp.y; else cp.x=lp.x; return map.containerPointToLatLng(cp); }
-function mAdd(e){ if(!measuring)return; let ll=e.latlng; if(e.originalEvent&&e.originalEvent.shiftKey&&measurePts.length) ll=snapOrtho(ll,measurePts[measurePts.length-1]); if(measurePts.length){ const a=map.latLngToContainerPoint(measurePts[measurePts.length-1]),b=map.latLngToContainerPoint(ll); if(Math.hypot(a.x-b.x,a.y-b.y)<6) return; } measurePts.push(ll); drawMeasure(); }
+function mAdd(e){ if(!measuring)return; if(e.originalEvent&&e.originalEvent.button!==0) return; let ll=e.latlng; if(e.originalEvent&&e.originalEvent.shiftKey&&measurePts.length) ll=snapOrtho(ll,measurePts[measurePts.length-1]); if(measurePts.length){ const a=map.latLngToContainerPoint(measurePts[measurePts.length-1]),b=map.latLngToContainerPoint(ll); if(Math.hypot(a.x-b.x,a.y-b.y)<6) return; } measurePts.push(ll); drawMeasure(); }
 function mMove(e){ if(!measuring||!measurePts.length)return; let ll=e.latlng; if(e.originalEvent&&e.originalEvent.shiftKey) ll=snapOrtho(ll,measurePts[measurePts.length-1]); drawMeasure(ll); }
 function fmtDist(m){ return m>=1000?(m/1000).toFixed(2)+" km":Math.round(m)+" m"; }
 function drawMeasure(preview){
@@ -681,6 +713,14 @@ setMeasureBtn();
 document.getElementById("showNoGeo").addEventListener("change",e=>{ showNoGeo=e.target.checked; updateGallery(); persistState(); });
 document.getElementById("sortSel").addEventListener("change",e=>{ currentSort=e.target.value; updateGallery(); persistState(); });
 document.getElementById("nameFilter").addEventListener("input",e=>{ nameFilter=e.target.value.trim().toLowerCase(); buildCluster(); renderClusters(); updateGallery(); renderPhotoTags(curPhoto()); });
+/* little × inside search inputs: click to clear (fires the input event so filtering resets) */
+function wireClearX(input){
+  const wrap=input&&input.parentElement, x=wrap&&wrap.querySelector(".xclear"); if(!x) return;
+  const sync=()=>wrap.classList.toggle("has",!!input.value);
+  input.addEventListener("input",sync); sync();
+  x.addEventListener("click",e=>{ e.preventDefault(); e.stopPropagation(); input.value=""; input.dispatchEvent(new Event("input",{bubbles:true})); input.focus(); });
+}
+wireClearX(document.getElementById("nameFilter"));
 document.getElementById("thumbSize").addEventListener("input",e=>{ document.documentElement.style.setProperty("--thumb",e.target.value+"px"); persistState(); });
 function deletePhoto(id){
   const i=photos.findIndex(p=>p.id===id); if(i<0) return;
@@ -718,6 +758,7 @@ function updateGallery(){
   body.querySelectorAll(".card").forEach(el=>{ const p=photoById(Number(el.dataset.id)); el.addEventListener("click",()=>openViewer(p)); el.addEventListener("mouseenter",()=>highlightDot(p)); el.addEventListener("mouseleave",highlightCurrent); });
   document.getElementById("galCount").textContent=lightboxList.length+" shown";
   document.getElementById("stView").textContent=inView.length;
+  renderMapTags();
 }
 function pathsOf(p){ return (Array.isArray(p.paths)&&p.paths.length)?p.paths:(p.path?[p.path]:[]); }
 function cardHtml(p,isNoGeo){
@@ -757,11 +798,12 @@ function openViewer(p){
   let i=lightboxList.findIndex(x=>x.id===p.id); if(i<0){ lightboxList=[p].concat(lightboxList); i=0; }
   lightboxIndex=i;
   const wasOpen=lb.classList.contains("open");
-  lb.classList.add("open"); loadViewer();
+  lb.classList.add("open"); loadViewer(); renderMapTags();
   if(!wasOpen){ setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); },30); }
 }
-/* Opening a photo streams the ORIGINAL file from disk (object URL — no data-URL copies are ever
-   cached), showing the low-res thumb while it loads. Only thumbs live in the cache. */
+/* The viewer shows the cached screenshot-quality preview by default — instant navigation, no disk
+   reads. Full quality is opt-in: ticking the checkbox streams the ORIGINAL from disk (object URL,
+   never cached as a copy). */
 let fullToken=0;
 function loadViewer(){
   const p=lightboxList[lightboxIndex]; if(!p)return;
@@ -770,8 +812,8 @@ function loadViewer(){
   document.getElementById("lbName").textContent=p.name;
   lbFull.checked=false; lbFullWrap.classList.remove("busy");
   draft=null; polyPrev=null; redoMarks=[];
+  fullToken++;   // invalidate any pending full-quality load from the previous photo
   showPreview(p);
-  autoLoadFull(p);   // stream the original in the background; thumb shows meanwhile
   renderPhotoTags(p);
   highlightCurrent();
 }
@@ -794,14 +836,27 @@ function renderPhotoTags(p){
 }
 function toggleTagFilter(folder){
   const inp=document.getElementById("nameFilter");
-  const next=((nameFilter||"").trim()===folder.toLowerCase())?"":folder;   // clicking the active tag clears the filter
-  inp.value=next; nameFilter=next.trim().toLowerCase();
-  buildCluster(); renderClusters(); updateGallery();
-  renderPhotoTags(curPhoto());
+  inp.value=((nameFilter||"").trim()===folder.toLowerCase())?"":folder;   // clicking the active tag clears the filter
+  inp.dispatchEvent(new Event("input",{bubbles:true}));   // one path: runs the filter, refreshes tags, syncs the clear ×
+}
+/* Tag rail on the MAP (bottom-left): every existing tag, filter-only — shown ONLY while no large
+   photo is open. Click to filter, active tag full opacity + others dimmed; no create here. */
+function renderMapTags(){
+  let el=document.getElementById("mapTags");
+  if(!el){ el=document.createElement("div"); el.id="mapTags"; el.className="map-tags"; map.getContainer().appendChild(el);
+    ["mousedown","pointerdown","dblclick","wheel"].forEach(ev=>el.addEventListener(ev,e=>e.stopPropagation())); }
+  const folders=allFolders();
+  if(lb.classList.contains("open")||!folders.length){ el.style.display="none"; return; }
+  el.style.display="";
+  const q=(nameFilter||"").trim(); let active=false, html="";
+  for(const f of folders){ const on=!!q&&f.toLowerCase()===q; if(on) active=true;
+    html+='<button class="ip-tag'+(on?" on":"")+'" data-folder="'+esc(f)+'" title="'+esc(f)+'">'+esc(folderLabel(f))+'</button>'; }
+  el.innerHTML=html; el.classList.toggle("filtered",active);
+  el.querySelectorAll(".ip-tag").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); toggleTagFilter(b.dataset.folder); }));
 }
 function showPreview(p,keepView){
   if(curUrl){ URL.revokeObjectURL(curUrl); curUrl=null; }
-  let s=p.thumb||"";
+  let s=p.preview||p.thumb||"";
   lbImg.onload=()=>setupFit(lbImg.naturalWidth,lbImg.naturalHeight,keepView);
   lbImg.src=s; lbRefImg.src=s;
 }
@@ -824,62 +879,20 @@ async function originalToURL(p,file){
   if(p.isHeic||isHeic(file)){ try{ src=await heicToJpegBlob(file,0.92); }catch(e){} }
   return {url:URL.createObjectURL(src), blob:src};
 }
-// Photos loaded before a thumb-quality bump keep their old thumbs (incremental load skips them);
-// regenerate organically from the original we just streamed for the viewer.
-async function maybeUpgradeThumb(p,blob){
+// Photos loaded before a rendition-quality bump keep their old thumbs/previews (incremental load
+// skips them); regenerate organically from the original streamed for a full-quality view.
+async function maybeUpgradeRenditions(p,blob){
   if(p.tv===THUMB_VER || !blob) return;
-  try{ const imgs=await makePreviews(blob); if(imgs.thumb){ p.thumb=imgs.thumb; p.tv=THUMB_VER; cacheFullSession(); } }catch(e){}
-}
-/* Prefetch the surrounding originals (±5) so arrowing through photos has no lag: each is read
-   from disk and decoded ahead of time, then handed to the viewer instantly on navigation.
-   The CURRENT photo always has priority — a prefetch pass only starts after the photo on screen
-   has been displayed, every navigation immediately invalidates the old pass (checked after every
-   await), and entries falling out of the window are revoked to cap memory. */
-const PREFETCH_SPAN=5, prefetched=new Map();   // photo id -> {url,img}
-let prefetchRun=0;
-function prefetchWindowIds(){ const ids=new Set(); const n=lightboxList.length; if(!n) return ids; for(let d=-PREFETCH_SPAN; d<=PREFETCH_SPAN; d++){ ids.add(lightboxList[(lightboxIndex+d+n)%n].id); } return ids; }
-function clearPrefetch(){ prefetchRun++; for(const e of prefetched.values()) URL.revokeObjectURL(e.url); prefetched.clear(); }
-function takePrefetched(p){ const e=prefetched.get(p.id); if(!e) return null; prefetched.delete(p.id); return e.url; }
-async function prefetchNeighbors(){
-  const run=++prefetchRun, n=lightboxList.length; if(!n) return;
-  const keep=prefetchWindowIds();
-  for(const [id,e] of prefetched){ if(!keep.has(id)){ URL.revokeObjectURL(e.url); prefetched.delete(id); } }
-  // nearest-first, alternating forward/back: +1,-1,+2,-2,… so both directions are ready
-  const order=[]; for(let d=1;d<=PREFETCH_SPAN;d++){ order.push((lightboxIndex+d)%n); order.push((lightboxIndex-d+n)%n); }
-  for(const j of order){
-    if(run!==prefetchRun) return;   // user moved on; the newer pass owns the window
-    const p2=lightboxList[j]; if(!p2||p2===curPhoto()||prefetched.has(p2.id)) continue;
-    let f=null; try{ f=await getOriginalFileSilent(p2); }catch(e){}
-    if(run!==prefetchRun) return;
-    if(!f) continue;
-    try{
-      const r=await originalToURL(p2,f);
-      if(run!==prefetchRun || !prefetchWindowIds().has(p2.id)){ URL.revokeObjectURL(r.url); if(run!==prefetchRun) return; continue; }
-      const im=new Image(); im.src=r.url; if(im.decode) im.decode().catch(()=>{});   // warm the decoder off the main thread
-      prefetched.set(p2.id,{url:r.url,img:im});
-    }catch(e){}
-    await new Promise(r=>setTimeout(r,0));   // yield between neighbors so navigation clicks are never queued behind prefetch work
-  }
-}
-async function autoLoadFull(p){
-  const tok=++fullToken;
-  const pre=takePrefetched(p);
-  if(pre){ swapViewer(pre); lbFull.checked=true; prefetchNeighbors(); return; }   // instant — already loaded & decoded
-  let file=null; try{ file=await getOriginalFileSilent(p); }catch(e){}
-  if(!file){ prefetchNeighbors(); return; }   // no silent access — thumb stays; the Full quality tick can prompt
-  const r=await originalToURL(p,file);
-  if(tok!==fullToken || curPhoto()!==p || !lb.classList.contains("open")){ URL.revokeObjectURL(r.url); return; }
-  swapViewer(r.url); lbFull.checked=true;
-  maybeUpgradeThumb(p,r.blob);
-  prefetchNeighbors();
+  try{ const imgs=await makePreviews(blob); if(imgs.thumb){ p.thumb=imgs.thumb; p.preview=imgs.preview||p.preview; p.tv=THUMB_VER; cacheFullSession(); } }catch(e){}
 }
 async function showFull(p){
-  const stay=()=>lightboxList[lightboxIndex]===p;
+  const tok=++fullToken;
+  const stay=()=>lightboxList[lightboxIndex]===p && tok===fullToken && lb.classList.contains("open");
   let file=null; try{ file=await getOriginalFileSilent(p); }catch(e){}
   if(!file){ file=await fetchOriginal(p); if(file) p.file=file; }
   if(!file) return false;
   const r=await originalToURL(p,file);
-  if(stay()&&lb.classList.contains("open")){ swapViewer(r.url); maybeUpgradeThumb(p,r.blob); prefetchNeighbors(); }
+  if(stay()){ swapViewer(r.url); maybeUpgradeRenditions(p,r.blob); }
   else URL.revokeObjectURL(r.url);
   return true;
 }
@@ -909,7 +922,7 @@ lbStage.addEventListener("wheel",e=>{ e.preventDefault(); const r=lbStage.getBou
 let panning=false,panX=0,panY=0;
 /* pointer handling consolidated in the markup engine below */
 function vStep(d){ if(!lightboxList.length)return; lightboxIndex=(lightboxIndex+d+lightboxList.length)%lightboxList.length; loadViewer(); }
-function closeViewer(){ if(!lb.classList.contains("open")) return; if(selMark) deselectText(); closeFileInfo(); if(typeof closeFolderPop==="function") closeFolderPop(); setMarkTool("none"); draft=null; polyPrev=null; clearHighlight(); lb.classList.remove("open"); clearPrefetch(); if(curUrl){URL.revokeObjectURL(curUrl);curUrl=null;} lbImg.src=""; setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); },30); }
+function closeViewer(){ if(!lb.classList.contains("open")) return; if(selMark) deselectText(); closeFileInfo(); if(typeof closeFolderPop==="function") closeFolderPop(); setMarkTool("none"); draft=null; polyPrev=null; clearHighlight(); lb.classList.remove("open"); fullToken++; if(curUrl){URL.revokeObjectURL(curUrl);curUrl=null;} lbImg.src=""; renderMapTags(); setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); },30); }
 document.getElementById("lbClose").addEventListener("click",closeViewer);
 document.getElementById("lbPrev").addEventListener("click",e=>{e.stopPropagation();vStep(-1);});
 document.getElementById("lbNext").addEventListener("click",e=>{e.stopPropagation();vStep(1);});
@@ -954,7 +967,8 @@ setColor(markColor);
 function setMarkTool(t){ if(selMark) deselectText(); markTool=t; draft=null; polyPrev=null; lbStage.classList.toggle("drawing",t!=="none"); document.getElementById("markPalette").classList.toggle("show",t!=="none"); document.querySelectorAll(".ip-marktools .mk[data-tool]").forEach(b=>b.classList.toggle("on",b.dataset.tool===t)); redrawMarks(); }
 document.querySelectorAll(".ip-marktools .mk[data-tool]").forEach(b=>{ b.addEventListener("click",e=>{ e.stopPropagation(); setMarkTool(b.dataset.tool===markTool?"none":b.dataset.tool); }); });
 document.getElementById("mkClear").addEventListener("click",e=>{ e.stopPropagation(); if(selMark) deselectText(); const p=curPhoto(); if(p){ p.marks=[]; draft=null; polyPrev=null; afterMarkChange(); } });
-document.getElementById("lbCopy").addEventListener("click",e=>{ e.stopPropagation(); copyCurrentView(e.currentTarget); });
+document.getElementById("lbCopy").addEventListener("click",e=>{ e.stopPropagation(); copyCurrentView(e.currentTarget,false); });
+document.getElementById("lbCopyHQ").addEventListener("click",e=>{ e.stopPropagation(); copyCurrentView(e.currentTarget,true); });
 document.getElementById("lbDownload").addEventListener("click",e=>{ e.stopPropagation(); downloadCurrentView(e.currentTarget); });
 
 function evToNorm(e){ const r=lbStage.getBoundingClientRect(); return { x:((e.clientX-r.left-vTx)/vScale)/fitW, y:((e.clientY-r.top-vTy)/vScale)/fitH }; }
@@ -1080,9 +1094,9 @@ function currentViewFrac(){
 }
 // Render what the user sees (current zoom/pan crop + markup) to a canvas.
 // maxDim caps the output: screen size for clipboard (fast, screenshot-quality), 4096 for download (full quality).
-function renderViewCanvas(p,maxDim){
+function renderViewCanvas(p,maxDim,srcOverride){
   return new Promise((resolve,reject)=>{
-    const src=(curPhoto()===p && lb.classList.contains("open") && lbImg.src)?lbImg.src:p.thumb;   // whatever is on screen (full-res if streamed in)
+    const src=srcOverride||((curPhoto()===p && lb.classList.contains("open") && lbImg.src)?lbImg.src:(p.preview||p.thumb));
     if(!src){ reject(new Error("no image")); return; }
     const img=new Image();
     img.onload=()=>{
@@ -1104,10 +1118,21 @@ function renderViewCanvas(p,maxDim){
   });
 }
 function screenshotDim(){ return Math.max(640, Math.ceil(Math.max(fitW||0,fitH||0)*(window.devicePixelRatio||1))); }
-function copyCurrentView(btn){
+// Full-quality render: stream the ORIGINAL from disk for the crop (prompting to connect the folder
+// if needed), falling back to whatever is displayed when the original is unreachable.
+async function renderHQ(p,maxDim){
+  let file=null; try{ file=await getOriginalFileSilent(p); }catch(e){}
+  if(!file){ try{ file=await fetchOriginal(p); if(file) p.file=file; }catch(e){} }
+  if(!file) return renderViewCanvas(p,maxDim);
+  const r=await originalToURL(p,file);
+  try{ return await renderViewCanvas(p,maxDim,r.url); }
+  finally{ URL.revokeObjectURL(r.url); }
+}
+function copyCurrentView(btn,hq){
   if(selMark) deselectText();
   const p=curPhoto(); if(!p) return;
-  renderViewCanvas(p,screenshotDim()).then(c=>c.toBlob(async blob=>{   // screen resolution — light and instant to paste
+  const render=hq?renderHQ(p,4096):renderViewCanvas(p,screenshotDim());   // 50% = screen res (instant); 100% = original res
+  render.then(c=>c.toBlob(async blob=>{
     if(!blob){ alert("Could not render the image."); return; }
     try{ await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]); flashIcon(btn); }
     catch(err){ alert("The browser blocked clipboard access here. Use the Download button instead."); }
@@ -1116,7 +1141,7 @@ function copyCurrentView(btn){
 function downloadCurrentView(btn){
   if(selMark) deselectText();
   const p=curPhoto(); if(!p) return;
-  renderViewCanvas(p,4096).then(c=>c.toBlob(blob=>{   // full source resolution of the current view
+  renderHQ(p,4096).then(c=>c.toBlob(blob=>{   // full source resolution of the current view, streamed from the original
     if(!blob){ alert("Could not render the image."); return; }
     const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
     a.download=(p.name||"image").replace(/\.[^.]+$/,"")+"-view.jpg";
@@ -1168,33 +1193,39 @@ function closeFolderPop(){ folderPopShown=false; document.getElementById("folder
 // The linked/root folder name (e.g. "Photos") is redundant on every label — strip it for display.
 function rootPrefix(){ return (folderName||"").replace(/\/+$/,""); }
 function folderLabel(f){ const r=rootPrefix(); if(r&&f===r) return "(main folder)"; if(r&&f.startsWith(r+"/")) return f.slice(r.length+1); return f; }
+/* Tag callout (opened by the up-arrow): every existing tag as a pill, plus ONE input that both
+   searches and creates — typing filters the pills; if no exact match, a Create button appears. */
 function openFolderPop(){
   const p=curPhoto(); if(!p) return;
   const pop=document.getElementById("folderPop");
   const folders=allFolders();
   let html='<div class="fp-title">Tags for '+esc(p.name)+'</div>';
-  if(folders.length>1) html+='<input type="text" class="fp-search" id="fpSearch" placeholder="Filter tags…" autocomplete="off"/>';
-  html+='<div class="fp-list">';
-  if(!folders.length) html+='<div class="fp-empty">No tags yet — create one below.</div>';
+  html+='<span class="xwrap"><input type="text" class="fp-search" id="fpSearch" placeholder="Search or create tag…" autocomplete="off"/><button class="xclear" type="button" title="Clear">&times;</button></span>';
+  html+='<div class="fp-list" id="fpList">';
   for(const f of folders){ const on=photoInFolder(p,f); html+='<button class="fp-tag'+(on?" on":"")+'" data-folder="'+esc(f)+'" title="'+esc(f)+'">'+esc(folderLabel(f))+'</button>'; }
-  html+='<div class="fp-empty" id="fpNoMatch" style="display:none">No tags match.</div>';
-  html+='</div><div class="fp-new"><input type="text" id="fpNew" placeholder="New tag name" autocomplete="off"/><button id="fpAdd">Create</button></div>';
+  html+='<button class="fp-create" id="fpCreate" style="display:none"></button>';
+  html+='<div class="fp-empty" id="fpEmpty" style="display:none">No tags yet — type a name to create one.</div>';
+  html+='</div>';
   pop.innerHTML=html; pop.style.display="block"; folderPopShown=true;
   pop.querySelectorAll(".fp-tag").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); const f=b.dataset.folder; const now=!photoInFolder(p,f); setPhotoFolder(p,f,now); b.classList.toggle("on",now); afterFolderChange(); }));
-  const search=pop.querySelector("#fpSearch");
-  if(search){
-    const doFilter=()=>{ const q=search.value.trim().toLowerCase(); let any=false;
-      pop.querySelectorAll(".fp-tag").forEach(el=>{ const hay=((el.dataset.folder||"")+" "+el.textContent).toLowerCase(); const show=!q||hay.includes(q); el.style.display=show?"":"none"; if(show)any=true; });
-      const nm=pop.querySelector("#fpNoMatch"); if(nm) nm.style.display=any?"none":"block";
-    };
-    search.addEventListener("input",doFilter);
-    setTimeout(()=>search.focus(),0);   // ready to type immediately
-  }
-  const addNew=()=>{ const inp=document.getElementById("fpNew"); let name=(inp.value||"").trim().replace(/^\/+|\/+$/g,""); if(!name) return;
-    const r=rootPrefix(); if(r&&name!==r&&!name.startsWith(r+"/")) name=r+"/"+name;   // create new folders inside the linked root
+  const search=pop.querySelector("#fpSearch"), createBtn=pop.querySelector("#fpCreate"), emptyEl=pop.querySelector("#fpEmpty");
+  const addNew=raw=>{ let name=(raw||"").trim().replace(/^\/+|\/+$/g,""); if(!name) return;
+    const r=rootPrefix(); if(r&&name.toLowerCase()!==r.toLowerCase()&&!name.toLowerCase().startsWith(r.toLowerCase()+"/")) name=r+"/"+name;   // new tags live inside the linked root
     setPhotoFolder(p,name,true); afterFolderChange(); openFolderPop(); };
-  pop.querySelector("#fpAdd").addEventListener("click",addNew);
-  pop.querySelector("#fpNew").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addNew(); } });
+  const doFilter=()=>{
+    const q=search.value.trim().toLowerCase(); let exact=false;
+    pop.querySelectorAll(".fp-tag").forEach(el=>{ const full=(el.dataset.folder||"").toLowerCase(), lbl=el.textContent.toLowerCase();
+      const show=!q||full.includes(q)||lbl.includes(q); el.style.display=show?"":"none";
+      if(q&&(lbl===q||full===q)) exact=true; });
+    createBtn.style.display=(q&&!exact)?"":"none";
+    if(q&&!exact) createBtn.textContent="+ Create “"+search.value.trim()+"”";
+    emptyEl.style.display=(!folders.length&&!q)?"":"none";
+  };
+  createBtn.addEventListener("click",e=>{ e.stopPropagation(); addNew(search.value); });
+  search.addEventListener("input",doFilter);
+  search.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); if(createBtn.style.display!=="none") addNew(search.value); } });
+  wireClearX(search); doFilter();
+  setTimeout(()=>search.focus(),0);   // ready to type immediately
 }
 function afterFolderChange(){ updateGallery(); buildCluster(); renderClusters(); renderPhotoTags(curPhoto()); idbSet("lastState",serializeState(false)).catch(()=>{});
   ensureJsonWrite(true).then(()=>scheduleAutoSave());   // grant write in the click gesture, then debounce so rapid tag toggles batch into ONE small file write
@@ -1311,7 +1342,7 @@ async function flushAutoSave(interactive){
 function overlayImagesFromCache(cache){
   if(!cache||!Array.isArray(cache.photos)) return; const m=new Map();
   for(const c of cache.photos){ const k=metaKey(c); if(!m.has(k)) m.set(k,c); }
-  for(const p of photos){ const c=m.get(metaKey(p)); if(!c) continue; if(!p.thumb&&c.thumb){ p.thumb=c.thumb; p.tv=c.tv||null; } }
+  for(const p of photos){ const c=m.get(metaKey(p)); if(!c) continue; if(!p.thumb&&c.thumb){ p.thumb=c.thumb; p.tv=c.tv||null; } if(!p.preview&&c.preview)p.preview=c.preview; }
 }
 // Load the latest straight from the .json file (the source of truth), using the cache only for images.
 let fileLoadedOnce=false, lastFullCache=null;
@@ -1392,7 +1423,7 @@ function serializeState(includeImages){
     photos: photos.map(p=>{ const o={path:p.path,name:p.name,lat:p.lat,lng:p.lng,time:p.time,dir:p.dir,size:p.size,isHeic:p.isHeic};
       if(Array.isArray(p.paths)&&p.paths.length&&(p.paths.length>1||p.paths[0]!==p.path))o.paths=p.paths;   // preserve folder membership (de-duped overlaps + moves)
       if(p.marks&&p.marks.length)o.marks=p.marks;
-      if(includeImages && p.thumb){ o.thumb=p.thumb; if(p.tv)o.tv=p.tv; }   // thumbs are the only cached rendition — full quality always comes from disk
+      if(includeImages){ if(p.thumb){ o.thumb=p.thumb; if(p.tv)o.tv=p.tv; } if(p.preview)o.preview=p.preview; }   // thumb + screenshot-quality preview; full quality always comes from disk
       return o; })
   };
 }
@@ -1408,7 +1439,7 @@ function loadStateText(text){
 }
 function applyState(st){
   clearAll(false); folderName=st.folderName||"";
-  (st.photos||[]).forEach(m=>photos.push({id:nextId++,path:m.path,name:m.name,paths:Array.isArray(m.paths)&&m.paths.length?m.paths:(m.path?[m.path]:[]),file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,tv:m.tv||null,lat:m.lat,lng:m.lng,time:m.time,dir:m.dir,marks:Array.isArray(m.marks)?m.marks:[]}));   // old files' preview/full renditions are intentionally dropped — thumbs only
+  (st.photos||[]).forEach(m=>photos.push({id:nextId++,path:m.path,name:m.name,paths:Array.isArray(m.paths)&&m.paths.length?m.paths:(m.path?[m.path]:[]),file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,lat:m.lat,lng:m.lng,time:m.time,dir:m.dir,marks:Array.isArray(m.marks)?m.marks:[]}));   // baked full-quality renditions from old files are intentionally dropped
   const s=st.settings||{};
   if(s.thumb){ document.documentElement.style.setProperty("--thumb",s.thumb); document.getElementById("thumbSize").value=parseInt(s.thumb)||120; }
   if(s.galleryW) document.documentElement.style.setProperty("--gallery-w",s.galleryW);
