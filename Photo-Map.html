@@ -269,6 +269,7 @@
     <button class="btn grpR" id="btnDedupe">Remove Duplicates</button>
   </div>
   <input id="folderInput" type="file" webkitdirectory directory multiple style="display:none" />
+  <input id="origInput" type="file" webkitdirectory directory multiple style="display:none" />
   <input id="jsonInput" type="file" accept="application/json,.json" style="display:none" />
   <div class="stats">
     <div class="stat total"><div class="v" id="stTotal">0</div><div class="k">Photos</div></div>
@@ -966,7 +967,7 @@ lbFull.addEventListener("change",async ()=>{
     let ok=false; try{ ok=await showFull(p); }catch(e){}
     lbFullWrap.classList.remove("busy");
     if(lightboxList[lightboxIndex]!==p) return;
-    if(!ok){ lbFull.checked=false; alert("Could not load the full quality original for "+p.name+". Connect the source folder with Open Folder, then tick Full quality again."); }
+    if(!ok){ lbFull.checked=false; alert("Could not load the full quality original for "+p.name+".\n\nWhen prompted, select the folder that contains your photos (e.g. the \"Photos\" folder), then tick Full quality again."); }
   } else {
     showPreview(p,true);
   }
@@ -979,15 +980,41 @@ document.getElementById("lbDel").addEventListener("click",e=>{
   else closeViewer();
 });
 
-async function fetchOriginal(p){
-  if(!dirHandle){ try{ dirHandle=await idbGet("dirHandle"); }catch(e){} }
-  if(!dirHandle){
-    if(hasFSA){ try{ dirHandle=await window.showDirectoryPicker(); await idbSet("dirHandle",dirHandle); }catch(e){ return null; } }
-    else { alert("Connect the source folder to enhance this image to full quality."); return null; }
+/* In-memory index of originals (filename -> File) from a folder connected via the
+   webkitdirectory input. This works even when the File System Access API is blocked
+   (e.g. the app is embedded in an iframe) and does not disturb the loaded session. */
+let originalIndex=null, origInputResolve=null;
+const origInput=document.getElementById("origInput");
+origInput.addEventListener("change",e=>{
+  const fl=Array.from(e.target.files||[]);
+  originalIndex=new Map();
+  for(const f of fl){ if(IMG_RE.test(f.name)) originalIndex.set(f.name.toLowerCase(),f); }
+  if(origInputResolve){ const r=origInputResolve; origInputResolve=null; r(originalIndex.size>0); }
+});
+origInput.addEventListener("cancel",()=>{ if(origInputResolve){ const r=origInputResolve; origInputResolve=null; r(false); } });
+function connectViaInput(){ return new Promise(resolve=>{ origInputResolve=resolve; origInput.value=""; origInput.click(); }); }
+async function connectSourceFolder(){
+  if(hasFSA && window.showDirectoryPicker){
+    try{ dirHandle=await window.showDirectoryPicker(); await idbSet("dirHandle",dirHandle); return true; }
+    catch(err){ if(err&&err.name==="AbortError") return false; }   // blocked (iframe) or unsupported -> fall back to folder input
   }
-  if(!(await ensurePermission(dirHandle))) return null;
-  try{ return await resolveFileByPath(dirHandle,p.path); }
-  catch(e){ alert("Could not find "+p.name+" in the connected folder."); return null; }
+  return await connectViaInput();
+}
+function fromIndex(p){ if(!originalIndex) return null; return originalIndex.get(String(p.name||"").toLowerCase())||null; }
+async function fetchOriginal(p){
+  // 1. Already-indexed original from a connected folder input.
+  const cached=fromIndex(p); if(cached) return cached;
+  // 2. File System Access handle (fast path-based resolution).
+  if(!dirHandle){ try{ dirHandle=await idbGet("dirHandle"); }catch(e){} }
+  if(dirHandle && await ensurePermission(dirHandle)){
+    try{ return await resolveFileByPath(dirHandle,p.path); }catch(e){}
+  }
+  // 3. Ask the user to connect the source folder (picker, or folder input if blocked).
+  const connected=await connectSourceFolder();
+  if(!connected) return null;
+  const idx=fromIndex(p); if(idx) return idx;
+  if(dirHandle){ try{ return await resolveFileByPath(dirHandle,p.path); }catch(e){} }
+  return null;
 }
 async function resolveFileByPath(dir,path){
   let segs=String(path).split("/").filter(Boolean);
