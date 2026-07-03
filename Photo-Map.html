@@ -999,14 +999,14 @@ function renderPhotoTags(p){
   el.classList.toggle("filtered",tagFilters.size>0);
   wireTagPills(el,true);
 }
-/* Tag rail on the MAP (bottom-left): every existing tag, filter-only — shown ONLY while no large
-   photo is open. No create here. */
+/* Tag rail on the MAP (bottom-left): every existing tag, filter-only (no ×) — always visible,
+   including while a photo is open (the rail lives on the map, beside the photo panel). */
 function renderMapTags(){
   let el=document.getElementById("mapTags");
   if(!el){ el=document.createElement("div"); el.id="mapTags"; el.className="map-tags"; map.getContainer().appendChild(el);
     ["mousedown","pointerdown","dblclick","wheel"].forEach(ev=>el.addEventListener(ev,e=>e.stopPropagation())); }
   const folders=allFolders();
-  if(lb.classList.contains("open")||!folders.length){ el.style.display="none"; return; }
+  if(!folders.length){ el.style.display="none"; return; }
   el.style.display="";
   el.innerHTML=tagPillsHtml(folders);
   el.classList.toggle("filtered",tagFilters.size>0);
