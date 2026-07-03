@@ -121,6 +121,8 @@
   .ip-tags::-webkit-scrollbar{display:none;}
   .ip-tag{font:600 11px var(--font);text-align:left;color:var(--accent2);background:#ffffffe8;border:1px solid var(--line2);border-radius:6px;padding:4px 10px;cursor:pointer;box-shadow:0 2px 8px #1e1f221a;transition:opacity .15s,border-color .12s;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
   .ip-tag:hover{border-color:var(--accent);}
+  .ip-tags .ip-tag,.map-tags .ip-tag{opacity:.68;}   /* resting state is semi-transparent; selection brings a tag to full */
+  .ip-tags .ip-tag:hover,.map-tags .ip-tag:hover{opacity:1;}
   .ip-tags.filtered .ip-tag{opacity:.68;}
   .ip-tags.filtered .ip-tag.on{opacity:1;border-color:var(--accent);background:var(--accent-tint);}
   .ip-tag.clearall{opacity:1!important;color:var(--bad);}
