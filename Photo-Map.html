@@ -82,7 +82,7 @@
   .ip-iconbtn:hover .pct{color:inherit;}
   .ip-iconbtn:hover{color:var(--accent);border-color:var(--accent);}
   .ip-iconbtn.ok{background:var(--good);border-color:var(--good);color:#fff;}
-  .folder-pop{display:none;position:absolute;bottom:52px;left:12px;z-index:7;max-width:calc(100% - 24px);align-items:flex-end;gap:8px;background:none;border:none;box-shadow:none;padding:0;overflow:visible;}
+  .folder-pop{display:none;position:absolute;bottom:14px;left:170px;z-index:7;max-width:calc(100% - 24px);align-items:flex-end;gap:8px;background:none;border:none;box-shadow:none;padding:0;overflow:visible;}
   .folder-pop .fp-searchbox{flex:none;width:240px;background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:0 12px 40px #1e1f2233;padding:10px;}
   .folder-pop .fp-results{display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-height:46vh;overflow:auto;scrollbar-width:none;padding-bottom:2px;}
   .folder-pop .fp-results::-webkit-scrollbar{display:none;}
@@ -1375,6 +1375,7 @@ function openFolderPop(){
     '<span class="xwrap"><input type="text" class="fp-search" id="fpSearch" placeholder="Search or create tag…" autocomplete="off"/><button class="xclear" type="button" title="Clear">&times;</button></span></div>'+
     '<div class="fp-results" id="fpResults"></div>';
   pop.style.display="flex"; folderPopShown=true;
+  const fBtn=document.getElementById("lbFolder"); pop.style.left=(12+((fBtn&&fBtn.offsetWidth)||130)+10)+"px";   // directly right of the Search/add tag button, bottoms aligned
   const search=pop.querySelector("#fpSearch"), res=pop.querySelector("#fpResults");
   const addNew=raw=>{ let name=(raw||"").trim().replace(/^\/+|\/+$/g,""); if(!name) return;
     const r=rootPrefix(); if(r&&name.toLowerCase()!==r.toLowerCase()&&!name.toLowerCase().startsWith(r.toLowerCase()+"/")) name=r+"/"+name;   // new tags live inside the linked root
