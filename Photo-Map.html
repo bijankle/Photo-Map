@@ -438,7 +438,7 @@ const THUMB_VER = 3;                         // bump when rendition sizes change
 /* state */
 let photos=[], nextId=1, folderName="";
 let sizeIndex=new Map();   // byte size -> kept photo, for de-duplicating overlapping folders on load
-let existingPaths=new Set();   // paths already loaded, so re-opening a folder only processes what's new
+let existingPaths=new Map();   // path -> photo already loaded, so re-opening a folder only processes what's new (or heals missing thumbs)
 let currentSort="date_desc", showNoGeo=false, nameFilter="";
 let tagFilters=new Set();   // active tag filters (folder paths) — photos must be in ALL of them (intersection)
 let dateMin=null,dateMax=null,dateLo=null,dateHi=null;
@@ -619,7 +619,7 @@ function pruneMissing(root, seenRaw){
   return removedPhotos;
 }
 const progress=document.getElementById("progress");
-function rebuildSizeIndex(){ sizeIndex=new Map(); existingPaths=new Set(); for(const p of photos){ if(p.size!=null && !sizeIndex.has(p.size)) sizeIndex.set(p.size,p); for(const pa of physPaths(p)) existingPaths.add(pa); } }
+function rebuildSizeIndex(){ sizeIndex=new Map(); existingPaths=new Map(); for(const p of photos){ if(p.size!=null && !sizeIndex.has(p.size)) sizeIndex.set(p.size,p); for(const pa of physPaths(p)) existingPaths.set(pa,p); } }
 function addPath(p,path){ if(!path) return; if(!Array.isArray(p.paths)) p.paths=p.path?[p.path]:[]; if(!p.paths.includes(path)) p.paths.push(path); }
 /* Project header at the top of the map: the .json name this session is based on, its last-saved
    time, and — while anything is busy — a compact load bar just above the text plus
@@ -655,20 +655,29 @@ async function ingest(items, append){
   finishLoad(!append || wasEmpty); setTimeout(()=>progress.style.width="0%",600);
   loadNote("");
 }
+// Generate the cached renditions for a photo we already track (metadata-only .json opened on a
+// machine with no image cache): heals grey images on the next Open Folder / Refresh.
+async function healRenditions(owner,file){
+  if(owner.thumb && owner.tv===THUMB_VER) return;
+  owner.file=owner.file||file; owner.isHeic=owner.isHeic||isHeic(file);
+  let disp=file; if(owner.isHeic){ try{ disp=await heicToJpegBlob(file,0.82); }catch(e){} }
+  const imgs=await makePreviews(disp).catch(()=>({thumb:null,preview:null}));
+  if(imgs.thumb){ owner.thumb=imgs.thumb; owner.preview=imgs.preview; owner.tv=THUMB_VER; }
+}
 async function processOne(it){
-  // Incremental load: a file already present (same path) is skipped without even reading it,
-  // so re-opening a folder after adding one photo only processes the new file.
-  if(it.path && existingPaths.has(it.path)) return;
+  // Incremental load: a file already present (same path) WITH imagery is skipped without even
+  // reading it; a known photo missing its thumbnails gets them regenerated (heal).
+  if(it.path){ const owner=existingPaths.get(it.path); if(owner){ if(owner.thumb) return; const f=await it.getFile(); await healRenditions(owner,f); return; } }
   const file=await it.getFile();
   const sz=file.size;
   // De-dupe by exact byte size: identical file from an overlapping folder -> keep one pin,
   // just record the extra folder path so it stays searchable under either folder name.
   // The check-and-reserve below runs synchronously (no await between), so it is race-safe
   // across the concurrent worker pool.
-  if(sz!=null && sizeIndex.has(sz)){ addPath(sizeIndex.get(sz),it.path); if(it.path) existingPaths.add(it.path); return; }
+  if(sz!=null && sizeIndex.has(sz)){ const owner=sizeIndex.get(sz); addPath(owner,it.path); if(it.path) existingPaths.set(it.path,owner); if(!owner.thumb) await healRenditions(owner,file); return; }
   const p={id:nextId++,path:it.path,name:it.name,file,size:sz,isHeic:false,thumb:null,lat:null,lng:null,time:null,dir:null,marks:[],paths:[it.path],vpaths:[]};
   if(sz!=null) sizeIndex.set(sz,p);
-  if(it.path) existingPaths.add(it.path);
+  if(it.path) existingPaths.set(it.path,p);
   photos.push(p);
   try{
     const ex=await exifr.parse(file,{tiff:true,ifd0:true,exif:true,gps:true});
@@ -1721,7 +1730,11 @@ function hideBanner(){ document.getElementById("reconnect").classList.remove("sh
 document.getElementById("btnReconnect").addEventListener("click",()=>{ if(bannerAction) bannerAction(); });
 function maybeOfferReconnect(){
   const haveImg=photos.some(p=>p.thumb);
-  if(photos.length && !haveImg && dirHandle){ showBanner('Reconnect folder <b>'+esc(dirHandle.name||folderName||"folder")+'</b> to load images.',reconnectFolder); }
+  if(!photos.length||haveImg) return;
+  if(dirHandle) showBanner('Reconnect folder <b>'+esc(dirHandle.name||folderName||"folder")+'</b> to load images.',reconnectFolder);
+  // Fresh machine/browser: the .json is metadata-only and there is no image cache or remembered
+  // folder here — walk the user to connecting the photos folder (fixes the all-grey images).
+  else showBanner('Images live in the photos folder — connect <b>'+esc(folderName||"the photos folder")+'</b> to load them.',()=>{ hideBanner(); openFolder(); });
 }
 async function reconnectFolder(){ if(!dirHandle)return; if(!(await ensurePermission(dirHandle))){ alert("Permission to read the folder was not granted."); return; } folderName=dirHandle.name; hideBanner();
   const keep=snapshotMeta(photos);   // preserve folder additions + markup across the reload
