@@ -130,7 +130,7 @@
   .ip-tag .tag-x{margin-right:7px;color:var(--faint);font-style:normal;font-weight:700;cursor:pointer;}
   .ip-tag .tag-x:hover{color:var(--bad);}
   .ip-fullbox{position:absolute;right:12px;bottom:14px;z-index:6;}
-  .ip-marktools{position:absolute;top:46px;left:12px;z-index:6;display:flex;flex-direction:column;gap:5px;background:#ffffffe8;border:1px solid var(--line);padding:8px 6px;border-radius:10px;max-height:calc(100% - 120px);overflow:auto;scrollbar-width:none;box-shadow:0 4px 16px #1e1f2226;}
+  .ip-marktools{position:absolute;top:68px;left:12px;z-index:6;display:none;flex-direction:column;gap:5px;background:#ffffffe8;border:1px solid var(--line);padding:8px 6px;border-radius:10px;max-height:calc(100% - 170px);overflow:auto;scrollbar-width:none;box-shadow:0 4px 16px #1e1f2226;}
   .ip-marktools::-webkit-scrollbar{display:none;}
   .ip-marktools .mk{position:relative;background:var(--panel);border:1px solid var(--line2);color:var(--text);border-radius:8px;cursor:pointer;width:41px;height:38px;display:flex;align-items:center;justify-content:center;}
   .ip-marktools .mk svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
@@ -138,10 +138,17 @@
   .ip-marktools .mk:hover{border-color:var(--accent);color:var(--accent);}
   .ip-marktools .mk.on{background:var(--accent);color:#fff;border-color:var(--accent);}
   .ip-marktools .mk.on .hk{color:#ffffffcc;}
-  .ip-marktools .mk.clear{width:auto;padding:0 9px;color:var(--bad);border-color:#EDB5B6;}
-  .ip-marktools .mk.clear .hk{position:static;font:600 11px var(--font);color:inherit;margin-left:4px;}
-  .ip-marktools .mk.clear svg{width:18px;height:18px;}
-  .markpalette{position:absolute;top:46px;left:72px;z-index:7;display:none;flex-direction:column;align-items:center;gap:7px;background:#ffffffec;border:1px solid var(--line);padding:8px 7px;border-radius:11px;box-shadow:0 4px 16px #1e1f2226;}
+  .ip-marktools .mk.clear{width:41px;height:auto;flex-direction:column;gap:1px;padding:5px 0 4px;color:var(--bad);border-color:#EDB5B6;}
+  .ip-marktools .mk.clear .hk{position:static;font:600 9px var(--font);color:inherit;margin:0;}
+  .ip-marktools .mk.clear svg{width:17px;height:17px;}
+  .ip-editbtn{position:absolute;top:10px;left:12px;z-index:6;width:44px;background:#ffffffe6;border:1px solid var(--line);border-radius:10px;color:var(--text);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 0 5px;box-shadow:0 2px 8px #1e1f221f;transition:color .12s,border-color .12s,background .12s;}
+  .ip-editbtn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+  .ip-editbtn span{font:600 9px var(--mono);letter-spacing:.6px;text-transform:uppercase;color:var(--dim);}
+  .ip-editbtn:hover{border-color:var(--accent);color:var(--accent);}
+  .ip-editbtn.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .ip-editbtn.on span{color:#ffffffcc;}
+  .imgpanel.edit-open .ip-marktools{display:flex;}
+  .markpalette{position:absolute;top:68px;left:72px;z-index:7;display:none;flex-direction:column;align-items:center;gap:7px;background:#ffffffec;border:1px solid var(--line);padding:8px 7px;border-radius:11px;box-shadow:0 4px 16px #1e1f2226;}
   .markpalette.show{display:flex;}
   .markpalette .sw{width:24px;height:24px;border-radius:50%;background:var(--c);border:2px solid #00000022;cursor:pointer;padding:0;}
   .markpalette .sw:hover{border-color:#00000044;}
@@ -368,6 +375,7 @@
       <button class="sw" data-c="#111111" style="--c:#111111" title="Black"></button>
       <input type="range" id="thickSlider" class="thick" min="1" max="12" value="5" title="Line thickness" />
     </div>
+    <button class="ip-editbtn" id="lbEdit" title="Drawing tools"><svg viewBox="0 0 24 24"><path d="M4 20l3-.7L19 7.3 16.7 5 5 16.7 4 20z"/></svg><span>Edit</span></button>
     <div class="ip-marktools">
       <button class="mk" data-tool="pen" title="Pen (P)"><svg viewBox="0 0 24 24"><path d="M4 20l3-.7L19 7.3 16.7 5 5 16.7 4 20z"/></svg><b class="hk">P</b></button>
       <button class="mk" data-tool="poly" title="Line / polyline — double click or right click to finish (L)"><svg viewBox="0 0 24 24"><path d="M4 18L11 9l4 4 5-8"/></svg><b class="hk">L</b></button>
@@ -1082,7 +1090,7 @@ lbStage.addEventListener("wheel",e=>{ e.preventDefault(); const r=lbStage.getBou
 let panning=false,panX=0,panY=0;
 /* pointer handling consolidated in the markup engine below */
 function vStep(d){ if(!lightboxList.length)return; lightboxIndex=(lightboxIndex+d+lightboxList.length)%lightboxList.length; loadViewer(); }
-function closeViewer(){ if(!lb.classList.contains("open")) return; if(selMark) deselectText(); closeFileInfo(); if(typeof closeFolderPop==="function") closeFolderPop(); setMarkTool("none"); draft=null; polyPrev=null; clearHighlight(); lb.classList.remove("open"); fullToken++; if(curUrl){URL.revokeObjectURL(curUrl);curUrl=null;} lbImg.src=""; renderMapTags(); setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); },30); }
+function closeViewer(){ if(!lb.classList.contains("open")) return; if(selMark) deselectText(); closeFileInfo(); if(typeof closeFolderPop==="function") closeFolderPop(); setMarkTool("none"); setEditOpen(false); draft=null; polyPrev=null; clearHighlight(); lb.classList.remove("open"); fullToken++; if(curUrl){URL.revokeObjectURL(curUrl);curUrl=null;} lbImg.src=""; renderMapTags(); setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); },30); }
 document.getElementById("lbClose").addEventListener("click",closeViewer);
 document.getElementById("lbPrev").addEventListener("click",e=>{e.stopPropagation();vStep(-1);});
 document.getElementById("lbNext").addEventListener("click",e=>{e.stopPropagation();vStep(1);});
@@ -1124,7 +1132,11 @@ document.querySelectorAll("#markPalette .sw").forEach(b=>b.addEventListener("cli
 const thickSlider=document.getElementById("thickSlider");
 thickSlider.addEventListener("input",()=>{ markThick=parseInt(thickSlider.value)||5; });
 setColor(markColor);
-function setMarkTool(t){ if(selMark) deselectText(); markTool=t; draft=null; polyPrev=null; lbStage.classList.toggle("drawing",t!=="none"); document.getElementById("markPalette").classList.toggle("show",t!=="none"); document.querySelectorAll(".ip-marktools .mk[data-tool]").forEach(b=>b.classList.toggle("on",b.dataset.tool===t)); redrawMarks(); }
+function setMarkTool(t){ if(selMark) deselectText(); markTool=t; draft=null; polyPrev=null; lbStage.classList.toggle("drawing",t!=="none"); document.getElementById("markPalette").classList.toggle("show",t!=="none"); document.querySelectorAll(".ip-marktools .mk[data-tool]").forEach(b=>b.classList.toggle("on",b.dataset.tool===t));
+  if(t!=="none") setEditOpen(true);   // selecting a tool (e.g. via hotkey) reveals the tool column
+  redrawMarks(); }
+function setEditOpen(open){ lb.classList.toggle("edit-open",open); const eb=document.getElementById("lbEdit"); if(eb) eb.classList.toggle("on",open); if(!open&&markTool!=="none") setMarkTool("none"); }
+document.getElementById("lbEdit").addEventListener("click",e=>{ e.stopPropagation(); setEditOpen(!lb.classList.contains("edit-open")); });
 document.querySelectorAll(".ip-marktools .mk[data-tool]").forEach(b=>{ b.addEventListener("click",e=>{ e.stopPropagation(); setMarkTool(b.dataset.tool===markTool?"none":b.dataset.tool); }); });
 document.getElementById("mkClear").addEventListener("click",e=>{ e.stopPropagation(); if(selMark) deselectText(); const p=curPhoto(); if(p){ p.marks=[]; draft=null; polyPrev=null; afterMarkChange(); } });
 document.getElementById("lbCopy").addEventListener("click",e=>{ e.stopPropagation(); copyCurrentView(e.currentTarget,false); });
