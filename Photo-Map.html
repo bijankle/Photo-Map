@@ -384,6 +384,7 @@
       <button class="mk" data-tool="oval" title="Ellipse — hold Shift for a circle (O)"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8" ry="6"/></svg><b class="hk">O</b></button>
       <button class="mk" data-tool="text" title="Text box (T)"><svg viewBox="0 0 24 24"><path d="M5 6h14M12 6v12"/></svg><b class="hk">T</b></button>
       <button class="mk" data-tool="erase" title="Eraser (E)"><svg viewBox="0 0 24 24"><path d="M4 15l7-7 6 6-4 4H8zM11 8l6 6"/></svg><b class="hk">E</b></button>
+      <button class="mk" id="mkRotate" title="Rotate 90° clockwise (Ctrl+Shift +) — Shift-click or Ctrl+Shift − for counter-clockwise"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7M20 3v4h-4"/></svg><b class="hk">&#8635;</b></button>
       <button class="mk clear" id="mkClear" title="Remove every markup on this photo"><svg viewBox="0 0 24 24"><path d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12"/></svg><b class="hk">Clear</b></button>
     </div>
     <div class="ip-tagcol">
@@ -672,7 +673,10 @@ async function healRenditions(owner,file){
   owner.file=owner.file||file; owner.isHeic=owner.isHeic||isHeic(file);
   let disp=file; if(owner.isHeic){ try{ disp=await heicToJpegBlob(file,0.82); }catch(e){} }
   const imgs=await makePreviews(disp).catch(()=>({thumb:null,preview:null}));
-  if(imgs.thumb){ owner.thumb=imgs.thumb; owner.preview=imgs.preview; owner.tv=THUMB_VER; }
+  if(imgs.thumb){ const d=rotDelta(owner.rot);
+    owner.thumb=d?await rotateDataURL(imgs.thumb,d,THUMB_Q):imgs.thumb;
+    owner.preview=d?await rotateDataURL(imgs.preview,d,PREVIEW_Q):imgs.preview;
+    owner.tv=THUMB_VER; }
 }
 async function processOne(it){
   // Incremental load: a file already present (same path) WITH imagery is skipped without even
@@ -1047,19 +1051,77 @@ async function originalToURL(p,file){
   if(p.isHeic||isHeic(file)){ try{ src=await heicToJpegBlob(file,0.92); }catch(e){} }
   return {url:URL.createObjectURL(src), blob:src};
 }
+/* ---- 90° rotation. Persisted per photo (p.rot: 0/90/180/270) and applied to the displayed image,
+   cached renditions, mark coordinates, and copies/downloads. The file on disk is never touched. */
+function rotDelta(total){ total=((total||0)%360+360)%360; return total===270?-90:total; }
+function loadImg(src){ return new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=src; }); }
+function rotCanvas(img,delta){
+  const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
+  const c=document.createElement("canvas");
+  if(delta===180){ c.width=w; c.height=h; } else { c.width=h; c.height=w; }
+  const cx=c.getContext("2d");
+  if(delta===90){ cx.translate(h,0); cx.rotate(Math.PI/2); }
+  else if(delta===-90){ cx.translate(0,w); cx.rotate(-Math.PI/2); }
+  else { cx.translate(w,h); cx.rotate(Math.PI); }
+  cx.drawImage(img,0,0); return c;
+}
+async function rotateDataURL(src,delta,q){ if(!src||!delta) return src; try{ const im=await loadImg(src); return rotCanvas(im,delta).toDataURL("image/jpeg",q||0.72); }catch(e){ return src; } }
+async function rotateObjectURL(url,delta){ if(!delta) return url; const im=await loadImg(url); return new Promise(res=>rotCanvas(im,delta).toBlob(b=>{ if(!b){ res(url); return; } URL.revokeObjectURL(url); res(URL.createObjectURL(b)); },"image/jpeg",0.95)); }
+// Rotate the original's display/render URL to match the photo's saved orientation.
+async function displayURL(p,file){
+  const r=await originalToURL(p,file);
+  const d=rotDelta(p.rot); if(!d) return r;
+  try{ r.url=await rotateObjectURL(r.url,d); }catch(e){}
+  return r;
+}
+function rotPoint(x,y,delta){ return delta===90?[1-y,x]:delta===-90?[y,1-x]:[1-x,1-y]; }
+function rotMarks(marks,delta){
+  for(const m of (marks||[])){
+    if(m.t==="pen"||m.t==="poly"){ if(Array.isArray(m.p)) m.p=m.p.map(pt=>rotPoint(pt[0],pt[1],delta)); }
+    else if(m.t==="arrow"){ const a=rotPoint(m.x,m.y,delta), b=rotPoint(m.x2,m.y2,delta); m.x=a[0]; m.y=a[1]; m.x2=b[0]; m.y2=b[1]; }
+    else if(m.t==="rect"||m.t==="oval"){
+      if(delta===90){ const nx=1-(m.y+m.h), ny=m.x, w=m.w; m.x=nx; m.y=ny; m.w=m.h; m.h=w; }
+      else if(delta===-90){ const nx=m.y, ny=1-(m.x+m.w), w=m.w; m.x=nx; m.y=ny; m.w=m.h; m.h=w; }
+      else { m.x=1-(m.x+m.w); m.y=1-(m.y+m.h); }
+    }
+    else if(m.t==="text"||m.t==="call"){ const a=rotPoint(m.x,m.y,delta); m.x=a[0]; m.y=a[1]; if(m.t==="call"){ const c2=rotPoint(m.tx,m.ty,delta); m.tx=c2[0]; m.ty=c2[1]; } }
+  }
+}
+let rotBusy=false;
+async function rotatePhoto(delta){
+  const p=curPhoto(); if(!p||rotBusy||!lb.classList.contains("open")) return;
+  rotBusy=true;
+  try{
+    p.rot=(((p.rot||0)+delta)%360+360)%360;
+    rotMarks(p.marks,delta); draft=null; polyPrev=null; redoMarks=[];
+    if(p.thumb) p.thumb=await rotateDataURL(p.thumb,delta,THUMB_Q);
+    if(p.preview) p.preview=await rotateDataURL(p.preview,delta,PREVIEW_Q);
+    loadViewer();                                   // re-display at the new orientation (fit zoom)
+    updateGallery(true); persistState(); cacheFullSession();
+  } finally{ rotBusy=false; }
+}
 // Photos loaded before a rendition-quality bump keep their old thumbs/previews (incremental load
 // skips them); regenerate organically from the original streamed for a full-quality view.
 async function maybeUpgradeRenditions(p,blob){
   if(p.tv===THUMB_VER || !blob) return;
-  try{ const imgs=await makePreviews(blob); if(imgs.thumb){ p.thumb=imgs.thumb; p.preview=imgs.preview||p.preview; p.tv=THUMB_VER; cacheFullSession(); } }catch(e){}
+  try{ const imgs=await makePreviews(blob); if(imgs.thumb){
+    const d=rotDelta(p.rot);
+    p.thumb=d?await rotateDataURL(imgs.thumb,d,THUMB_Q):imgs.thumb;
+    p.preview=d?await rotateDataURL(imgs.preview,d,PREVIEW_Q):(imgs.preview||p.preview);
+    p.tv=THUMB_VER; cacheFullSession(); } }catch(e){}
 }
 async function showFull(p){
   const tok=++fullToken;
   const stay=()=>lightboxList[lightboxIndex]===p && tok===fullToken && lb.classList.contains("open");
+  const t0=performance.now();
+  loadNote("Full quality — locating the original…");
   let file=null; try{ file=await getOriginalFileSilent(p); }catch(e){}
   if(!file){ file=await fetchOriginal(p); if(file) p.file=file; }
-  if(!file) return false;
-  const r=await originalToURL(p,file);
+  if(!file){ loadNote(""); return false; }
+  loadNote(p.isHeic?"Full quality — converting HEIC…":"Full quality — reading "+(file.size?fmtSize(file.size):"the original")+" from the folder…");
+  const r=await displayURL(p,file);
+  console.info("[photomap] full quality:",p.name,Math.round(performance.now()-t0)+"ms");
+  loadNote("");
   if(stay()){ swapViewer(r.url); maybeUpgradeRenditions(p,r.blob); }
   else URL.revokeObjectURL(r.url);
   return true;
@@ -1139,6 +1201,7 @@ function setEditOpen(open){ lb.classList.toggle("edit-open",open); const eb=docu
 document.getElementById("lbEdit").addEventListener("click",e=>{ e.stopPropagation(); setEditOpen(!lb.classList.contains("edit-open")); });
 document.querySelectorAll(".ip-marktools .mk[data-tool]").forEach(b=>{ b.addEventListener("click",e=>{ e.stopPropagation(); setMarkTool(b.dataset.tool===markTool?"none":b.dataset.tool); }); });
 document.getElementById("mkClear").addEventListener("click",e=>{ e.stopPropagation(); if(selMark) deselectText(); const p=curPhoto(); if(p){ p.marks=[]; draft=null; polyPrev=null; afterMarkChange(); } });
+document.getElementById("mkRotate").addEventListener("click",e=>{ e.stopPropagation(); rotatePhoto(e.shiftKey?-90:90); });
 document.getElementById("lbCopy").addEventListener("click",e=>{ e.stopPropagation(); copyCurrentView(e.currentTarget,false); });
 document.getElementById("lbCopyHQ").addEventListener("click",e=>{ e.stopPropagation(); copyCurrentView(e.currentTarget,true); });
 document.getElementById("lbDownload").addEventListener("click",e=>{ e.stopPropagation(); downloadCurrentView(e.currentTarget); });
@@ -1296,7 +1359,7 @@ async function renderHQ(p,maxDim){
   let file=null; try{ file=await getOriginalFileSilent(p); }catch(e){}
   if(!file){ try{ file=await fetchOriginal(p); if(file) p.file=file; }catch(e){} }
   if(!file) return renderViewCanvas(p,maxDim);
-  const r=await originalToURL(p,file);
+  const r=await displayURL(p,file);   // rotation applied so crops + marks line up with what is on screen
   try{ return await renderViewCanvas(p,maxDim,r.url); }
   finally{ URL.revokeObjectURL(r.url); }
 }
@@ -1322,6 +1385,8 @@ function downloadCurrentView(btn){
 }
 document.addEventListener("keydown",e=>{
   if(document.activeElement===tbText) return;
+  if((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==="+"||e.key==="="||e.key==="-"||e.key==="_")){   // Ctrl+Shift+ + / − rotates (− types _ on most layouts)
+    if(lb.classList.contains("open")){ e.preventDefault(); rotatePhoto((e.key==="-"||e.key==="_")?-90:90); } return; }
   if((e.ctrlKey||e.metaKey)&&(e.key==="z"||e.key==="Z")){ e.preventDefault();
     if(measuring&&measurePts.length){ measurePts.pop(); drawMeasure(); return; }
     const open=lb.classList.contains("open");
@@ -1480,8 +1545,11 @@ function invalidateDirIndex(){ dirIndex=null; dirIndexBuild=null; }
 async function buildDirIndex(){
   if(dirIndex) return dirIndex;
   if(!dirIndexBuild) dirIndexBuild=(async()=>{
-    const m=new Map();
-    try{ for await (const f of walkDir(dirHandle,"")) if(IMG_RE.test(f.name)){ const k=f.name.toLowerCase(); if(!m.has(k)) m.set(k,f.handle); } }catch(e){}
+    const t0=performance.now(); const m=new Map(); let n=0;
+    loadNote("Indexing “"+((dirHandle&&dirHandle.name)||"photos")+"” to locate originals… (one-time)");
+    try{ for await (const f of walkDir(dirHandle,"")) if(IMG_RE.test(f.name)){ const k=f.name.toLowerCase(); if(!m.has(k)) m.set(k,f.handle); if(++n%400===0) loadNote("Indexing folder… "+n.toLocaleString()+" photos found"); } }catch(e){}
+    console.info("[photomap] folder index:",n,"photos in",Math.round(performance.now()-t0)+"ms");
+    loadNote("");
     dirIndex=m; return m;
   })();
   return dirIndexBuild;
@@ -1495,6 +1563,7 @@ async function resolveFromHandle(p){
     else if(rootLow) push(dirHandle.name+"/"+pa); }
   push(p.name);
   for(const c of cands){ try{ const f=await resolveFileByPath(dirHandle,c); if(f) return f; }catch(e){} }
+  console.info("[photomap] path candidates missed for",p.name,"(folder root:",(dirHandle&&dirHandle.name)+")","— falling back to the filename index");
   try{ const idx=await buildDirIndex(); const h=idx.get(String(p.name||"").toLowerCase()); if(h) return await h.getFile(); }catch(e){}
   return null;
 }
@@ -1678,6 +1747,7 @@ function serializeState(includeImages){
     photos: photos.map(p=>{ const o={path:p.path,name:p.name,lat:p.lat,lng:p.lng,time:p.time,dir:p.dir,size:p.size,isHeic:p.isHeic};
       if(Array.isArray(p.paths)&&(p.paths.length!==1||p.paths[0]!==p.path))o.paths=p.paths;   // physical locations (incl. empty when pruned from disk)
       if(Array.isArray(p.vpaths)&&p.vpaths.length)o.vpaths=p.vpaths;   // in-app tag memberships — never pruned by disk syncs
+      if(p.rot)o.rot=p.rot;
       if(p.marks&&p.marks.length)o.marks=p.marks;
       if(includeImages){ if(p.thumb){ o.thumb=p.thumb; if(p.tv)o.tv=p.tv; } if(p.preview)o.preview=p.preview; }   // thumb + screenshot-quality preview; full quality always comes from disk
       return o; })
@@ -1701,7 +1771,7 @@ function applyState(st){
     if(vp===null){   // legacy file (mixed paths): keep the anchor path as physical, treat extras as virtual so tags can never be wrongly pruned
       vp=phys.filter(pa=>pa!==m.path); phys=m.path?[m.path]:phys.slice(0,1);
     }
-    photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,lat:m.lat,lng:m.lng,time:m.time,dir:m.dir,marks:Array.isArray(m.marks)?m.marks:[]});
+    photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,rot:m.rot||0,lat:m.lat,lng:m.lng,time:m.time,dir:m.dir,marks:Array.isArray(m.marks)?m.marks:[]});
   });   // baked full-quality renditions from old files are intentionally dropped
   if(lastFullCache) overlayImagesFromCache(lastFullCache);   // the .json is metadata-only — fill thumbs/previews back in from the browser image cache
   const s=st.settings||{};
@@ -1724,8 +1794,9 @@ function applyState(st){
    even when the heavy image Save fails or goes stale. These helpers let us re-apply that fresh
    metadata onto a reloaded session so folder additions are never lost. Matched by a stable key. */
 function metaKey(p){ return (p.name||"")+"|"+(p.size!=null?p.size:"")+"|"+(p.lat!=null?Number(p.lat).toFixed(5):"")+"|"+(p.lng!=null?Number(p.lng).toFixed(5):""); }
-function snapshotMeta(list){ const m=new Map(); for(const p of (list||[])){ const k=metaKey(p); if(!m.has(k)) m.set(k,{paths:Array.isArray(p.paths)?p.paths.slice():null, vpaths:Array.isArray(p.vpaths)?p.vpaths.slice():null, marks:Array.isArray(p.marks)&&p.marks.length?p.marks:null}); } return m; }
-function applyMetaMap(m){ if(!m||!m.size) return; for(const p of photos){ const meta=m.get(metaKey(p)); if(!meta) continue; if(meta.paths&&meta.paths.length) p.paths=meta.paths.slice(); if(meta.vpaths&&meta.vpaths.length) p.vpaths=meta.vpaths.slice(); if(meta.marks) p.marks=meta.marks; } }
+function snapshotMeta(list){ const m=new Map(); for(const p of (list||[])){ const k=metaKey(p); if(!m.has(k)) m.set(k,{paths:Array.isArray(p.paths)?p.paths.slice():null, vpaths:Array.isArray(p.vpaths)?p.vpaths.slice():null, rot:p.rot||0, marks:Array.isArray(p.marks)&&p.marks.length?p.marks:null}); } return m; }
+function applyMetaMap(m){ if(!m||!m.size) return; for(const p of photos){ const meta=m.get(metaKey(p)); if(!meta) continue; if(meta.paths&&meta.paths.length) p.paths=meta.paths.slice(); if(meta.vpaths&&meta.vpaths.length) p.vpaths=meta.vpaths.slice(); if(meta.marks) p.marks=meta.marks;
+  if(meta.rot&&!p.rot){ p.rot=meta.rot; const d=rotDelta(p.rot); (async()=>{ if(p.thumb)p.thumb=await rotateDataURL(p.thumb,d,THUMB_Q); if(p.preview)p.preview=await rotateDataURL(p.preview,d,PREVIEW_Q); cacheFullSession(); })(); } } }
 
 /* persistence (IndexedDB): metadata only, cheap */
 function idbOpen(){ return new Promise((res,rej)=>{ const o=indexedDB.open("photomap",1); o.onupgradeneeded=()=>o.result.createObjectStore("kv"); o.onsuccess=()=>res(o.result); o.onerror=()=>rej(o.error); }); }
