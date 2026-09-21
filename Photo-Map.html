@@ -353,9 +353,9 @@
 <div class="main" id="main">
   <div class="imgpanel" id="imgPanel">
     <div class="lb-stage" id="lbStage">
-      <img class="main" id="lbImg" src="" alt="" />
+      <img class="main" id="lbImg" src="" alt="" draggable="false" />
       <canvas class="lb-mark" id="lbMark"></canvas>
-      <div class="lb-ref" id="lbRef"><img id="lbRefImg" src="" alt="" /><div class="box" id="lbRefBox"></div></div>
+      <div class="lb-ref" id="lbRef"><img id="lbRefImg" src="" alt="" draggable="false" /><div class="box" id="lbRefBox"></div></div>
     </div>
     <div class="ip-topright">
       <button class="ip-iconbtn" id="lbCopy" title="Copy current view to clipboard — screen quality (fast)"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><b class="pct">50%</b></button>
@@ -1303,7 +1303,7 @@ function onDown(e){
   if(e.target.closest&&(e.target.closest(".lb-ref")||e.target.closest("#tbEditor"))) return;
   if(selMark) deselectText();
   const n=evToNorm(e);
-  if(markTool==="none"){ const h=hitText(n); if(h){ selectText(h); return; } if(vScale<=1)return; panning=true; panX=e.clientX; panY=e.clientY; lbStage.classList.add("panning"); return; }
+  if(markTool==="none"){ const h=hitText(n); if(h){ selectText(h); return; } if(vScale<=1)return; e.preventDefault(); panning=true; panX=e.clientX; panY=e.clientY; lbStage.classList.add("panning"); return; }
   if(markTool==="text"){ const h=hitText(n); if(h){ selectText(h); } else { newText(n); } return; }
   if(markTool==="pen"){ draft={t:"pen",p:[[n.x,n.y]],c:markColor,k:markThick,_sx:n.x,_sy:n.y}; dragging=true; redoMarks=[]; redrawMarks(); return; }
   if(markTool==="arrow"){ draft={t:"arrow",x:n.x,y:n.y,x2:n.x,y2:n.y,c:markColor,k:markThick}; dragging=true; redoMarks=[]; return; }
@@ -1335,6 +1335,8 @@ window.addEventListener("keyup",e=>{ if(e.key==="Shift"&&dragging&&draft&&draft.
 lbStage.addEventListener("mousedown",onDown);
 window.addEventListener("mousemove",onMove);
 window.addEventListener("mouseup",onUp);
+// The big-view image must never start a native file/image drag — dragging always pans.
+document.addEventListener("dragstart",e=>{ if(e.target&&e.target.closest&&e.target.closest("#imgPanel")) e.preventDefault(); },true);
 function endPoly(addCursor){ if(!draft||draft.t!=="poly")return; if(addCursor&&polyPrev){ const last=draft.p[draft.p.length-1]; if(!last||distPx(last,[polyPrev.x,polyPrev.y])>=4) draft.p.push([polyPrev.x,polyPrev.y]); } if(draft.p.length>=2){ curMarks().push({t:"poly",p:draft.p,c:draft.c,k:draft.k}); afterMarkChange(); } draft=null; polyPrev=null; redrawMarks(); }
 lbStage.addEventListener("dblclick",e=>{ if(markTool==="poly"&&draft&&draft.t==="poly") endPoly(false); });
 lbStage.addEventListener("contextmenu",e=>{ if(markTool==="poly"&&draft&&draft.t==="poly"){ e.preventDefault(); endPoly(true); } });
@@ -1655,8 +1657,8 @@ async function ensureJsonWrite(interactive){
   if(!jsonHandle||!jsonHandle.queryPermission) return false;
   try{
     if((await jsonHandle.queryPermission({mode:"readwrite"}))==="granted") return true;
-    if(interactive && (await jsonHandle.requestPermission({mode:"readwrite"}))==="granted") return true;
-  }catch(e){}
+    if(interactive){ const g=(await jsonHandle.requestPermission({mode:"readwrite"}))==="granted"; releaseStuckDrag(); if(g) return true; }
+  }catch(e){ releaseStuckDrag(); }
   return false;
 }
 let autoTimer=null, autoPending=false, autoBusy=false, autoDisabled=false, fileCorrupt=false, lastWrittenSig=null;
@@ -1703,7 +1705,7 @@ async function loadFromJsonFile(fromGesture){
   if(!jsonHandle) return false;
   try{
     let perm = jsonHandle.queryPermission ? await jsonHandle.queryPermission({mode:"read"}) : "granted";
-    if(perm!=="granted"){ if(!fromGesture) return false; perm=await jsonHandle.requestPermission({mode:"read"}); if(perm!=="granted") return false; }
+    if(perm!=="granted"){ if(!fromGesture) return false; perm=await jsonHandle.requestPermission({mode:"read"}); releaseStuckDrag(); if(perm!=="granted") return false; }
     const f=await jsonHandle.getFile();
     etaStart("json",Math.max(0.05,(f.size||1e6)/1048576),"Loading — reading "+(jsonHandle.name||".json")+"…");
     const text=await f.text();
@@ -1865,12 +1867,12 @@ async function reopenLastJson(){
   if(!jsonHandle)return;
   try{
     let perm=await jsonHandle.queryPermission({mode:"read"});
-    if(perm!=="granted"){ perm=await jsonHandle.requestPermission({mode:"read"}); }
+    if(perm!=="granted"){ perm=await jsonHandle.requestPermission({mode:"read"}); releaseStuckDrag(); }
     if(perm!=="granted") return;
     saveFileHandle=jsonHandle; loadedJsonName=jsonHandle.name||loadedJsonName; const f=await jsonHandle.getFile(); loadStateText(await f.text()); hideBanner();
   }catch(e){ console.warn(e); }
 }
-async function ensurePermission(handle){ try{ const o={mode:"read"}; if((await handle.queryPermission(o))==="granted")return true; if((await handle.requestPermission(o))==="granted")return true; }catch(e){} return false; }
+async function ensurePermission(handle){ try{ const o={mode:"read"}; if((await handle.queryPermission(o))==="granted")return true; const g=(await handle.requestPermission(o))==="granted"; releaseStuckDrag(); if(g)return true; }catch(e){ releaseStuckDrag(); } return false; }
 let permArmed=false;
 /* A native permission dialog swallows the mouseup of the click that opened it,
    leaving Leaflet's drag handler stuck "pressed" so the map pans without the
@@ -1883,6 +1885,13 @@ function releaseStuckDrag(){
     window.dispatchEvent(new PointerEvent("pointerup",{bubbles:true,cancelable:true}));
   }catch(e){}
 }
+// Safety net: if the pointer moves with NO button held while a drag still thinks it's
+// engaged (a native dialog swallowed the mouseup), force-release it.
+window.addEventListener("pointermove",e=>{
+  if(e.buttons!==0) return;
+  if(panning||erasing||(dragging&&draft&&draft.t!=="poly")){ try{ onUp(); }catch(err){} }
+  try{ if(map&&map.dragging&&map.dragging.moving&&map.dragging.moving()) releaseStuckDrag(); }catch(err){}
+},true);
 function armFolderPermission(){
   if(permArmed||!dirHandle) return; permArmed=true;
   const once=async(ev)=>{
