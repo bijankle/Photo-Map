@@ -1792,6 +1792,8 @@ let vScale=1,vTx=0,vTy=0,fitW=0,fitH=0,curUrl=null;
 const REF_W=160,MAXS=8;
 function openViewer(p){
   if(!p)return;
+  // Opening a photo that does NOT belong to the selected action(s) drops that selection — no stale flashing.
+  if(selActs.size && !(Array.isArray(p.acts)&&p.acts.some(id=>selActs.has(id)))) clearActSel();
   if(!lightboxList.length) lightboxList=[p];
   let i=lightboxList.findIndex(x=>x.id===p.id); if(i<0){ lightboxList=[p].concat(lightboxList); i=0; }
   lightboxIndex=i;
