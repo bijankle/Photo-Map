@@ -213,7 +213,8 @@
 
   .leftstack{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:1000;display:flex;flex-direction:column;gap:10px;align-items:center;}
   .btnrow{display:flex;gap:8px;}
-  .areabtn{font-family:var(--mono);font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--text);background:#ffffffe8;backdrop-filter:blur(8px);border:1px solid var(--line2);border-radius:9px;padding:9px 13px;cursor:pointer;box-shadow:0 8px 24px #1e1f2222;}
+  .areabtn{font-family:var(--mono);font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--text);background:#ffffffe8;backdrop-filter:blur(8px);border:1px solid var(--line2);border-radius:9px;padding:7px 8px;cursor:pointer;box-shadow:0 8px 24px #1e1f2222;
+    width:96px;white-space:normal;line-height:1.4;text-align:center;}
   .areabtn:hover{border-color:var(--accent);color:var(--accent);}
   .areabtn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
   .measure-lbl{background:#fff;color:var(--accent);font-family:var(--mono);font-size:12px;font-weight:700;padding:3px 7px;border:1px solid var(--accent);border-radius:6px;white-space:nowrap;box-shadow:0 4px 14px #1e1f2226;}
@@ -317,6 +318,15 @@
   .dropzone{position:fixed;inset:0;z-index:2500;display:none;align-items:center;justify-content:center;background:rgba(255,255,255,.86);border:3px dashed var(--accent);margin:14px;border-radius:18px;font-family:var(--font);font-weight:700;font-size:26px;color:var(--accent);pointer-events:none;}
   .dropzone.show{display:flex;}
   @media (max-width:900px){ .stats{display:none;} }
+  /* right-click menu on photo dots */
+  #ctxmenu{position:fixed;z-index:7000;background:var(--panel);border:1px solid var(--line2);border-radius:10px;
+    box-shadow:0 10px 30px #1e1f2233;padding:6px;display:none;min-width:214px;}
+  #ctxmenu .ci{display:block;width:100%;text-align:left;border:none;background:none;font-family:var(--font);font-size:13px;
+    color:var(--ink);padding:8px 10px;border-radius:7px;cursor:pointer;}
+  #ctxmenu .ci:hover{background:var(--accent-tint);color:var(--accent2);}
+  #ctxmenu .ci[disabled]{color:var(--faint);cursor:default;}
+  #ctxmenu .ci[disabled]:hover{background:none;color:var(--faint);}
+
   /* new-version pill (only appears when the app is served from the web, e.g. GitHub Pages) */
   #updpill{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:6000;display:flex;align-items:center;gap:10px;
     background:var(--panel);border:1px solid var(--accent);border-radius:999px;padding:8px 10px 8px 16px;
@@ -413,7 +423,7 @@
   <div id="map"></div>
   <div class="progress" id="progress"></div>
   <div class="leftstack" id="leftstack">
-    <div class="btnrow"><button class="areabtn" id="areaBtn">Filter area</button><button class="areabtn" id="zoomBtn">Zoom window</button><button class="areabtn" id="measureBtn">Measure</button></div>
+    <div class="btnrow"><button class="areabtn" id="selBtn">Select area</button><button class="areabtn" id="areaBtn">Filter area</button><button class="areabtn" id="zoomBtn">Zoom window</button><button class="areabtn" id="measureBtn">Measure</button></div>
     <div class="datebar hidden" id="datebar">
       <div class="dhead"><span class="t">Capture Date Range</span><button class="reset" id="dateReset">Reset</button></div>
       <div class="vals"><span id="dStart">—</span><span id="dEnd">—</span></div>
@@ -547,7 +557,7 @@ function buildCluster(){
   cluster.load(feats);
 }
 function renderClusters(){
-  markerLayer.clearLayers();
+  markerLayer.clearLayers(); dotMarkers.clear();
   if(!cluster) return;
   const b=map.getBounds();
   let w=Math.max(-180,b.getWest()),e=Math.min(180,b.getEast()),s=Math.max(-85,b.getSouth()),n=Math.min(85,b.getNorth());
@@ -574,40 +584,88 @@ function renderClusters(){
       markerLayer.addLayer(m);
     } else {
       const p=photoById(c.properties.pid); if(!p) continue;
+      const isSel=selSet.has(p.id);
       const hit=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:15,stroke:false,fill:true,fillOpacity:0});
-      hit.on("mouseover",e=>{ if(dotDrag) return; if(dotSelected(p)) map.getContainer().style.cursor="move"; showHover(p,e.originalEvent); });
+      hit.on("mouseover",e=>{ if(dotDrag) return; if(isSel||dotSelected(p)) map.getContainer().style.cursor="move"; showHover(p,e.originalEvent); });
       hit.on("mousemove",e=>{ if(!dotDrag) positionHover(e.originalEvent); });
       hit.on("mouseout",()=>{ if(!dotDrag) map.getContainer().style.cursor=""; hideHover(); });
-      hit.on("mousedown",e=>{ const oe=e.originalEvent; if(oe&&oe.button===0&&dotSelected(p)){ L.DomEvent.stop(oe); startDotDrag(p,hit,dot); } });
+      hit.on("mousedown",e=>{ const oe=e.originalEvent; if(oe&&oe.button===0&&(selSet.has(p.id)||dotSelected(p))){ L.DomEvent.stop(oe); startDotDrag(p,hit,dot); } });
       hit.on("click",()=>{ if(Date.now()-dotDropT<450) return; openViewer(p); });
-      const dot=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:6,color:"#3A41B0",weight:2,fillColor:"#5865F2",fillOpacity:.95,interactive:false});
+      hit.on("contextmenu",e=>{ L.DomEvent.stop(e.originalEvent); openDotMenu(p,e.originalEvent); });
+      const dot=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:6,color:isSel?"#B45309":"#3A41B0",weight:2,fillColor:isSel?"#F59E0B":"#5865F2",fillOpacity:.95,interactive:false});
+      if(isSel) dotMarkers.set(p.id,{hit,dot});
       markerLayer.addLayer(hit); markerLayer.addLayer(dot);
     }
   }
 }
 
-/* Reposition a dot: open the photo (its dot gets the white ring = selected), then hold and drag
-   that dot. Unselected dots never drag — the map pans as usual. Only where the photo SHOWS on
-   this map changes; the original GPS is kept (glat/glng) and the photo file is never modified. */
-let dotDrag=null, dotDropT=0;
+/* Reposition dots: open a photo (its dot gets the white ring) OR select dots with Select area —
+   then hold and drag a selected dot. A multi-selection moves together, keeping relative positions.
+   Unselected dots never drag — the map pans as usual. Only where photos SHOW on this map changes;
+   the original GPS is kept (glat/glng) and the photo files are never modified. */
+let dotDrag=null, dotDropT=0, selSet=new Set(), dotMarkers=new Map();
 function dotSelected(p){ return lb.classList.contains("open") && curPhoto()===p; }
 function startDotDrag(p,hit,dot){
   hideHover(); try{ map.dragging.disable(); }catch(e){}
   map.getContainer().style.cursor="grabbing";
-  dotDrag={p,hit,dot,before:snapshotTags(p),moved:false};
+  const group=selSet.has(p.id)?[...selSet]:null;
+  let origs=null;
+  if(group){ origs=new Map(); for(const pid of group){ if(pid===p.id) continue; const mk=dotMarkers.get(pid); if(mk) origs.set(pid,{ll:mk.dot.getLatLng(),hit:mk.hit,dot:mk.dot}); } }
+  dotDrag={p,hit,dot,start:dot.getLatLng(),group,origs,viewerPhoto:dotSelected(p),moved:false};
 }
-map.on("mousemove",e=>{ if(!dotDrag) return; dotDrag.moved=true; dotDrag.hit.setLatLng(e.latlng); dotDrag.dot.setLatLng(e.latlng); if(hlMarker) hlMarker.setLatLng(e.latlng); });
+map.on("mousemove",e=>{
+  if(!dotDrag) return; dotDrag.moved=true;
+  const dLat=e.latlng.lat-dotDrag.start.lat, dLng=e.latlng.lng-dotDrag.start.lng;
+  if(dotDrag.origs) for(const o of dotDrag.origs.values()){ const ll=[o.ll.lat+dLat,o.ll.lng+dLng]; o.hit.setLatLng(ll); o.dot.setLatLng(ll); }
+  dotDrag.hit.setLatLng(e.latlng); dotDrag.dot.setLatLng(e.latlng);
+  if(hlMarker&&dotDrag.viewerPhoto) hlMarker.setLatLng(e.latlng);
+});
 window.addEventListener("mouseup",()=>{
   if(!dotDrag) return; const d=dotDrag; dotDrag=null;
   map.getContainer().style.cursor=""; try{ map.dragging.enable(); }catch(e){}
   if(!d.moved) return;
   dotDropT=Date.now();   // swallow the click that follows the drop so it doesn't re-open the viewer
-  const ll=d.dot.getLatLng(), p=d.p;
-  if(p.glat==null){ p.glat=p.lat; p.glng=p.lng; }   // first correction: keep the photo's true GPS so it's never lost
-  p.lat=ll.lat; p.lng=ll.lng;
-  recordTagChange(p,d.before); afterFolderChange();
+  const ll=d.dot.getLatLng(), dLat=ll.lat-d.start.lat, dLng=ll.lng-d.start.lng;
+  const targets=d.group?d.group.map(photoById).filter(Boolean):[d.p];
+  const items=[];
+  for(const p of targets){
+    const before=snapshotTags(p);
+    if(p.glat==null){ p.glat=p.lat; p.glng=p.lng; }   // first correction: keep the photo's true GPS so it's never lost
+    p.lat+=dLat; p.lng+=dLng;
+    items.push({id:p.id,before,after:snapshotTags(p)});
+  }
+  pushTagAction(items); afterFolderChange();
 });
 window.addEventListener("keydown",e=>{ if(e.key==="Escape"&&dotDrag){ e.stopPropagation(); dotDrag=null; map.getContainer().style.cursor=""; try{ map.dragging.enable(); }catch(er){} renderClusters(); highlightCurrent(); } },true);
+
+/* right-click menu on a dot: restore the original GPS of that photo (or the whole selection) */
+const ctxMenu=document.createElement("div"); ctxMenu.id="ctxmenu"; document.body.appendChild(ctxMenu);
+function closeCtx(){ ctxMenu.style.display="none"; }
+document.addEventListener("mousedown",e=>{ if(ctxMenu.style.display==="block" && !e.target.closest("#ctxmenu")) closeCtx(); },true);
+window.addEventListener("keydown",e=>{ if(e.key==="Escape"&&ctxMenu.style.display==="block"){ e.stopPropagation(); closeCtx(); } },true);
+function openDotMenu(p,ev){
+  hideHover();
+  const targets=selSet.has(p.id)?[...selSet].map(photoById).filter(Boolean):[p];
+  const moved=targets.filter(t=>t.glat!=null);
+  ctxMenu.innerHTML="";
+  const r=document.createElement("button"); r.className="ci"; r.type="button";
+  if(moved.length){
+    r.textContent="Restore original GPS"+(targets.length>1?" ("+moved.length+" photo"+(moved.length>1?"s":"")+")":"");
+    r.addEventListener("click",()=>{ closeCtx(); restoreGps(moved); });
+  } else { r.textContent=targets.length>1?"Original GPS (none moved)":"Original GPS (not moved)"; r.disabled=true; }
+  ctxMenu.appendChild(r);
+  if(selSet.size){ const d=document.createElement("button"); d.className="ci"; d.type="button"; d.textContent="Deselect all"; d.addEventListener("click",()=>{ closeCtx(); clearSel(); }); ctxMenu.appendChild(d); }
+  ctxMenu.style.display="block";
+  ctxMenu.style.left=Math.min(ev.clientX,innerWidth-234)+"px";
+  ctxMenu.style.top=Math.min(ev.clientY,innerHeight-(selSet.size?96:56))+"px";
+}
+function restoreGps(list){
+  const items=[];
+  for(const p of list){ if(p.glat==null) continue; const before=snapshotTags(p); p.lat=p.glat; p.lng=p.glng; p.glat=null; p.glng=null; items.push({id:p.id,before,after:snapshotTags(p)}); }
+  if(!items.length) return;
+  pushTagAction(items); afterFolderChange();
+}
+function clearSel(){ selSet.clear(); setAreaBtn(); renderClusters(); }
 
 /* file loading */
 const IMG_RE=/\.(jpe?g|png|tiff?|heic|heif|webp|gif|bmp)$/i;
@@ -859,10 +917,13 @@ function passDate(p){ if(dateLo==null||p.time==null)return true; return p.time>=
 /* area (box) filter */
 const areaBtn=document.getElementById("areaBtn");
 const zoomBtn=document.getElementById("zoomBtn");
+const selBtn=document.getElementById("selBtn");
 areaBtn.addEventListener("click",toggleFilter);
 zoomBtn.addEventListener("click",toggleZoom);
+selBtn.addEventListener("click",toggleSelect);
 function toggleFilter(){ if(boxBounds){ clearArea(); return; } if(drawing&&drawMode==="filter"){ stopDraw(); return; } if(drawing){ stopDraw(); } startDraw("filter"); }
 function toggleZoom(){ if(drawing&&drawMode==="zoom"){ stopDraw(); return; } if(drawing){ stopDraw(); } startDraw("zoom"); }
+function toggleSelect(){ if(drawing&&drawMode==="select"){ stopDraw(); return; } if(selSet.size){ clearSel(); return; } if(drawing){ stopDraw(); } startDraw("select"); }
 function startDraw(mode){ if(measuring) stopMeasure(); drawing=true; drawMode=mode; map.dragging.disable(); map.getContainer().style.cursor="crosshair"; setAreaBtn(); map.on("mousedown",dDown); }
 function stopDraw(){ map.off("mousedown",dDown); map.off("mousemove",dMove); map.off("mouseup",dUp); if(tempRect){map.removeLayer(tempRect);tempRect=null;} drawing=false; drawMode=null; map.dragging.enable(); map.getContainer().style.cursor=""; setAreaBtn(); }
 function dDown(e){ if(e.originalEvent&&e.originalEvent.button!==0) return; drawStart=e.latlng; map.on("mousemove",dMove); map.on("mouseup",dUp); }
@@ -883,6 +944,13 @@ function dUp(e){
     setAreaBtn(); return;
   }
   map.off("mousedown",dDown); drawing=false; drawMode=null; map.dragging.enable(); map.getContainer().style.cursor="";
+  if(mode==="select"){   // select every visible dot inside the box so they can be dragged together
+    if(!tiny){
+      const inWin=photos.filter(p=>p.lat!=null&&passDate(p)&&passSearch(p)&&passTags(p)&&(!boxBounds||boxBounds.contains([p.lat,p.lng]))&&b.contains([p.lat,p.lng]));
+      selSet=new Set(inWin.map(p=>p.id));
+    }
+    setAreaBtn(); renderClusters(); return;
+  }
   if(tiny){ setAreaBtn(); return; }
   boxBounds=b; boxRect=L.rectangle(b,{color:"#5865F2",weight:2,fill:false,dashArray:"6 4"}).addTo(map);
   setAreaBtn(); buildCluster(); renderClusters(); updateGallery(); persistState();
@@ -894,6 +962,9 @@ function setAreaBtn(){
   else { areaBtn.textContent="Filter area [f]"; areaBtn.classList.remove("active"); }
   if(drawing&&drawMode==="zoom"){ zoomBtn.textContent="Cancel [z]"; zoomBtn.classList.add("active"); }
   else { zoomBtn.textContent="Zoom window [z]"; zoomBtn.classList.remove("active"); }
+  if(drawing&&drawMode==="select"){ selBtn.textContent="Cancel [s]"; selBtn.classList.add("active"); }
+  else if(selSet.size){ selBtn.textContent="Deselect ("+selSet.size+") [s]"; selBtn.classList.add("active"); }
+  else { selBtn.textContent="Select area [s]"; selBtn.classList.remove("active"); }
 }
 setAreaBtn();
 
@@ -1463,10 +1534,11 @@ document.addEventListener("keydown",e=>{
   const tag=((e.target&&e.target.tagName)||"").toLowerCase();
   if(tag==="input"||tag==="select"||tag==="textarea") return;
   if(document.activeElement===tbText) return;
-  if(e.key==="Escape"){ if(drawing) stopDraw(); if(measuring) stopMeasure(); return; }
+  if(e.key==="Escape"){ if(drawing) stopDraw(); else if(measuring) stopMeasure(); else if(selSet.size) clearSel(); return; }
   if(e.key==="z"||e.key==="Z"){ toggleZoom(); }
   else if(e.key==="f"||e.key==="F"){ toggleFilter(); }
   else if(e.key==="m"||e.key==="M"){ toggleMeasure(); }
+  else if(e.key==="s"||e.key==="S"){ toggleSelect(); }
 });
 
 /* ENHANCE: bake full quality original into this one photo */
@@ -1551,15 +1623,17 @@ function openFolderPop(){
 let tagUndoStack=[], tagRedoStack=[], recentTags=[];   // recentTags: last folders assigned via the UI, newest first (speeds up bulk tagging)
 function noteRecentTag(f){ if(!f) return; recentTags=[f].concat(recentTags.filter(x=>x!==f)).slice(0,10); }
 function snapshotTags(p){ return {paths:physPaths(p).slice(), vpaths:virtPaths(p).slice(), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null)}; }
-function recordTagChange(p,before){
-  const after=snapshotTags(p);
-  if(JSON.stringify(before)===JSON.stringify(after)) return;
-  tagUndoStack.push({id:p.id,before,after,t:Date.now()}); if(tagUndoStack.length>200) tagUndoStack.shift();
+function pushTagAction(items){   // one undo step, possibly touching many photos (e.g. a multi-selection move)
+  items=items.filter(it=>JSON.stringify(it.before)!==JSON.stringify(it.after));
+  if(!items.length) return;
+  tagUndoStack.push({items,t:Date.now()}); if(tagUndoStack.length>200) tagUndoStack.shift();
   tagRedoStack=[];
 }
-function applyTagSnapshot(id,snap){ const p=photoById(id); if(!p) return; p.paths=snap.paths.slice(); p.vpaths=snap.vpaths.slice(); if(snap.lat!=null){ p.lat=snap.lat; p.lng=snap.lng; } if("glat" in snap){ p.glat=snap.glat; p.glng=snap.glng; } afterFolderChange(); if(folderPopShown) openFolderPop(); }
-function undoTag(){ const a=tagUndoStack.pop(); if(!a) return false; tagRedoStack.push(a); applyTagSnapshot(a.id,a.before); return true; }
-function redoTag(){ const a=tagRedoStack.pop(); if(!a) return false; tagUndoStack.push(a); applyTagSnapshot(a.id,a.after); return true; }
+function recordTagChange(p,before){ pushTagAction([{id:p.id,before,after:snapshotTags(p)}]); }
+function applySnapRaw(id,snap){ const p=photoById(id); if(!p) return; p.paths=snap.paths.slice(); p.vpaths=snap.vpaths.slice(); if(snap.lat!=null){ p.lat=snap.lat; p.lng=snap.lng; } if("glat" in snap){ p.glat=snap.glat; p.glng=snap.glng; } }
+function applyTagSnapshot(id,snap){ applySnapRaw(id,snap); afterFolderChange(); if(folderPopShown) openFolderPop(); }
+function undoTag(){ const a=tagUndoStack.pop(); if(!a) return false; tagRedoStack.push(a); const its=a.items||[{id:a.id,before:a.before}]; its.forEach(it=>applySnapRaw(it.id,it.before)); afterFolderChange(); if(folderPopShown) openFolderPop(); return true; }
+function redoTag(){ const a=tagRedoStack.pop(); if(!a) return false; tagUndoStack.push(a); const its=a.items||[{id:a.id,after:a.after}]; its.forEach(it=>applySnapRaw(it.id,it.after)); afterFolderChange(); if(folderPopShown) openFolderPop(); return true; }
 function undoLatest(open){
   const ms=open?curMarks():null;
   const markT=(ms&&ms.length)?(ms[ms.length-1]._t||0):null;
@@ -1680,6 +1754,7 @@ async function refreshFolder(){
 function clearAll(redraw){
   if(boxRect){map.removeLayer(boxRect);boxRect=null;} boxBounds=null; setAreaBtn();
   photos=[]; nextId=1; cluster=null; markerLayer.clearLayers(); undoStack=[]; lightboxList=[]; lightboxIndex=0; sizeIndex=new Map();
+  selSet.clear(); dotMarkers.clear(); setAreaBtn(); if(typeof closeCtx==="function") closeCtx();
   if(measuring) stopMeasure();
   dateMin=dateMax=dateLo=dateHi=null; document.getElementById("datebar").classList.add("hidden");
   if(redraw){ updateStats(); document.getElementById("galCount").textContent="0 shown"; document.getElementById("stView").textContent="0";
