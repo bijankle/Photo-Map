@@ -1107,11 +1107,14 @@ function renderActions(){
     return '<div class="act-row'+(a.done?' done':'')+(selActs.has(a.id)?' sel':'')+(isCur?' cur':'')+'" data-aid="'+a.id+'">'
       +'<label class="act-chk" title="'+(a.done?'Reopen this action':'Mark completed')+'"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
       +'<div class="act-body"><div class="t">'+esc(a.text)+'</div>'+descHtml(a,expActs)+'<div class="m">'+n+' photo'+(n===1?'':'s')+(a.done&&a.doneAt?' · done '+fmtDate(a.doneAt):'')+'</div></div>'
-      +expBtnHtml(a,expActs)+'<button class="ipa-x act-del" type="button" title="Delete this action">&times;</button></div>'; }).join("");
+      +expBtnHtml(a,expActs)+'<button class="ipa-x act-del" type="button" title="'+(isCur?'Remove this action from the open photo':'Delete this action')+'">&times;</button></div>'; }).join("");
   list.querySelectorAll(".act-row").forEach(el=>{
     const a=actById(Number(el.dataset.aid)); if(!a) return;
     el.querySelector("input").addEventListener("click",e=>{ e.stopPropagation(); setActionDone(a,e.target.checked); });
-    el.querySelector(".act-del").addEventListener("click",e=>{ e.stopPropagation(); deleteAction(a); });
+    el.querySelector(".act-del").addEventListener("click",e=>{ e.stopPropagation();
+      const cp2=lb.classList.contains("open")?curPhoto():null;
+      if(cp2&&Array.isArray(cp2.acts)&&cp2.acts.includes(a.id)) unassignAct(a,cp2);   // open photo is linked: X just removes that link
+      else deleteAction(a); });
     wireActRowCommon(el,a,expActs);
     /* single click selects/navigates (slightly delayed so a double-click can win); double click edits in place */
     el.addEventListener("click",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); el._ct=setTimeout(()=>clickAction(a,e),260); });
