@@ -575,12 +575,39 @@ function renderClusters(){
     } else {
       const p=photoById(c.properties.pid); if(!p) continue;
       const hit=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:15,stroke:false,fill:true,fillOpacity:0});
-      hit.on("mouseover",e=>showHover(p,e.originalEvent)); hit.on("mousemove",e=>positionHover(e.originalEvent)); hit.on("mouseout",hideHover); hit.on("click",()=>openViewer(p));
+      hit.on("mouseover",e=>{ if(dotDrag) return; if(dotSelected(p)) map.getContainer().style.cursor="move"; showHover(p,e.originalEvent); });
+      hit.on("mousemove",e=>{ if(!dotDrag) positionHover(e.originalEvent); });
+      hit.on("mouseout",()=>{ if(!dotDrag) map.getContainer().style.cursor=""; hideHover(); });
+      hit.on("mousedown",e=>{ const oe=e.originalEvent; if(oe&&oe.button===0&&dotSelected(p)){ L.DomEvent.stop(oe); startDotDrag(p,hit,dot); } });
+      hit.on("click",()=>{ if(Date.now()-dotDropT<450) return; openViewer(p); });
       const dot=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:6,color:"#3A41B0",weight:2,fillColor:"#5865F2",fillOpacity:.95,interactive:false});
       markerLayer.addLayer(hit); markerLayer.addLayer(dot);
     }
   }
 }
+
+/* Reposition a dot: open the photo (its dot gets the white ring = selected), then hold and drag
+   that dot. Unselected dots never drag — the map pans as usual. Only where the photo SHOWS on
+   this map changes; the original GPS is kept (glat/glng) and the photo file is never modified. */
+let dotDrag=null, dotDropT=0;
+function dotSelected(p){ return lb.classList.contains("open") && curPhoto()===p; }
+function startDotDrag(p,hit,dot){
+  hideHover(); try{ map.dragging.disable(); }catch(e){}
+  map.getContainer().style.cursor="grabbing";
+  dotDrag={p,hit,dot,before:snapshotTags(p),moved:false};
+}
+map.on("mousemove",e=>{ if(!dotDrag) return; dotDrag.moved=true; dotDrag.hit.setLatLng(e.latlng); dotDrag.dot.setLatLng(e.latlng); if(hlMarker) hlMarker.setLatLng(e.latlng); });
+window.addEventListener("mouseup",()=>{
+  if(!dotDrag) return; const d=dotDrag; dotDrag=null;
+  map.getContainer().style.cursor=""; try{ map.dragging.enable(); }catch(e){}
+  if(!d.moved) return;
+  dotDropT=Date.now();   // swallow the click that follows the drop so it doesn't re-open the viewer
+  const ll=d.dot.getLatLng(), p=d.p;
+  if(p.glat==null){ p.glat=p.lat; p.glng=p.lng; }   // first correction: keep the photo's true GPS so it's never lost
+  p.lat=ll.lat; p.lng=ll.lng;
+  recordTagChange(p,d.before); afterFolderChange();
+});
+window.addEventListener("keydown",e=>{ if(e.key==="Escape"&&dotDrag){ e.stopPropagation(); dotDrag=null; map.getContainer().style.cursor=""; try{ map.dragging.enable(); }catch(er){} renderClusters(); highlightCurrent(); } },true);
 
 /* file loading */
 const IMG_RE=/\.(jpe?g|png|tiff?|heic|heif|webp|gif|bmp)$/i;
@@ -1523,14 +1550,14 @@ function openFolderPop(){
    undo by timestamp so "undo" always reverts whichever edit happened most recently. */
 let tagUndoStack=[], tagRedoStack=[], recentTags=[];   // recentTags: last folders assigned via the UI, newest first (speeds up bulk tagging)
 function noteRecentTag(f){ if(!f) return; recentTags=[f].concat(recentTags.filter(x=>x!==f)).slice(0,10); }
-function snapshotTags(p){ return {paths:physPaths(p).slice(), vpaths:virtPaths(p).slice()}; }
+function snapshotTags(p){ return {paths:physPaths(p).slice(), vpaths:virtPaths(p).slice(), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null)}; }
 function recordTagChange(p,before){
   const after=snapshotTags(p);
   if(JSON.stringify(before)===JSON.stringify(after)) return;
   tagUndoStack.push({id:p.id,before,after,t:Date.now()}); if(tagUndoStack.length>200) tagUndoStack.shift();
   tagRedoStack=[];
 }
-function applyTagSnapshot(id,snap){ const p=photoById(id); if(!p) return; p.paths=snap.paths.slice(); p.vpaths=snap.vpaths.slice(); afterFolderChange(); if(folderPopShown) openFolderPop(); }
+function applyTagSnapshot(id,snap){ const p=photoById(id); if(!p) return; p.paths=snap.paths.slice(); p.vpaths=snap.vpaths.slice(); if(snap.lat!=null){ p.lat=snap.lat; p.lng=snap.lng; } if("glat" in snap){ p.glat=snap.glat; p.glng=snap.glng; } afterFolderChange(); if(folderPopShown) openFolderPop(); }
 function undoTag(){ const a=tagUndoStack.pop(); if(!a) return false; tagRedoStack.push(a); applyTagSnapshot(a.id,a.before); return true; }
 function redoTag(){ const a=tagRedoStack.pop(); if(!a) return false; tagUndoStack.push(a); applyTagSnapshot(a.id,a.after); return true; }
 function undoLatest(open){
@@ -1548,7 +1575,7 @@ function redoLatest(open){
   if(tagRT===null||(markRT!==null&&markRT<=tagRT)){ curMarks().push(redoMarks.pop()); redrawMarks(); persistState(); }   // replay forward in time
   else redoTag();
 }
-function afterFolderChange(){ updateGallery(); buildCluster(); renderClusters(); renderPhotoTags(curPhoto()); idbSet("lastState",serializeState(false)).catch(()=>{});
+function afterFolderChange(){ updateGallery(); buildCluster(); renderClusters(); highlightCurrent(); renderPhotoTags(curPhoto()); idbSet("lastState",serializeState(false)).catch(()=>{});
   ensureJsonWrite(true).then(()=>scheduleAutoSave());   // grant write in the click gesture, then debounce so rapid tag toggles batch into ONE small file write
 }
 document.getElementById("lbFolder").addEventListener("click",e=>{ e.stopPropagation(); if(folderPopShown) closeFolderPop(); else openFolderPop(); });
@@ -1792,6 +1819,7 @@ function serializeState(includeImages){
       if(Array.isArray(p.paths)&&(p.paths.length!==1||p.paths[0]!==p.path))o.paths=p.paths;   // physical locations (incl. empty when pruned from disk)
       if(Array.isArray(p.vpaths)&&p.vpaths.length)o.vpaths=p.vpaths;   // in-app tag memberships — never pruned by disk syncs
       if(p.rot)o.rot=p.rot;
+      if(p.glat!=null){ o.glat=p.glat; o.glng=p.glng; }   // dot was repositioned in-app; lat/lng show it, glat/glng keep the photo's true GPS
       if(p.marks&&p.marks.length)o.marks=p.marks;
       if(includeImages){ if(p.thumb){ o.thumb=p.thumb; if(p.tv)o.tv=p.tv; } if(p.preview)o.preview=p.preview; }   // thumb + screenshot-quality preview; full quality always comes from disk
       return o; })
@@ -1815,7 +1843,7 @@ function applyState(st){
     if(vp===null){   // legacy file (mixed paths): keep the anchor path as physical, treat extras as virtual so tags can never be wrongly pruned
       vp=phys.filter(pa=>pa!==m.path); phys=m.path?[m.path]:phys.slice(0,1);
     }
-    photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,rot:m.rot||0,lat:m.lat,lng:m.lng,time:m.time,dir:m.dir,marks:Array.isArray(m.marks)?m.marks:[]});
+    photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,rot:m.rot||0,lat:m.lat,lng:m.lng,glat:(m.glat!=null?m.glat:null),glng:(m.glng!=null?m.glng:null),time:m.time,dir:m.dir,marks:Array.isArray(m.marks)?m.marks:[]});
   });   // baked full-quality renditions from old files are intentionally dropped
   if(lastFullCache) overlayImagesFromCache(lastFullCache);   // the .json is metadata-only — fill thumbs/previews back in from the browser image cache
   const s=st.settings||{};
@@ -1837,9 +1865,11 @@ function applyState(st){
 /* Folder membership + markup are lightweight and are autosaved (lastState) on every change,
    even when the heavy image Save fails or goes stale. These helpers let us re-apply that fresh
    metadata onto a reloaded session so folder additions are never lost. Matched by a stable key. */
-function metaKey(p){ return (p.name||"")+"|"+(p.size!=null?p.size:"")+"|"+(p.lat!=null?Number(p.lat).toFixed(5):"")+"|"+(p.lng!=null?Number(p.lng).toFixed(5):""); }
-function snapshotMeta(list){ const m=new Map(); for(const p of (list||[])){ const k=metaKey(p); if(!m.has(k)) m.set(k,{paths:Array.isArray(p.paths)?p.paths.slice():null, vpaths:Array.isArray(p.vpaths)?p.vpaths.slice():null, rot:p.rot||0, marks:Array.isArray(p.marks)&&p.marks.length?p.marks:null}); } return m; }
+function metaKey(p){ const la=(p.glat!=null?p.glat:p.lat), ln=(p.glng!=null?p.glng:p.lng);   // identity uses the ORIGINAL GPS so in-app dot corrections never orphan a photo's cache/metadata
+  return (p.name||"")+"|"+(p.size!=null?p.size:"")+"|"+(la!=null?Number(la).toFixed(5):"")+"|"+(ln!=null?Number(ln).toFixed(5):""); }
+function snapshotMeta(list){ const m=new Map(); for(const p of (list||[])){ const k=metaKey(p); if(!m.has(k)) m.set(k,{paths:Array.isArray(p.paths)?p.paths.slice():null, vpaths:Array.isArray(p.vpaths)?p.vpaths.slice():null, rot:p.rot||0, marks:Array.isArray(p.marks)&&p.marks.length?p.marks:null, lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null)}); } return m; }
 function applyMetaMap(m){ if(!m||!m.size) return; for(const p of photos){ const meta=m.get(metaKey(p)); if(!meta) continue; if(meta.paths&&meta.paths.length) p.paths=meta.paths.slice(); if(meta.vpaths&&meta.vpaths.length) p.vpaths=meta.vpaths.slice(); if(meta.marks) p.marks=meta.marks;
+  if(meta.glat!=null){ p.glat=meta.glat; p.glng=meta.glng; if(meta.lat!=null){ p.lat=meta.lat; p.lng=meta.lng; } }   // newer session moved this dot — carry the correction over
   if(meta.rot&&!p.rot){ p.rot=meta.rot; const d=rotDelta(p.rot); (async()=>{ if(p.thumb)p.thumb=await rotateDataURL(p.thumb,d,THUMB_Q); if(p.preview)p.preview=await rotateDataURL(p.preview,d,PREVIEW_Q); cacheFullSession(); })(); } } }
 
 /* persistence (IndexedDB): metadata only, cheap */
