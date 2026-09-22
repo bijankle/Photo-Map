@@ -973,7 +973,7 @@ function wireActRowCommon(el,a){
   const ex=el.querySelector(".act-exp");
   if(ex) ex.addEventListener("click",e=>{ e.stopPropagation(); if(expActs.has(a.id)) expActs.delete(a.id); else expActs.add(a.id); refreshActUI(); });
   const d=el.querySelector(".d");
-  if(d) d.addEventListener("dblclick",e=>{ e.stopPropagation(); startActDescEdit(a,el); });
+  if(d) d.addEventListener("dblclick",e=>{ e.stopPropagation(); clearTimeout(el._ct); startActDescEdit(a,el); });   // cancel the row's pending single-click select, or it re-renders and closes the editor
 }
 function deleteAction(a){
   const n=actPhotos(a).length;
