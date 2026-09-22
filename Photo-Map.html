@@ -346,6 +346,8 @@
   .act-new{padding:0 12px 10px;}
   .act-new input{width:100%;box-sizing:border-box;font:inherit;font-size:13px;color:var(--ink);background:var(--panel2);border:1px solid var(--line2);border-radius:9px;padding:8px 10px;outline:none;}
   .act-new input:focus{border-color:var(--accent);}
+  .act-new input.arm{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-tint);}
+  .act-new input.arm::placeholder{color:var(--accent);}
   .act-list{flex:1;overflow-y:auto;padding:0 10px 12px;display:flex;flex-direction:column;gap:6px;}
   .act-row{display:flex;align-items:flex-start;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 9px;cursor:pointer;user-select:none;}
   .act-row:hover{border-color:var(--accent);}
@@ -890,7 +892,7 @@ function openDotMenu(p,ev){
       !ok,"One action to many photos, or many actions to one photo — not many to many");
   }
   mkCtxItem("New action for "+(many?targets.length+" photos":"this photo")+"…",
-    ()=>{ const t=prompt("New action:"); if(t) createAction(t,targets.map(x=>x.id)); });
+    ()=>armNewAction(targets.map(x=>x.id)));   // arms the Actions panel input — type there and Enter assigns to these photos
   const moved=targets.filter(t=>t.glat!=null);
   if(moved.length) mkCtxItem("Restore original GPS"+(many?" ("+moved.length+" photo"+(moved.length>1?"s":"")+")":""),()=>restoreGps(moved));
   else mkCtxItem(many?"Original GPS (none moved)":"Original GPS (not moved)",null,true);
@@ -1085,9 +1087,24 @@ function renderIpActions(){
   });
 }
 document.getElementById("actOpenOnly").addEventListener("click",()=>{ actShowOpenOnly=!actShowOpenOnly; renderActions(); persistState(); });
+/* Right-click "New action" on photos doesn't pop a dialog: it ARMS this input — type the action
+   and Enter creates it already assigned to those photos. Escape disarms. */
+let pendingActPhotos=null;
+const ACT_PH="+ New action — Enter to add";
+function armNewAction(pids){
+  pendingActPhotos=(pids&&pids.length)?pids.slice():null;
+  const inp=document.getElementById("actNewInput");
+  inp.placeholder=pendingActPhotos?("New action for "+pendingActPhotos.length+" photo"+(pendingActPhotos.length>1?"s":"")+" — Enter to add"):ACT_PH;
+  inp.classList.toggle("arm",!!pendingActPhotos);
+  inp.focus();
+}
 document.getElementById("actNewInput").addEventListener("keydown",e=>{
+  if(e.key==="Escape"&&pendingActPhotos){ e.stopPropagation(); armNewAction(null); return; }
   if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return;
-  e.target.value=""; createAction(v,null);
+  e.target.value="";
+  const pids=pendingActPhotos; armNewAction(null);
+  createAction(v,pids);
+  document.getElementById("actNewInput").focus();   // keep typing to add the next one
 });
 document.getElementById("ipaHide").addEventListener("click",()=>{ ipHideDone=!ipHideDone; renderIpActions(); });
 document.getElementById("ipaNew").addEventListener("keydown",e=>{
@@ -1200,7 +1217,7 @@ map.on("contextmenu",e=>{
   mkCtxItem("Filter area [f]",toggleFilter);
   mkCtxItem("Zoom window [z]",toggleZoom);
   mkCtxItem("Measure [m]",toggleMeasure);
-  mkCtxItem("New action…",()=>{ const t=prompt("New action:"); if(t) createAction(t,null); });
+  mkCtxItem("New action…",()=>armNewAction(null));   // focuses the Actions panel input
   if(selSet.size||selActs.size) mkCtxItem("Clear selections",()=>{ clearSel(); clearActSel(); });
   showCtxAt(e.originalEvent.clientX,e.originalEvent.clientY);
 });
