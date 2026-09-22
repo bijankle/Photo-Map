@@ -1938,6 +1938,9 @@ function parseShareHash(){
 
 /* startup */
 (async function init(){
+  // Ask the browser to protect this site's stored data (remembered .json/folder, image cache)
+  // from automatic low-disk cleanup. Best-effort; ignored where unsupported (e.g. file://).
+  try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist().catch(()=>{}); }catch(e){}
   try{ if(typeof LZString!=="undefined" && parseShareHash()) return; }catch(e){}
   let full=null,last=null;
   try{ full=await idbGet("lastFull"); }catch(e){}
