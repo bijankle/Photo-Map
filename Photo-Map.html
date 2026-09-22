@@ -529,6 +529,7 @@
       <button class="set-tab on" data-sec="map">Map</button>
       <button class="set-tab" data-sec="photos">Photos</button>
       <button class="set-tab" data-sec="actions">Actions</button>
+      <button class="set-tab" data-sec="mobile">Mobile</button>
     </div>
     <div class="set-main">
       <button class="set-close" id="setClose">&times;</button>
@@ -556,6 +557,24 @@
         <div class="set-row">
           <div class="set-lbl">Thumbnail size<span class="set-sub">Card size in the gallery.</span></div>
           <div class="set-ctl"><input type="range" id="setThumb" min="64" max="260" /></div>
+        </div>
+      </div>
+      <div class="set-sec" data-sec="mobile">
+        <h3>Mobile</h3>
+        <div class="set-row">
+          <div class="set-lbl">Data repository<span class="set-sub">The PRIVATE GitHub repo that holds the mobile pack. Never use the public app repo.</span></div>
+          <div class="set-ctl"><input type="text" id="setGhRepo" placeholder="bijankle/photo-map-KCGM" style="width:200px;font:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--line2);border-radius:8px;" /></div>
+        </div>
+        <div class="set-row">
+          <div class="set-lbl">Access token<span class="set-sub">Fine-grained GitHub token with Contents read/write on that repo only. Stored only in this browser, never in the project file.</span></div>
+          <div class="set-ctl"><input type="password" id="setGhToken" placeholder="github_pat_&hellip;" style="width:200px;font:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--line2);border-radius:8px;" /></div>
+        </div>
+        <div class="set-row">
+          <div class="set-lbl">Export to mobile<span class="set-sub">Pushes the OPEN actions, their steps and preview photos to the data repo. The phone loads the latest automatically.</span></div>
+          <div class="set-ctl" style="flex-direction:column;align-items:flex-start;gap:6px;">
+            <button class="btn primary" id="btnMobileExport" style="font-size:13px;">Export now</button>
+            <span id="mobExpStatus" style="font-family:var(--mono);font-size:10px;color:var(--dim);"></span>
+          </div>
         </div>
       </div>
       <div class="set-sec" data-sec="actions">
@@ -1284,6 +1303,9 @@ function syncSettingsUI(){
   document.getElementById("setThumb").value=parseInt(getComputedStyle(document.documentElement).getPropertyValue("--thumb"))||120;
   document.getElementById("setActOpen").checked=actShowOpenOnly;
   document.getElementById("setActMap").checked=actOnlyMap;
+  const g=ghCfg(); document.getElementById("setGhRepo").value=g.repo; document.getElementById("setGhToken").value=g.token;
+  let le=0; try{ le=+localStorage.getItem("pmLastExport")||0; }catch(e){}
+  document.getElementById("mobExpStatus").textContent=le?("Last export: "+new Date(le).toLocaleString(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})):"";
 }
 document.getElementById("setClusterSens").addEventListener("input",e=>{
   clusterSens=Math.max(0,Math.min(100,+e.target.value||0));
@@ -1297,6 +1319,58 @@ setModal.querySelectorAll('input[name="setBase"]').forEach(r=>r.addEventListener
 document.getElementById("setNoGeo").addEventListener("change",e=>{ showNoGeo=e.target.checked; document.getElementById("showNoGeo").checked=showNoGeo; updateGallery(); persistState(); });
 document.getElementById("setThumb").addEventListener("input",e=>{ document.documentElement.style.setProperty("--thumb",e.target.value+"px"); document.getElementById("thumbSize").value=e.target.value; persistState(); });
 document.getElementById("setActOpen").addEventListener("change",e=>{ actShowOpenOnly=e.target.checked; renderActions(); persistState(); });
+
+/* ---- Mobile export: push the field pack to the PRIVATE data repo via the GitHub API ----
+   Token + repo live ONLY in this browser's localStorage — never in the .json, never in the public repo. */
+function ghCfg(){ let t="",r=""; try{ t=localStorage.getItem("pmGhToken")||""; r=localStorage.getItem("pmGhRepo")||""; }catch(e){} return {token:t.trim(),repo:(r.trim()||"bijankle/photo-map-KCGM")}; }
+function ghHeaders(token){ return {"Authorization":"Bearer "+token,"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"}; }
+async function ghFileSha(cfg,path){   // sha via the parent directory listing (works for files over 1 MB too)
+  const dir=path.includes("/")?path.slice(0,path.lastIndexOf("/")):"";
+  const r=await fetch("https://api.github.com/repos/"+cfg.repo+"/contents/"+dir,{headers:ghHeaders(cfg.token)});
+  if(r.status===404) return null;
+  if(!r.ok) throw new Error("GitHub says "+r.status+" reading the repo — check the repo name and token access");
+  const list=await r.json();
+  const hit=Array.isArray(list)?list.find(f=>f.path===path):null;
+  return hit?hit.sha:null;
+}
+async function ghPutFile(cfg,path,text,msg){
+  const sha=await ghFileSha(cfg,path);
+  const body={message:msg,content:btoa(unescape(encodeURIComponent(text)))};
+  if(sha) body.sha=sha;
+  const r=await fetch("https://api.github.com/repos/"+cfg.repo+"/contents/"+path,{method:"PUT",headers:ghHeaders(cfg.token),body:JSON.stringify(body)});
+  if(!r.ok){ let d=""; try{ d=(await r.json()).message||""; }catch(e){} throw new Error("GitHub says "+r.status+(d?" — "+d:"")); }
+}
+function buildMobilePack(){
+  const open=actions.filter(a=>!a.done);
+  return {
+    v:1, exportedAt:new Date().toISOString(), project:loadedJsonName||folderName||"PhotoMap",
+    actions: open.map(a=>({ id:a.id, text:a.text, desc:a.desc||"", steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d})),
+      photos: actPhotos(a).map(p=>({ id:p.id, name:p.name, lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null),
+        img:(p.preview||p.thumb||null) })) }))
+  };
+}
+async function exportMobile(){
+  const st=document.getElementById("mobExpStatus"), btn=document.getElementById("btnMobileExport");
+  const cfg=ghCfg();
+  if(!cfg.token){ st.textContent="Paste your GitHub token above first."; return; }
+  const openN=actions.filter(a=>!a.done).length;
+  if(!openN){ st.textContent="No open actions to export."; return; }
+  btn.disabled=true; st.textContent="Building pack…";
+  try{
+    const pack=buildMobilePack();
+    const text=JSON.stringify(pack);
+    st.textContent="Pushing "+(text.length/1048576).toFixed(1)+" MB to "+cfg.repo+"…";
+    await ghPutFile(cfg,"pack.json",text,"PhotoMap mobile pack — "+openN+" open action"+(openN===1?"":"s"));
+    try{ localStorage.setItem("pmLastExport",String(Date.now())); }catch(e){}
+    st.textContent="✓ Live for the phone — "+openN+" action"+(openN===1?"":"s")+", "+new Date().toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"});
+  }catch(err){
+    st.textContent="Failed: "+(err&&err.message||err);
+  }
+  btn.disabled=false;
+}
+document.getElementById("btnMobileExport").addEventListener("click",exportMobile);
+document.getElementById("setGhRepo").addEventListener("change",e=>{ try{ localStorage.setItem("pmGhRepo",e.target.value.trim()); }catch(err){} });
+document.getElementById("setGhToken").addEventListener("change",e=>{ try{ localStorage.setItem("pmGhToken",e.target.value.trim()); }catch(err){} });
 document.getElementById("setActMap").addEventListener("change",e=>{ actOnlyMap=e.target.checked; buildCluster(); renderClusters(); updateGallery(); renderMapTags(); persistState(); });
 
 /* right-click: on/near a dot -> the DOT menu; only genuinely empty map gets the general commands */
