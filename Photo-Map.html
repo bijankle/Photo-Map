@@ -810,8 +810,12 @@ function renderClusters(){
       hit.on("mouseover",e=>{ if(dotDrag) return; if(isSel||dotSelected(p)) map.getContainer().style.cursor="move"; showHover(p,e.originalEvent); });
       hit.on("mousemove",e=>{ if(!dotDrag) positionHover(e.originalEvent); });
       hit.on("mouseout",()=>{ if(!dotDrag) map.getContainer().style.cursor=""; hideHover(); });
-      hit.on("mousedown",e=>{ const oe=e.originalEvent; if(oe&&oe.button===0&&(selSet.has(p.id)||dotSelected(p))){ L.DomEvent.stop(oe); startDotDrag(p,hit,dot); } });
-      hit.on("click",()=>{ uiClickT=Date.now(); if(Date.now()-dotDropT<450) return; openViewer(p); });
+      hit.on("mousedown",e=>{ const oe=e.originalEvent; if(oe&&(oe.ctrlKey||oe.metaKey)) return;   // ctrl+press is a selection gesture, never a drag
+        if(oe&&oe.button===0&&(selSet.has(p.id)||dotSelected(p))){ L.DomEvent.stop(oe); startDotDrag(p,hit,dot); } });
+      hit.on("click",e=>{ uiClickT=Date.now(); if(Date.now()-dotDropT<450) return;
+        const oe=e.originalEvent;
+        if(oe&&(oe.ctrlKey||oe.metaKey)){ if(selSet.has(p.id)) selSet.delete(p.id); else selSet.add(p.id); setAreaBtn(); buildCluster(); renderClusters(); return; }   // ctrl+click toggles the dot in the selection
+        openViewer(p); });
       hit.on("contextmenu",e=>{ L.DomEvent.stop(e.originalEvent); openDotMenu(p,e.originalEvent); });
       const dot=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:6,color:"#3A41B0",weight:2,fillColor:"#5865F2",fillOpacity:.95,interactive:false});
       if(isSel){ const mk=dotMarkers.get(p.id); mk.hit=hit; mk.dot=dot; }
@@ -903,8 +907,9 @@ function clearSel(){ selSet.clear(); setAreaBtn(); buildCluster(); renderCluster
 /* A quick left click on empty map clears photo + action selections. Leaflet never fires "click"
    after a pan, so dragging the map is safe; clicks on dots, clusters, or menu dismissals are
    excluded via uiClickT. */
-map.on("click",()=>{
+map.on("click",e=>{
   if(drawing||measuring||dotDrag) return;
+  if(e.originalEvent&&(e.originalEvent.ctrlKey||e.originalEvent.metaKey)) return;   // ctrl+click is a selection gesture — a miss must not wipe the selection
   if(Date.now()-uiClickT<400||Date.now()-dotDropT<450) return;
   if(selSet.size) clearSel();
   if(selActs.size) clearActSel();
