@@ -406,6 +406,8 @@
   #ipaNew{width:100%;box-sizing:border-box;font:inherit;font-size:12.5px;color:var(--ink);background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:6px 8px;outline:none;}
   #ipaNew:focus{border-color:var(--accent);}
 
+  .card.sel{outline:3px solid var(--accent);outline-offset:-3px;border-radius:8px;}
+
   /* gallery banner while an action filters the thumbnails */
   .act-note{display:flex;align-items:center;gap:8px;background:var(--accent-tint);border:1px solid var(--accent);border-radius:9px;padding:7px 10px;margin:0 0 10px;font-size:12px;color:var(--accent2);}
   .act-note button{margin-left:auto;border:none;background:var(--accent);color:#fff;font:inherit;font-size:11px;border-radius:999px;padding:3px 10px;cursor:pointer;}
@@ -1737,7 +1739,14 @@ function updateGallery(keepLimit){
   if(hidden>0) html+='<button class="gal-more" id="galMore">Show more ('+hidden.toLocaleString()+' remaining)</button>';
   if(!html) html='<div class="empty-msg"><b>No photos in this view.</b><br/>Pan or zoom the map, widen the date range, or load another folder.</div>';
   body.innerHTML=html;
-  body.querySelectorAll(".card").forEach(el=>{ const p=photoById(Number(el.dataset.id)); el.addEventListener("click",()=>openViewer(p)); el.addEventListener("mouseenter",()=>highlightDot(p)); el.addEventListener("mouseleave",highlightCurrent); });
+  body.querySelectorAll(".card").forEach(el=>{ const p=photoById(Number(el.dataset.id));
+    el.addEventListener("click",e=>{
+      if(e.ctrlKey||e.metaKey){ e.preventDefault();   // ctrl+click toggles the photo in the selection, same as on the map
+        if(selSet.has(p.id)) selSet.delete(p.id); else selSet.add(p.id);
+        el.classList.toggle("sel",selSet.has(p.id));
+        setAreaBtn(); buildCluster(); renderClusters(); return; }
+      openViewer(p); });
+    el.addEventListener("mouseenter",()=>highlightDot(p)); el.addEventListener("mouseleave",highlightCurrent); });
   const more=body.querySelector("#galMore"); if(more) more.addEventListener("click",()=>{ galleryLimit+=GALLERY_CHUNK*2; updateGallery(true); });
   const anx=body.querySelector("#actNoteX"); if(anx) anx.addEventListener("click",clearActSel);
   if(!body._moreWired){ body._moreWired=true; body.addEventListener("scroll",()=>{ if(!document.getElementById("galMore")) return; if(body.scrollTop+body.clientHeight>body.scrollHeight-320){ galleryLimit+=GALLERY_CHUNK*2; updateGallery(true); } }); }
@@ -1757,7 +1766,7 @@ function cardHtml(p,isNoGeo){
   const img=src?'<img class="thumb" src="'+src+'" loading="lazy" decoding="async" alt="">':'<div class="ph">no image</div>';
   const paths=pathsOf(p); const title=esc(paths.length?paths.join("\n"):p.name);   // all folders this photo was found in
   const dupe=paths.length>1?'<div class="hq" style="left:auto;right:5px;background:#4752C4;color:#fff;border-color:#4752C4" title="In '+paths.length+' folders">\u00D7'+paths.length+'</div>':"";
-  return '<div class="card" data-id="'+p.id+'" title="'+title+'">'+flag+dupe+img+'<div class="meta"><div class="fn">'+esc(p.name)+'</div><div class="sub">'+esc(sub)+'</div></div></div>';
+  return '<div class="card'+(selSet.has(p.id)?' sel':'')+'" data-id="'+p.id+'" title="'+title+'">'+flag+dupe+img+'<div class="meta"><div class="fn">'+esc(p.name)+'</div><div class="sub">'+esc(sub)+'</div></div></div>';
 }
 function sortPhotos(arr,center){ const a=arr.slice();
   if(currentSort==="name") a.sort((x,y)=>x.name.localeCompare(y.name));
