@@ -776,7 +776,8 @@ function passSearch(p){
 function passTags(p){ if(!tagFilters.size) return true; for(const f of tagFilters) if(!photoInFolder(p,f)) return false; return true; }
 function buildCluster(){
   const hl=hlPhotoSet();   // clusters aggregate how many highlighted photos they contain, so the BUBBLE can flash
-  const feats=photos.filter(p=>p.lat!=null && passDate(p) && passSearch(p) && passTags(p) && passActs(p) && passAlt(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng]))).map(p=>({type:"Feature",properties:{pid:p.id,hl:hl.has(p.id)?1:0,sel:selSet.has(p.id)?1:0},geometry:{type:"Point",coordinates:[p.lng,p.lat]}}));
+  const excl=actSelPhotoSet();   // a selected action's photos NEVER cluster — they always show as their own flashing dots
+  const feats=photos.filter(p=>p.lat!=null && !excl.has(p.id) && passDate(p) && passSearch(p) && passTags(p) && passActs(p) && passAlt(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng]))).map(p=>({type:"Feature",properties:{pid:p.id,hl:hl.has(p.id)?1:0,sel:selSet.has(p.id)?1:0},geometry:{type:"Point",coordinates:[p.lng,p.lat]}}));
   cluster=new Supercluster(Object.assign({maxZoom:21,map:pr=>({hl:pr.hl||0,sel:pr.sel||0}),reduce:(acc,pr)=>{acc.hl+=pr.hl;acc.sel+=pr.sel;}},clusterOpts()));
   cluster.load(feats);
 }
@@ -784,6 +785,7 @@ function buildCluster(){
 let clusterSens=50;
 function clusterOpts(){ return clusterSens<=0?{radius:1,minPoints:1e9}:{radius:Math.max(1,Math.round(clusterSens*1.28)),minPoints:2}; }
 function hlPhotoSet(){ const s=new Set(selSet); for(const id of selActs) for(const p of actPhotos(actById(id))) s.add(p.id); return s; }
+function actSelPhotoSet(){ const s=new Set(); for(const id of selActs) for(const p of actPhotos(actById(id))){ if(p.lat!=null) s.add(p.id); } return s; }
 function renderClusters(){
   markerLayer.clearLayers(); dotMarkers.clear();
   if(!cluster) return;
@@ -819,24 +821,37 @@ function renderClusters(){
       markerLayer.addLayer(m);
     } else {
       const p=photoById(c.properties.pid); if(!p) continue;
-      const isSel=hlSet.has(p.id);
-      if(isSel){ const hl=mkHlDot(lat,lng); markerLayer.addLayer(hl); dotMarkers.set(p.id,{hl}); }   // selected = same pulsing highlight as a single open photo
-      const hit=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:15,stroke:false,fill:true,fillOpacity:0});
-      hit.on("mouseover",e=>{ if(dotDrag) return; if(isSel||dotSelected(p)) map.getContainer().style.cursor="move"; showHover(p,e.originalEvent); });
-      hit.on("mousemove",e=>{ if(!dotDrag) positionHover(e.originalEvent); });
-      hit.on("mouseout",()=>{ if(!dotDrag) map.getContainer().style.cursor=""; hideHover(); });
-      hit.on("mousedown",e=>{ const oe=e.originalEvent; if(oe&&(oe.ctrlKey||oe.metaKey)) return;   // ctrl+press is a selection gesture, never a drag
-        if(oe&&oe.button===0&&(selSet.has(p.id)||dotSelected(p))){ L.DomEvent.stop(oe); startDotDrag(p,hit,dot); } });
-      hit.on("click",e=>{ uiClickT=Date.now(); if(Date.now()-dotDropT<450) return;
-        const oe=e.originalEvent;
-        if(oe&&(oe.ctrlKey||oe.metaKey)){ if(selSet.has(p.id)) selSet.delete(p.id); else selSet.add(p.id); setAreaBtn(); buildCluster(); renderClusters(); return; }   // ctrl+click toggles the dot in the selection
-        openViewer(p); });
-      hit.on("contextmenu",e=>{ L.DomEvent.stop(e.originalEvent); openDotMenu(p,e.originalEvent); });
-      const dot=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:6,color:"#3A41B0",weight:2,fillColor:"#5865F2",fillOpacity:.95,interactive:false});
-      if(isSel){ const mk=dotMarkers.get(p.id); mk.hit=hit; mk.dot=dot; }
-      markerLayer.addLayer(hit); markerLayer.addLayer(dot);
+      addSingleDot(p,lat,lng,hlSet.has(p.id));
     }
   }
+  // A selected action's photos are kept OUT of clustering — always draw them as their own flashing dots.
+  const excl=actSelPhotoSet();
+  if(excl.size){
+    for(const id of excl){
+      const p=photoById(id); if(!p||p.lat==null) continue;
+      if(!passDate(p)||!passSearch(p)||!passTags(p)||!passActs(p)||!passAlt(p)) continue;
+      if(boxBounds&&!boxBounds.contains([p.lat,p.lng])) continue;
+      if(!b.contains([p.lat,p.lng])) continue;
+      addSingleDot(p,p.lat,p.lng,true);
+    }
+  }
+}
+function addSingleDot(p,lat,lng,isSel){
+  if(isSel){ const hl=mkHlDot(lat,lng); markerLayer.addLayer(hl); dotMarkers.set(p.id,{hl}); }   // selected = same pulsing highlight as a single open photo
+  const hit=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:15,stroke:false,fill:true,fillOpacity:0});
+  hit.on("mouseover",e=>{ if(dotDrag) return; if(isSel||dotSelected(p)) map.getContainer().style.cursor="move"; showHover(p,e.originalEvent); });
+  hit.on("mousemove",e=>{ if(!dotDrag) positionHover(e.originalEvent); });
+  hit.on("mouseout",()=>{ if(!dotDrag) map.getContainer().style.cursor=""; hideHover(); });
+  hit.on("mousedown",e=>{ const oe=e.originalEvent; if(oe&&(oe.ctrlKey||oe.metaKey)) return;   // ctrl+press is a selection gesture, never a drag
+    if(oe&&oe.button===0&&(selSet.has(p.id)||dotSelected(p))){ L.DomEvent.stop(oe); startDotDrag(p,hit,dot); } });
+  hit.on("click",e=>{ uiClickT=Date.now(); if(Date.now()-dotDropT<450) return;
+    const oe=e.originalEvent;
+    if(oe&&(oe.ctrlKey||oe.metaKey)){ if(selSet.has(p.id)) selSet.delete(p.id); else selSet.add(p.id); setAreaBtn(); buildCluster(); renderClusters(); return; }   // ctrl+click toggles the dot in the selection
+    openViewer(p); });
+  hit.on("contextmenu",e=>{ L.DomEvent.stop(e.originalEvent); openDotMenu(p,e.originalEvent); });
+  const dot=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:6,color:"#3A41B0",weight:2,fillColor:"#5865F2",fillOpacity:.95,interactive:false});
+  if(isSel){ const mk=dotMarkers.get(p.id); mk.hit=hit; mk.dot=dot; }
+  markerLayer.addLayer(hit); markerLayer.addLayer(dot);
 }
 
 /* Reposition dots: open a photo (its dot gets the white ring) OR select dots with Select area —
@@ -1245,6 +1260,12 @@ function dotAtPoint(pt){
       const cp=map.latLngToContainerPoint([c.geometry.coordinates[1],c.geometry.coordinates[0]]);
       const d=Math.hypot(cp.x-pt.x,cp.y-pt.y);
       if(d<20&&d<bd){ bd=d; best=photoById(c.properties.pid); }
+    }
+    for(const id of actSelPhotoSet()){   // action dots are drawn outside the cluster index
+      const p=photoById(id); if(!p||p.lat==null) continue;
+      const cp=map.latLngToContainerPoint([p.lat,p.lng]);
+      const d=Math.hypot(cp.x-pt.x,cp.y-pt.y);
+      if(d<20&&d<bd){ bd=d; best=p; }
     }
   }catch(err){}
   return best;
