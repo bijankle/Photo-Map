@@ -558,7 +558,8 @@
 <div class="main tab-photo" id="main">
   <aside class="actpanel" id="actPanel">
     <div class="act-head"><span class="title">Actions</span><span class="count" id="actCount">0 open</span>
-      <button class="act-tgl" id="actOpenOnly" title="Show only uncompleted actions in this list">Open only</button></div>
+      <button class="act-tgl" id="actOpenOnly" title="Show only uncompleted actions in this list">Open only</button>
+      <button class="act-tgl" id="actMapOnly" title="Show only photos with an uncompleted action on the map">Actions only</button></div>
     <div class="act-new"><input type="text" id="actNewInput" placeholder="+ New action — Enter to add" autocomplete="off" /></div>
     <div class="act-list" id="actList"></div>
   </aside>
@@ -1045,6 +1046,7 @@ function renderActions(){
   const openN=actions.filter(a=>!a.done).length;
   document.getElementById("actCount").textContent=openN+" open / "+actions.length;
   document.getElementById("actOpenOnly").classList.toggle("on",actShowOpenOnly);
+  document.getElementById("actMapOnly").classList.toggle("on",actOnlyMap);
   const shown=actShowOpenOnly?actions.filter(a=>!a.done):actions;
   if(!shown.length){ list.innerHTML=""; return; }
   list.innerHTML=shown.map(a=>{ const n=actPhotos(a).length;
@@ -1088,6 +1090,7 @@ function renderIpActions(){
   });
 }
 document.getElementById("actOpenOnly").addEventListener("click",()=>{ actShowOpenOnly=!actShowOpenOnly; renderActions(); persistState(); });
+document.getElementById("actMapOnly").addEventListener("click",()=>{ actOnlyMap=!actOnlyMap; buildCluster(); renderClusters(); updateGallery(); renderActions(); renderMapTags(); persistState(); });
 /* Right-click "New action" on photos doesn't pop a dialog: it ARMS this input — type the action
    and Enter creates it already assigned to those photos. Escape disarms. */
 let pendingActPhotos=null;
@@ -1796,13 +1799,11 @@ function renderMapTags(){
   el.style.display="";
   const active=folders.filter(f=>tagFilters.has(f));
   el.innerHTML='<div class="mt-pills">'+(active.length?tagPillsHtml(active):"")+'</div>'
-    +'<div class="mt-btnrow"><button class="mt-btn'+(mapTagPopShown?' on':'')+'" id="mtSearch" type="button" title="Search tags to filter the map">Search tag ▴</button>'
-    +'<button class="mt-btn'+(actOnlyMap?' on':'')+'" id="mtActs" type="button" title="Show only photos that still have an uncompleted action">Actions only</button></div>'
+    +'<div class="mt-btnrow"><button class="mt-btn'+(mapTagPopShown?' on':'')+'" id="mtSearch" type="button" title="Search tags to filter the map">Search tag ▴</button></div>'
     +'<div class="mt-pop" id="mtPop"></div>';
   el.classList.toggle("filtered",tagFilters.size>0);
   if(active.length) wireTagPills(el);
   document.getElementById("mtSearch").addEventListener("click",e=>{ e.stopPropagation(); mapTagPopShown=!mapTagPopShown; if(!mapTagPopShown) mtQuery=""; renderMapTags(); if(mapTagPopShown){ const i=document.getElementById("mtQ"); if(i) i.focus(); } });
-  document.getElementById("mtActs").addEventListener("click",e=>{ e.stopPropagation(); actOnlyMap=!actOnlyMap; buildCluster(); renderClusters(); updateGallery(); renderMapTags(); persistState(); });
   if(mapTagPopShown) fillMapTagPop();
 }
 function fillMapTagPop(){
