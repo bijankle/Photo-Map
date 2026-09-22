@@ -14,7 +14,7 @@
     --accent:#5865F2; --accent2:#4752C4; --accent-tint:#EEF0FE; --good:#3BA55C; --bad:#D83C3E;
     --font:'Aptos','Segoe UI Variable Text','Segoe UI',system-ui,-apple-system,sans-serif;
     --mono:'Aptos Mono','Cascadia Code',ui-monospace,monospace;
-    --header-h:58px; --gallery-w:360px; --thumb:120px; --img-w:42%;
+    --header-h:58px; --gallery-w:360px; --thumb:120px; --img-w:42%; --side-w:380px;
   }
   *{box-sizing:border-box;}
   html,body{height:100%;margin:0;}
@@ -70,7 +70,7 @@
 
   .main{display:flex;height:calc(100% - var(--header-h));position:relative;}
   #map{flex:1 1 auto;height:100%;background:#F2F3F5;z-index:1;}
-  .imgpanel{position:relative;display:none;flex:0 0 var(--img-w);width:var(--img-w);min-width:240px;max-width:82vw;height:100%;background:#ECEEF1;align-items:center;justify-content:center;overflow:hidden;z-index:2;}
+  .imgpanel{position:relative;display:none;flex:0 0 var(--side-w);width:var(--side-w);min-width:240px;max-width:82vw;height:calc(100% - 40px);margin-top:40px;background:#ECEEF1;align-items:center;justify-content:center;overflow:hidden;z-index:2;}
   .imgpanel.open{display:flex;}
   .imgsplit{display:none;}
   .imgpanel.open + .imgsplit{display:block;}
@@ -179,7 +179,7 @@
   .splitter{width:7px;flex:0 0 7px;cursor:col-resize;background:var(--line);position:relative;z-index:3;}
   .splitter::after{content:"";position:absolute;inset:0 2px;background:var(--line2);border-radius:2px;}
   .splitter:hover::after{background:var(--accent);}
-  .gallery{width:var(--gallery-w);flex:0 0 var(--gallery-w);height:100%;background:var(--panel);display:flex;flex-direction:column;z-index:2;min-width:220px;border-left:1px solid var(--line);}
+  .gallery{width:var(--side-w);flex:0 0 var(--side-w);height:calc(100% - 40px);margin-top:40px;background:var(--panel);display:flex;flex-direction:column;z-index:2;min-width:220px;border-left:1px solid var(--line);}
   .gallery-head{padding:11px 14px 9px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
   .gallery-head .title{font-family:var(--font);font-weight:700;font-size:14px;letter-spacing:.4px;text-transform:uppercase;color:var(--ink);}
   .gallery-head .count{font-family:var(--mono);font-size:12px;color:var(--accent2);}
@@ -320,7 +320,7 @@
   .dropzone.show{display:flex;}
   @media (max-width:900px){ .stats{display:none;} }
   /* ---- layout order: actions | map | splitter | photo/gallery | tab strip ---- */
-  .actpanel{order:1;} #actSplit{order:1;} #map{order:2;} #splitter{order:3;} .imgpanel{order:4;} .gallery{order:5;} .rtabs{order:6;}
+  .actpanel{order:1;} #actSplit{order:1;} #map{order:2;} #splitter{order:3;} .imgpanel{order:4;} .gallery{order:5;}
 
   /* left actions panel */
   .actpanel{width:var(--act-w,270px);flex:0 0 var(--act-w,270px);min-width:170px;height:100%;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:2;}
@@ -356,12 +356,14 @@
   .act-body .m{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:2px;}
   .act-list .empty-msg{color:var(--dim);font-size:12px;text-align:center;padding:18px 8px;}
 
-  /* right tab strip */
-  .rtabs{width:42px;flex:0 0 42px;height:100%;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;gap:6px;padding-top:10px;z-index:2;}
-  .rtab{writing-mode:vertical-rl;transform:rotate(180deg);font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;
-    color:var(--muted);background:var(--panel2);border:1px solid var(--line2);border-radius:0 8px 8px 0;padding:14px 6px;margin-left:5px;cursor:pointer;}
+  /* right sidebar tab header — sits where the old panel title was, spanning the sidebar width */
+  .rtabs{position:absolute;top:0;right:0;width:var(--side-w);height:40px;box-sizing:border-box;display:flex;align-items:center;gap:6px;
+    padding:0 12px;background:var(--panel);border-left:1px solid var(--line);border-bottom:1px solid var(--line);z-index:5;}
+  .rtab{font-family:var(--mono);font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);background:var(--panel2);
+    border:1px solid var(--line2);border-radius:999px;padding:6px 16px;cursor:pointer;}
   .rtab:hover{color:var(--accent);border-color:var(--accent);}
   .rtab.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .rtabs .count{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--accent);}
 
   /* tab visibility: photo tab shows the viewer panel (or its placeholder), gallery tab shows the gallery */
   #main.tab-photo .imgpanel{display:flex;}
@@ -634,9 +636,9 @@
   <div class="rtabs" id="rtabs">
     <button class="rtab active" id="tabPhoto" title="Show the photo viewer">Photo</button>
     <button class="rtab" id="tabGallery" title="Show the thumbnail gallery">Gallery</button>
+    <span class="count" id="galCount">0 shown</span>
   </div>
   <aside class="gallery">
-    <div class="gallery-head"><span class="title">Gallery</span><span class="count" id="galCount">0 shown</span></div>
     <div class="controls">
       <div class="ctl-row"><label for="sortSel">Sort</label>
         <select id="sortSel"><option value="date_desc">Newest first</option><option value="date_asc">Oldest first</option><option value="name">Filename</option><option value="dist">Nearest to center</option></select></div>
@@ -2322,8 +2324,8 @@ window.addEventListener("mouseup",()=>{ if(actResizing){ actResizing=false; docu
 /* sidebar resize */
 const splitter=document.getElementById("splitter"); let resizing=false;
 splitter.addEventListener("mousedown",e=>{ resizing=true; e.preventDefault(); document.body.style.userSelect="none"; });
-window.addEventListener("mousemove",e=>{ if(!resizing)return; let w=Math.max(240,Math.min(window.innerWidth*0.75,window.innerWidth-e.clientX-45));   // 42px tab strip + splitter sit right of the panel
-  document.documentElement.style.setProperty(rightTab==="photo"?"--img-w":"--gallery-w",w+"px");
+window.addEventListener("mousemove",e=>{ if(!resizing)return; let w=Math.max(240,Math.min(window.innerWidth*0.75,window.innerWidth-e.clientX-3));
+  document.documentElement.style.setProperty("--side-w",w+"px");   // ONE width for the whole right sidebar — both tabs share it
   if(rightTab==="photo"&&lb.classList.contains("open")) refit();
   positionTools(); map.invalidateSize(); });
 window.addEventListener("mouseup",()=>{ if(resizing){resizing=false;document.body.style.userSelect="";persistState();} });
@@ -2480,7 +2482,7 @@ function serializeState(includeImages){
     actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.desc)o.desc=a.desc; return o; }),
     settings:{ baseLayer: map.hasLayer(google)?"google":map.hasLayer(esri)?"esri":"none", showNoGeo, sortBy:currentSort,
       thumb:getComputedStyle(document.documentElement).getPropertyValue("--thumb").trim(),
-      galleryW:getComputedStyle(document.documentElement).getPropertyValue("--gallery-w").trim(),
+      sideW:getComputedStyle(document.documentElement).getPropertyValue("--side-w").trim(),
       actW:getComputedStyle(document.documentElement).getPropertyValue("--act-w").trim()||null, dateLo, dateHi,
       box: boxBounds?[boxBounds.getSouth(),boxBounds.getWest(),boxBounds.getNorth(),boxBounds.getEast()]:null,
       recentTags: recentTags.slice(0,10), rightTab, actShowOpenOnly, actOnlyMap, altLo, altHi, altBlank, dateBlank, clusterSens,
@@ -2521,7 +2523,8 @@ function applyState(st){
   if(lastFullCache) overlayImagesFromCache(lastFullCache);   // the .json is metadata-only — fill thumbs/previews back in from the browser image cache
   const s=st.settings||{};
   if(s.thumb){ document.documentElement.style.setProperty("--thumb",s.thumb); document.getElementById("thumbSize").value=parseInt(s.thumb)||120; }
-  if(s.galleryW) document.documentElement.style.setProperty("--gallery-w",s.galleryW);
+  if(s.sideW) document.documentElement.style.setProperty("--side-w",s.sideW);
+  else if(s.galleryW) document.documentElement.style.setProperty("--side-w",s.galleryW);   // older files: adopt the gallery width as the sidebar width
   if(s.actW) document.documentElement.style.setProperty("--act-w",s.actW);
   if(s.baseLayer==="esri"){ map.removeLayer(google); esri.addTo(map); } else if(s.baseLayer==="none"){ map.removeLayer(google); }
   showNoGeo=!!s.showNoGeo; document.getElementById("showNoGeo").checked=showNoGeo;
