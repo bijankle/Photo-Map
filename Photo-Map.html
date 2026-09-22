@@ -2468,26 +2468,31 @@ function parseShareHash(){
 (function(){
   if(!/^https?:$/.test(location.protocol)) return;   // local file / offline copy: nothing to check
   let baseTag=null, dismissedTag=null, pill=null;
+  let docLM=null; try{ const d=new Date(document.lastModified); if(!isNaN(d)) docLM=d.getTime(); }catch(e){}   // when THIS copy of the page was published
   async function fetchTag(){
-    try{ const r=await fetch(location.href,{method:"HEAD",cache:"no-store"});
+    try{ const r=await fetch(location.pathname+"?upd="+Date.now(),{method:"HEAD",cache:"no-store"});
       if(!r.ok) return null;
-      return r.headers.get("etag")||r.headers.get("last-modified")||null;
+      return { tag:r.headers.get("etag")||r.headers.get("last-modified")||null, lm:r.headers.get("last-modified")||null };
     }catch(e){ return null; }
   }
+  function hardReload(){ location.replace(location.pathname+"?v="+Date.now()); }   // cache-busting: guarantees the fresh copy
   function showPill(tag){
     if(pill) return;
     pill=document.createElement("div"); pill.id="updpill";
     pill.innerHTML='<span>A newer version of PhotoMap is available.</span><button class="updgo" type="button">Refresh</button><button class="updx" type="button" title="Not now">×</button>';
     document.body.appendChild(pill);
-    pill.querySelector(".updgo").addEventListener("click",()=>{ location.reload(); });
+    pill.querySelector(".updgo").addEventListener("click",hardReload);
     pill.querySelector(".updx").addEventListener("click",()=>{ dismissedTag=tag; pill.remove(); pill=null; });
   }
   async function check(){
-    const t=await fetchTag(); if(!t) return;
-    if(!baseTag){ baseTag=t; return; }                 // first successful read = the running build
-    if(t!==baseTag && t!==dismissedTag) showPill(t);
+    const t=await fetchTag(); if(!t||!t.tag) return;
+    // The browser can serve a STALE cached page: compare this copy's publish time with the server's.
+    const srvLM=t.lm?Date.parse(t.lm):NaN;
+    if(docLM&&!isNaN(srvLM)&&srvLM-docLM>20000&&t.tag!==dismissedTag){ showPill(t.tag); return; }
+    if(!baseTag){ baseTag=t.tag; return; }             // first read = the running build (only trusted when times matched)
+    if(t.tag!==baseTag && t.tag!==dismissedTag) showPill(t.tag);
   }
-  check();                                             // capture the running build's tag
+  check();                                             // catches a stale-from-cache load right away
   setInterval(check, 5*60*1000);                       // then look for updates every 5 minutes…
   document.addEventListener("visibilitychange",()=>{ if(!document.hidden) check(); });   // …and when you come back to the tab
 })();
