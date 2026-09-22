@@ -101,8 +101,9 @@
   .folder-pop .fp-tag.on{opacity:1;background:var(--accent-tint);border-color:var(--accent);}
   .folder-pop .fp-create{font:600 11px var(--font);color:#fff;background:var(--accent);border:none;border-radius:6px;padding:5px 10px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .folder-pop .fp-create:hover{background:var(--accent2);}
-  .map-tags{position:absolute;left:12px;bottom:14px;z-index:1000;display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:280px;max-height:48%;overflow:auto;scrollbar-width:none;}
-  .map-tags::-webkit-scrollbar{display:none;}
+  .map-tags{position:absolute;left:12px;bottom:14px;z-index:1000;display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:280px;}
+  .mt-pills{display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-height:38vh;overflow:auto;scrollbar-width:none;}
+  .mt-pills::-webkit-scrollbar{display:none;}
   .map-tags.filtered .ip-tag{opacity:.65;}
   .map-tags.filtered .ip-tag.on{opacity:1;border-color:var(--accent);background:var(--accent-tint);}
   .ip-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:6;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:#ffffffe6;color:var(--text);font-size:26px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s;box-shadow:0 2px 10px #1e1f2226;}
@@ -318,6 +319,92 @@
   .dropzone{position:fixed;inset:0;z-index:2500;display:none;align-items:center;justify-content:center;background:rgba(255,255,255,.86);border:3px dashed var(--accent);margin:14px;border-radius:18px;font-family:var(--font);font-weight:700;font-size:26px;color:var(--accent);pointer-events:none;}
   .dropzone.show{display:flex;}
   @media (max-width:900px){ .stats{display:none;} }
+  /* ---- layout order: actions | map | splitter | photo/gallery | tab strip ---- */
+  .actpanel{order:1;} #map{order:2;} #splitter{order:3;} .imgpanel{order:4;} .gallery{order:5;} .rtabs{order:6;}
+
+  /* left actions panel */
+  .actpanel{width:270px;flex:0 0 270px;min-width:200px;height:100%;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:2;}
+  .act-head{display:flex;align-items:center;gap:8px;padding:12px 12px 8px;}
+  .act-head .title{font-weight:700;color:var(--ink);font-size:14px;}
+  .act-head .count{font-family:var(--mono);font-size:10px;color:var(--dim);flex:1;}
+  .act-tgl{font-family:var(--mono);font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);background:var(--panel2);border:1px solid var(--line2);border-radius:999px;padding:4px 9px;cursor:pointer;}
+  .act-tgl:hover{border-color:var(--accent);color:var(--accent);}
+  .act-tgl.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .act-new{padding:0 12px 10px;}
+  .act-new input{width:100%;box-sizing:border-box;font:inherit;font-size:13px;color:var(--ink);background:var(--panel2);border:1px solid var(--line2);border-radius:9px;padding:8px 10px;outline:none;}
+  .act-new input:focus{border-color:var(--accent);}
+  .act-list{flex:1;overflow-y:auto;padding:0 10px 12px;display:flex;flex-direction:column;gap:6px;}
+  .act-row{display:flex;align-items:flex-start;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 9px;cursor:pointer;}
+  .act-row:hover{border-color:var(--accent);}
+  .act-row.sel{border-color:var(--accent);background:var(--accent-tint);box-shadow:0 0 0 1px var(--accent);}
+  .act-row.done .t{text-decoration:line-through;color:var(--dim);}
+  .act-chk{display:flex;align-items:center;padding-top:1px;cursor:pointer;}
+  .act-chk input{width:15px;height:15px;accent-color:var(--good);cursor:pointer;}
+  .act-body{flex:1;min-width:0;}
+  .act-body .t{font-size:13px;color:var(--ink);line-height:1.35;word-wrap:break-word;}
+  .act-body .m{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:2px;}
+  .act-list .empty-msg{color:var(--dim);font-size:12px;text-align:center;padding:18px 8px;}
+
+  /* right tab strip */
+  .rtabs{width:42px;flex:0 0 42px;height:100%;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;gap:6px;padding-top:10px;z-index:2;}
+  .rtab{writing-mode:vertical-rl;transform:rotate(180deg);font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;
+    color:var(--muted);background:var(--panel2);border:1px solid var(--line2);border-radius:0 8px 8px 0;padding:14px 6px;margin-left:5px;cursor:pointer;}
+  .rtab:hover{color:var(--accent);border-color:var(--accent);}
+  .rtab.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+  /* tab visibility: photo tab shows the viewer panel (or its placeholder), gallery tab shows the gallery */
+  #main.tab-photo .imgpanel{display:flex;}
+  #main.tab-photo .gallery{display:none!important;}
+  #main.tab-gallery .imgpanel{display:none!important;}
+  #main.tab-gallery .gallery{display:flex;}
+  .imgpanel:not(.open)>*{display:none!important;}
+  .imgpanel:not(.open)>.ip-empty{display:grid!important;}
+  .ip-empty{display:none;place-items:center;width:100%;height:100%;color:var(--dim);font-size:14px;text-align:center;padding:20px;line-height:1.6;}
+
+  /* actions strip under the open photo */
+  .ip-actions{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;width:min(46%,430px);max-height:36%;z-index:40;
+    display:flex;flex-direction:column;gap:6px;background:#ffffffef;backdrop-filter:blur(8px);border:1px solid var(--line2);border-radius:12px;padding:8px 10px;box-shadow:0 8px 24px #1e1f2226;}
+  .ipa-head{display:flex;align-items:center;justify-content:space-between;}
+  .ipa-head .t{font-family:var(--mono);font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);}
+  .ipa-tgl{font-family:var(--mono);font-size:10px;color:var(--muted);background:none;border:1px solid var(--line2);border-radius:999px;padding:2px 8px;cursor:pointer;}
+  .ipa-tgl:hover{border-color:var(--accent);color:var(--accent);}
+  .ipa-tgl.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .ipa-list{overflow-y:auto;display:flex;flex-direction:column;gap:4px;min-height:0;}
+  .ipa-row{display:flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:5px 7px;}
+  .ipa-row .t{flex:1;font-size:12.5px;color:var(--ink);min-width:0;word-wrap:break-word;}
+  .ipa-row.done .t{text-decoration:line-through;color:var(--dim);}
+  .ipa-x{border:none;background:none;color:var(--faint);font-size:15px;cursor:pointer;padding:0 2px;line-height:1;}
+  .ipa-x:hover{color:var(--bad);}
+  .ipa-none{font-size:12px;color:var(--dim);text-align:center;padding:2px 0;}
+  #ipaNew{width:100%;box-sizing:border-box;font:inherit;font-size:12.5px;color:var(--ink);background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:6px 8px;outline:none;}
+  #ipaNew:focus{border-color:var(--accent);}
+
+  /* gallery banner while an action filters the thumbnails */
+  .act-note{display:flex;align-items:center;gap:8px;background:var(--accent-tint);border:1px solid var(--accent);border-radius:9px;padding:7px 10px;margin:0 0 10px;font-size:12px;color:var(--accent2);}
+  .act-note button{margin-left:auto;border:none;background:var(--accent);color:#fff;font:inherit;font-size:11px;border-radius:999px;padding:3px 10px;cursor:pointer;}
+
+  /* map bottom-left: active-filter pills + Search tag / Actions only buttons */
+  .mt-btnrow{display:flex;gap:6px;align-items:center;}
+  .mt-btn{font-family:var(--mono);font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--text);background:#ffffffe8;backdrop-filter:blur(8px);
+    border:1px solid var(--line2);border-radius:9px;padding:7px 10px;cursor:pointer;box-shadow:0 6px 18px #1e1f221f;}
+  .mt-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .mt-btn.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .mt-pop{position:absolute;bottom:46px;left:0;width:250px;background:var(--panel);border:1px solid var(--line2);border-radius:12px;box-shadow:0 12px 32px #1e1f2233;padding:8px;display:none;flex-direction:column-reverse;gap:6px;}
+  .mt-pop input{width:100%;box-sizing:border-box;font:inherit;font-size:12.5px;color:var(--ink);background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:6px 8px;outline:none;}
+  .mt-pop input:focus{border-color:var(--accent);}
+  .mt-results{display:flex;flex-direction:column-reverse;gap:4px;max-height:240px;overflow-y:auto;}
+  .mt-item{border:1px solid var(--line2);background:var(--panel2);border-radius:8px;padding:6px 9px;font-size:12px;color:var(--ink);cursor:pointer;text-align:left;}
+  .mt-item:hover{border-color:var(--accent);color:var(--accent);}
+  .mt-item.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+  /* altitude bar extras */
+  .ab-blank{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;color:var(--muted);cursor:pointer;margin-left:auto;margin-right:10px;}
+  .ab-blank input{accent-color:var(--accent);cursor:pointer;}
+  .ab-read{width:100%;box-sizing:border-box;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--accent);background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:7px 10px;cursor:pointer;}
+  .ab-read:hover{border-color:var(--accent);}
+  .ab-read.hidden{display:none;}
+  .ab-read[disabled]{color:var(--faint);cursor:default;}
+
   /* right-click menu on photo dots */
   #ctxmenu{position:fixed;z-index:7000;background:var(--panel);border:1px solid var(--line2);border-radius:10px;
     box-shadow:0 10px 30px #1e1f2233;padding:6px;display:none;min-width:214px;}
@@ -369,8 +456,15 @@
   <button class="btn primary" id="btnReconnect">Load</button>
 </div>
 
-<div class="main" id="main">
+<div class="main tab-photo" id="main">
+  <aside class="actpanel" id="actPanel">
+    <div class="act-head"><span class="title">Actions</span><span class="count" id="actCount">0 open</span>
+      <button class="act-tgl" id="actOpenOnly" title="Show only uncompleted actions in this list">Open only</button></div>
+    <div class="act-new"><input type="text" id="actNewInput" placeholder="+ New action — Enter to add" autocomplete="off" /></div>
+    <div class="act-list" id="actList"></div>
+  </aside>
   <div class="imgpanel" id="imgPanel">
+    <div class="ip-empty" id="ipEmpty"><div><b>No photo open.</b><br/><span class="hint">Click a dot on the map, a gallery thumbnail, or an action.</span></div></div>
     <div class="lb-stage" id="lbStage">
       <img class="main" id="lbImg" src="" alt="" draggable="false" />
       <canvas class="lb-mark" id="lbMark"></canvas>
@@ -413,13 +507,17 @@
     <div class="ip-fullbox">
       <label class="lb-fullchk" id="lbFullWrap"><input type="checkbox" id="lbFull" /><span>Full quality</span></label>
     </div>
+    <div class="ip-actions" id="ipActions">
+      <div class="ipa-head"><span class="t">Actions</span><button class="ipa-tgl" id="ipaHide" title="Hide completed actions">Hide done</button></div>
+      <div class="ipa-list" id="ipaList"></div>
+      <input type="text" id="ipaNew" placeholder="+ Add action for this photo" autocomplete="off" />
+    </div>
     <div class="folder-pop" id="folderPop"></div>
     <div class="tbed" id="tbEditor" style="display:none">
       <div class="tbctrl"><button id="tbDel" class="tbdel" title="Delete text box">&times;</button><button id="tbMinus" title="Smaller">A&minus;</button><button id="tbPlus" title="Larger">A+</button><span class="tbmove" id="tbMove" title="Drag to move">&#10021;</span></div>
       <div class="tbtext" id="tbText" contenteditable="true" spellcheck="false"></div>
     </div>
   </div>
-  <div class="splitter imgsplit" id="imgSplit"></div>
   <div id="map"></div>
   <div class="progress" id="progress"></div>
   <div class="leftstack" id="leftstack">
@@ -430,8 +528,19 @@
       <div class="slider-wrap"><div class="slider-track"></div><div class="slider-fill" id="sliderFill"></div>
         <input type="range" id="rangeMin" min="0" max="100" value="0" /><input type="range" id="rangeMax" min="0" max="100" value="100" /></div>
     </div>
+    <div class="datebar hidden" id="altbar">
+      <div class="dhead"><span class="t">Altitude Range</span><label class="ab-blank" title="Also show photos with no altitude in their metadata"><input type="checkbox" id="altBlank" checked /> incl. blank</label><button class="reset" id="altReset">Reset</button></div>
+      <div class="vals"><span id="aStart">&mdash;</span><span id="aEnd">&mdash;</span></div>
+      <div class="slider-wrap"><div class="slider-track"></div><div class="slider-fill" id="altFill"></div>
+        <input type="range" id="altMin" min="0" max="100" value="0" /><input type="range" id="altMax" min="0" max="100" value="100" /></div>
+      <button class="ab-read hidden" id="altRead">Read altitudes from the photo files</button>
+    </div>
   </div>
   <div class="splitter" id="splitter"></div>
+  <div class="rtabs" id="rtabs">
+    <button class="rtab active" id="tabPhoto" title="Show the photo viewer">Photo</button>
+    <button class="rtab" id="tabGallery" title="Show the thumbnail gallery">Gallery</button>
+  </div>
   <aside class="gallery">
     <div class="gallery-head"><span class="title">Gallery</span><span class="count" id="galCount">0 shown</span></div>
     <div class="controls">
@@ -552,7 +661,7 @@ function passSearch(p){
 // Multi-tag filter: a photo passes only if it is in EVERY active tag (overlap/intersection).
 function passTags(p){ if(!tagFilters.size) return true; for(const f of tagFilters) if(!photoInFolder(p,f)) return false; return true; }
 function buildCluster(){
-  const feats=photos.filter(p=>p.lat!=null && passDate(p) && passSearch(p) && passTags(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng]))).map(p=>({type:"Feature",properties:{pid:p.id},geometry:{type:"Point",coordinates:[p.lng,p.lat]}}));
+  const feats=photos.filter(p=>p.lat!=null && passDate(p) && passSearch(p) && passTags(p) && passActs(p) && passAlt(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng]))).map(p=>({type:"Feature",properties:{pid:p.id},geometry:{type:"Point",coordinates:[p.lng,p.lat]}}));
   cluster=new Supercluster({radius:64,maxZoom:21,minPoints:2});
   cluster.load(feats);
 }
@@ -646,18 +755,21 @@ window.addEventListener("keydown",e=>{ if(e.key==="Escape"&&ctxMenu.style.displa
 function openDotMenu(p,ev){
   hideHover();
   const targets=selSet.has(p.id)?[...selSet].map(photoById).filter(Boolean):[p];
-  const moved=targets.filter(t=>t.glat!=null);
+  const many=targets.length>1;
   ctxMenu.innerHTML="";
-  const r=document.createElement("button"); r.className="ci"; r.type="button";
-  if(moved.length){
-    r.textContent="Restore original GPS"+(targets.length>1?" ("+moved.length+" photo"+(moved.length>1?"s":"")+")":"");
-    r.addEventListener("click",()=>{ closeCtx(); restoreGps(moved); });
-  } else { r.textContent=targets.length>1?"Original GPS (none moved)":"Original GPS (not moved)"; r.disabled=true; }
-  ctxMenu.appendChild(r);
-  if(selSet.size){ const d=document.createElement("button"); d.className="ci"; d.type="button"; d.textContent="Deselect all"; d.addEventListener("click",()=>{ closeCtx(); clearSel(); }); ctxMenu.appendChild(d); }
-  ctxMenu.style.display="block";
-  ctxMenu.style.left=Math.min(ev.clientX,innerWidth-234)+"px";
-  ctxMenu.style.top=Math.min(ev.clientY,innerHeight-(selSet.size?96:56))+"px";
+  if(selActs.size){
+    const ok=selActs.size===1||!many;   // one action to many photos, or many actions to one photo
+    mkCtxItem("Assign "+selActs.size+" selected action"+(selActs.size===1?"":"s")+" → "+(many?targets.length+" photos":"this photo"),
+      ()=>assignActs([...selActs],targets),
+      !ok,"One action to many photos, or many actions to one photo — not many to many");
+  }
+  mkCtxItem("New action for "+(many?targets.length+" photos":"this photo")+"…",
+    ()=>{ const t=prompt("New action:"); if(t) createAction(t,targets.map(x=>x.id)); });
+  const moved=targets.filter(t=>t.glat!=null);
+  if(moved.length) mkCtxItem("Restore original GPS"+(many?" ("+moved.length+" photo"+(moved.length>1?"s":"")+")":""),()=>restoreGps(moved));
+  else mkCtxItem(many?"Original GPS (none moved)":"Original GPS (not moved)",null,true);
+  if(selSet.size) mkCtxItem("Deselect all",clearSel);
+  showCtxAt(ev.clientX,ev.clientY);
 }
 function restoreGps(list){
   const items=[];
@@ -666,6 +778,180 @@ function restoreGps(list){
   pushTagAction(items); afterFolderChange();
 }
 function clearSel(){ selSet.clear(); setAreaBtn(); renderClusters(); }
+
+/* ================= ACTIONS =================
+   An action is a task with a tick box (tick = completed). Actions link to photos (one action to
+   many photos, or many actions to one photo). Stored in the .json like tags; photos untouched. */
+let actions=[], nextActId=1, selActs=new Set(), actionFilter=null;
+let actShowOpenOnly=false, actOnlyMap=false, ipHideDone=false, rightTab="photo";
+const actRingLayer=L.layerGroup().addTo(map);
+function actById(id){ return actions.find(a=>a.id===id)||null; }
+function actPhotos(a){ return a?photos.filter(p=>Array.isArray(p.acts)&&p.acts.includes(a.id)):[]; }
+function hasOpenAct(p){ return Array.isArray(p.acts)&&p.acts.some(id=>{ const a=actById(id); return a&&!a.done; }); }
+function passActs(p){ return !actOnlyMap||hasOpenAct(p); }
+function normActs(list){ let mx=0; const out=(list||[]).map(a=>({id:+a.id||0,text:String(a.text||""),done:!!a.done,created:a.created||null,doneAt:a.doneAt||null})).filter(a=>a.id>0&&a.text); out.forEach(a=>{ if(a.id>mx)mx=a.id; }); nextActId=mx+1; return out; }
+function rebuildActionFilter(){ actionFilter=selActs.size?new Set([...selActs].flatMap(id=>actPhotos(actById(id)).map(p=>p.id))):null; }
+function drawActionRings(){
+  actRingLayer.clearLayers(); if(!selActs.size) return;
+  const seen=new Set();
+  for(const id of selActs) for(const p of actPhotos(actById(id))){
+    if(p.lat==null||seen.has(p.id)) continue; seen.add(p.id);
+    actRingLayer.addLayer(L.circleMarker([p.lat,p.lng],{radius:12,color:"#D97706",weight:3,fill:false,dashArray:"4 4",interactive:false}));
+  }
+}
+function clearActSel(){ if(!selActs.size) return; selActs.clear(); actionFilter=null; renderActions(); drawActionRings(); updateGallery(); }
+function createAction(text,pids){
+  text=(text||"").trim(); if(!text) return null;
+  const a={id:nextActId++,text,done:false,created:Date.now(),doneAt:null};
+  actions.unshift(a);
+  if(pids&&pids.length) assignActs([a.id],pids.map(photoById).filter(Boolean));
+  else afterFolderChange();
+  return a;
+}
+function setActionDone(a,done){ a.done=!!done; a.doneAt=a.done?Date.now():null; afterFolderChange(); }
+function renameAction(a){ const t=prompt("Action text:",a.text); if(t==null) return; const v=t.trim(); if(v){ a.text=v; afterFolderChange(); } }
+function deleteAction(a){
+  const n=actPhotos(a).length;
+  if(!confirm('Delete the action "'+a.text+'"?\n\nIt will be removed from '+n+' photo'+(n===1?'':'s')+'. (Removing it from photos is undoable; the action itself is not.)')) return;
+  const items=[];
+  for(const p of photos){ if(Array.isArray(p.acts)&&p.acts.includes(a.id)){ const before=snapshotTags(p); p.acts=p.acts.filter(x=>x!==a.id); items.push({id:p.id,before,after:snapshotTags(p)}); } }
+  if(items.length) pushTagAction(items);
+  actions=actions.filter(x=>x!==a); selActs.delete(a.id);
+  afterFolderChange();
+}
+function assignActs(actIds,phList){
+  const items=[];
+  for(const p of phList){
+    const before=snapshotTags(p); const set=new Set(p.acts||[]); let ch=false;
+    for(const id of actIds){ if(!set.has(id)){ set.add(id); ch=true; } }
+    if(!ch) continue; p.acts=[...set]; items.push({id:p.id,before,after:snapshotTags(p)});
+  }
+  if(items.length) pushTagAction(items);
+  afterFolderChange();
+}
+function unassignAct(a,p){
+  if(!Array.isArray(p.acts)||!p.acts.includes(a.id)) return;
+  const before=snapshotTags(p); p.acts=p.acts.filter(x=>x!==a.id);
+  pushTagAction([{id:p.id,before,after:snapshotTags(p)}]);
+  afterFolderChange();
+}
+function clickAction(a){
+  if(selActs.has(a.id)){ selActs.delete(a.id); rebuildActionFilter(); renderActions(); drawActionRings(); updateGallery(); return; }
+  selActs.add(a.id); rebuildActionFilter(); renderActions(); drawActionRings(); updateGallery();
+  const ps=actPhotos(a);
+  const geo=ps.filter(p=>p.lat!=null);
+  if(geo.length){ try{ map.fitBounds(L.latLngBounds(geo.map(p=>[p.lat,p.lng])),{padding:[70,70],maxZoom:19}); }catch(e){} }
+  if(ps.length===1) openViewer(ps[0]);            // single photo: straight to the Photo tab
+  else if(ps.length>1) setTab("gallery");         // several: gallery shows just these thumbnails
+}
+function renderActions(){
+  const list=document.getElementById("actList"); if(!list) return;
+  const openN=actions.filter(a=>!a.done).length;
+  document.getElementById("actCount").textContent=openN+" open / "+actions.length;
+  document.getElementById("actOpenOnly").classList.toggle("on",actShowOpenOnly);
+  const shown=actShowOpenOnly?actions.filter(a=>!a.done):actions;
+  if(!shown.length){
+    list.innerHTML='<div class="empty-msg">'+(actions.length?'No open actions — all done ✓':'No actions yet.<br/><span class="hint">Type above, or right-click a photo dot → “New action”.</span>')+'</div>';
+    return;
+  }
+  list.innerHTML=shown.map(a=>{ const n=actPhotos(a).length;
+    return '<div class="act-row'+(a.done?' done':'')+(selActs.has(a.id)?' sel':'')+'" data-aid="'+a.id+'">'
+      +'<label class="act-chk" title="'+(a.done?'Reopen this action':'Mark completed')+'"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
+      +'<div class="act-body"><div class="t">'+esc(a.text)+'</div><div class="m">'+n+' photo'+(n===1?'':'s')+(a.done&&a.doneAt?' · done '+fmtDate(a.doneAt):'')+'</div></div></div>'; }).join("");
+  list.querySelectorAll(".act-row").forEach(el=>{
+    const a=actById(Number(el.dataset.aid)); if(!a) return;
+    el.querySelector("input").addEventListener("click",e=>{ e.stopPropagation(); setActionDone(a,e.target.checked); });
+    el.addEventListener("click",e=>{ if(e.target.closest(".act-chk")) return; clickAction(a); });
+    el.addEventListener("contextmenu",e=>{ e.preventDefault(); e.stopPropagation(); openActMenu(a,e); });
+  });
+}
+function renderIpActions(){
+  const box=document.getElementById("ipActions"); if(!box) return;
+  const p=lb.classList.contains("open")?curPhoto():null;
+  if(!p){ box.style.display="none"; return; }
+  box.style.display="flex";
+  const all=(p.acts||[]).map(actById).filter(Boolean);
+  const shown=ipHideDone?all.filter(a=>!a.done):all;
+  const hideBtn=document.getElementById("ipaHide");
+  hideBtn.classList.toggle("on",ipHideDone);
+  hideBtn.style.display=all.some(a=>a.done)?"":"none";
+  const listEl=document.getElementById("ipaList");
+  listEl.innerHTML=shown.length?shown.map(a=>'<div class="ipa-row'+(a.done?' done':'')+'" data-aid="'+a.id+'">'
+    +'<label class="act-chk"><input type="checkbox"'+(a.done?' checked':'')+'/></label><span class="t">'+esc(a.text)+'</span>'
+    +'<button class="ipa-x" title="Remove this action from this photo">&times;</button></div>').join("")
+    :'<div class="ipa-none">No actions on this photo.</div>';
+  listEl.querySelectorAll(".ipa-row").forEach(el=>{
+    const a=actById(Number(el.dataset.aid)); if(!a) return;
+    el.querySelector("input").addEventListener("click",e=>{ e.stopPropagation(); setActionDone(a,e.target.checked); });
+    el.querySelector(".ipa-x").addEventListener("click",e=>{ e.stopPropagation(); unassignAct(a,curPhoto()); });
+  });
+}
+document.getElementById("actOpenOnly").addEventListener("click",()=>{ actShowOpenOnly=!actShowOpenOnly; renderActions(); persistState(); });
+document.getElementById("actNewInput").addEventListener("keydown",e=>{
+  if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return;
+  e.target.value=""; createAction(v,null);
+});
+document.getElementById("ipaHide").addEventListener("click",()=>{ ipHideDone=!ipHideDone; renderIpActions(); });
+document.getElementById("ipaNew").addEventListener("keydown",e=>{
+  if(e.key!=="Enter") return; const p=curPhoto(); const v=e.target.value.trim(); if(!v||!p) return;
+  e.target.value=""; createAction(v,[p.id]);
+});
+["mousedown","pointerdown","dblclick"].forEach(ev=>document.getElementById("ipActions").addEventListener(ev,e=>e.stopPropagation()));
+
+/* right sidebar tabs */
+function setTab(t){
+  rightTab=(t==="gallery")?"gallery":"photo";
+  const m=document.getElementById("main");
+  m.classList.toggle("tab-photo",rightTab==="photo"); m.classList.toggle("tab-gallery",rightTab==="gallery");
+  document.getElementById("tabPhoto").classList.toggle("active",rightTab==="photo");
+  document.getElementById("tabGallery").classList.toggle("active",rightTab==="gallery");
+  setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); if(rightTab==="photo"&&lb.classList.contains("open")) refit(); },30);
+}
+document.getElementById("tabPhoto").addEventListener("click",()=>{ setTab("photo"); persistState(); });
+document.getElementById("tabGallery").addEventListener("click",()=>{ setTab("gallery"); persistState(); });
+
+/* right-click menu on an action row */
+function mkCtxItem(label,fn,disabled,title){
+  const b=document.createElement("button"); b.className="ci"; b.type="button"; b.textContent=label;
+  if(disabled){ b.disabled=true; if(title) b.title=title; }
+  else b.addEventListener("click",()=>{ closeCtx(); fn(); });
+  ctxMenu.appendChild(b); return b;
+}
+function showCtxAt(x,y){ ctxMenu.style.display="block"; const r=ctxMenu.getBoundingClientRect(); ctxMenu.style.left=Math.min(x,innerWidth-r.width-8)+"px"; ctxMenu.style.top=Math.min(y,innerHeight-r.height-8)+"px"; }
+function openActMenu(a,ev){
+  ctxMenu.innerHTML="";
+  const actIds=(selActs.has(a.id)&&selActs.size>1)?[...selActs]:[a.id];
+  const many=actIds.length>1;
+  if(selSet.size){
+    const ok=!many||selSet.size===1;
+    mkCtxItem("Assign "+(many?actIds.length+" selected actions":"action")+" → "+selSet.size+" selected photo"+(selSet.size===1?"":"s"),
+      ()=>assignActs(actIds,[...selSet].map(photoById).filter(Boolean)),
+      !ok,"One action to many photos, or many actions to one photo — not many to many");
+  }
+  if(lb.classList.contains("open")&&curPhoto())
+    mkCtxItem("Assign "+(many?actIds.length+" selected actions":"action")+" → open photo",()=>assignActs(actIds,[curPhoto()]));
+  if(!selSet.size&&!(lb.classList.contains("open")&&curPhoto()))
+    mkCtxItem("Assign → select photos first (Select area, or open a photo)",null,true);
+  mkCtxItem(a.done?"Reopen action":"Mark completed",()=>setActionDone(a,!a.done));
+  mkCtxItem("Rename…",()=>renameAction(a));
+  mkCtxItem("Delete action…",()=>deleteAction(a));
+  showCtxAt(ev.clientX,ev.clientY);
+}
+renderActions();   // initial (empty) state of the panel
+
+/* right-click on empty map: general commands */
+map.on("contextmenu",e=>{
+  if(drawing||measuring||dotDrag) return;
+  e.originalEvent.preventDefault();
+  ctxMenu.innerHTML="";
+  mkCtxItem("Select area [s]",toggleSelect);
+  mkCtxItem("Filter area [f]",toggleFilter);
+  mkCtxItem("Zoom window [z]",toggleZoom);
+  mkCtxItem("Measure [m]",toggleMeasure);
+  mkCtxItem("New action…",()=>{ const t=prompt("New action:"); if(t) createAction(t,null); });
+  if(selSet.size||selActs.size) mkCtxItem("Clear selections",()=>{ clearSel(); clearActSel(); });
+  showCtxAt(e.originalEvent.clientX,e.originalEvent.clientY);
+});
 
 /* file loading */
 const IMG_RE=/\.(jpe?g|png|tiff?|heic|heif|webp|gif|bmp)$/i;
@@ -812,7 +1098,7 @@ async function processOne(it){
   // The check-and-reserve below runs synchronously (no await between), so it is race-safe
   // across the concurrent worker pool.
   if(sz!=null && sizeIndex.has(sz)){ const owner=sizeIndex.get(sz); addPath(owner,it.path); if(it.path) existingPaths.set(it.path,owner); if(!owner.thumb) await healRenditions(owner,file); return; }
-  const p={id:nextId++,path:it.path,name:it.name,file,size:sz,isHeic:false,thumb:null,lat:null,lng:null,time:null,dir:null,marks:[],paths:[it.path],vpaths:[]};
+  const p={id:nextId++,path:it.path,name:it.name,file,size:sz,isHeic:false,thumb:null,lat:null,lng:null,alt:null,time:null,dir:null,marks:[],paths:[it.path],vpaths:[],acts:[]};
   if(sz!=null) sizeIndex.set(sz,p);
   if(it.path) existingPaths.set(it.path,p);
   photos.push(p);
@@ -822,6 +1108,7 @@ async function processOne(it){
       if(typeof ex.latitude==="number"&&typeof ex.longitude==="number"){ p.lat=ex.latitude; p.lng=ex.longitude; }
       const d=ex.DateTimeOriginal||ex.CreateDate||ex.ModifyDate; if(d instanceof Date&&!isNaN(d)) p.time=d.getTime();
       if(typeof ex.GPSImgDirection==="number") p.dir=ex.GPSImgDirection;
+      p.alt=altFromExif(ex);
     }
   }catch(e){}
   p.isHeic=isHeic(file);
@@ -905,6 +1192,8 @@ function buildDateFilter(){
   dateMin=times[0]; dateMax=times[0]; for(const t of times){ if(t<dateMin)dateMin=t; if(t>dateMax)dateMax=t; }
   dateLo=dateMin; dateHi=dateMax; bar.classList.remove("hidden"); syncSliderUI();
 }
+/* the altitude bar follows the date bar everywhere the filters get rebuilt */
+const _bdf=buildDateFilter; buildDateFilter=function(){ _bdf(); buildAltFilter(); };
 const rMin=document.getElementById("rangeMin"),rMax=document.getElementById("rangeMax"),sliderFill=document.getElementById("sliderFill");
 function pctFromTime(t){ return dateMax===dateMin?0:(t-dateMin)/(dateMax-dateMin)*100; }
 function timeFromPct(p){ return dateMin+(dateMax-dateMin)*(p/100); }
@@ -913,6 +1202,65 @@ function onSlider(){ let lo=parseFloat(rMin.value),hi=parseFloat(rMax.value); if
 rMin.addEventListener("input",onSlider); rMax.addEventListener("input",onSlider);
 document.getElementById("dateReset").addEventListener("click",()=>{ dateLo=dateMin; dateHi=dateMax; syncSliderUI(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); });
 function passDate(p){ if(dateLo==null||p.time==null)return true; return p.time>=dateLo&&p.time<=dateHi; }
+
+/* altitude filter (from photo GPS metadata; meters). Photos without altitude pass while "incl. blank" is ticked. */
+let altMinV=null,altMaxV=null,altLo=null,altHi=null,altBlank=true;
+function altFromExif(ex){
+  if(!ex) return null; let a=ex.GPSAltitude;
+  if(typeof a!=="number"||!isFinite(a)) return null;
+  const ref=ex.GPSAltitudeRef; if(a>0&&(ref===1||ref==="1"||(ref&&ref.byteLength))){ if(ref===1||ref==="1"||(ref[0]===1)) a=-a; }
+  return Math.round(a*10)/10;
+}
+function passAlt(p){ if(altLo==null) return true; if(p.alt==null) return altBlank; return p.alt>=altLo&&p.alt<=altHi; }
+function buildAltFilter(){
+  const bar=document.getElementById("altbar"); if(!bar) return;
+  if(!photos.length){ bar.classList.add("hidden"); altMinV=altMaxV=altLo=altHi=null; return; }
+  bar.classList.remove("hidden");
+  const alts=photos.filter(p=>p.alt!=null).map(p=>p.alt);
+  const missing=photos.length-alts.length;
+  const rd=document.getElementById("altRead"); rd.classList.toggle("hidden",missing===0);
+  if(rd) rd.textContent="Read altitudes from the photo files"+(missing&&alts.length?" ("+missing+" missing)":"");
+  if(alts.length<2){ altMinV=altMaxV=altLo=altHi=null; document.getElementById("aStart").textContent="—"; document.getElementById("aEnd").textContent="—";
+    document.getElementById("altFill").style.left="0%"; document.getElementById("altFill").style.width="100%"; return; }
+  let mn=alts[0],mx=alts[0]; for(const a of alts){ if(a<mn)mn=a; if(a>mx)mx=a; }
+  altMinV=mn; altMaxV=mx;
+  if(altLo==null||altLo<mn) altLo=mn; if(altHi==null||altHi>mx) altHi=mx;
+  syncAltUI();
+}
+const aMin=document.getElementById("altMin"),aMax=document.getElementById("altMax"),altFillEl=document.getElementById("altFill");
+function pctFromAlt(a){ return altMaxV===altMinV?0:(a-altMinV)/(altMaxV-altMinV)*100; }
+function altFromPct(p){ return altMinV+(altMaxV-altMinV)*(p/100); }
+function fmtAlt(a){ return Math.round(a)+" m"; }
+function syncAltUI(){ if(altMinV==null) return; const lo=pctFromAlt(altLo),hi=pctFromAlt(altHi);
+  aMin.value=lo; aMax.value=hi; altFillEl.style.left=lo+"%"; altFillEl.style.width=(hi-lo)+"%";
+  document.getElementById("aStart").textContent=fmtAlt(altLo); document.getElementById("aEnd").textContent=fmtAlt(altHi); }
+function onAltSlider(){ if(altMinV==null) return; let lo=parseFloat(aMin.value),hi=parseFloat(aMax.value); if(lo>hi){const t=lo;lo=hi;hi=t;}
+  altLo=Math.round(altFromPct(lo)*10)/10; altHi=Math.round(altFromPct(hi)*10)/10; syncAltUI(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); }
+aMin.addEventListener("input",onAltSlider); aMax.addEventListener("input",onAltSlider);
+document.getElementById("altReset").addEventListener("click",()=>{ altLo=altMinV; altHi=altMaxV; if(altMinV!=null) syncAltUI(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); });
+document.getElementById("altBlank").addEventListener("change",e=>{ altBlank=e.target.checked; buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); });
+document.getElementById("altRead").addEventListener("click",readAltitudes);
+async function readAltitudes(){
+  const targets=photos.filter(p=>p.alt==null&&!p._altTried);
+  if(!targets.length){ buildAltFilter(); return; }
+  const btn=document.getElementById("altRead"); btn.disabled=true;
+  if(dirHandle){ try{ await ensurePermission(dirHandle); }catch(e){} }   // one prompt up front (stuck-drag safe), then silent reads
+  const total=targets.length; let done=0, found=0;
+  etaStart("altread",total,"Loading — reading altitudes 0/"+total+"…");
+  const queue=targets.slice();
+  await Promise.all(Array.from({length:4},async()=>{
+    for(;;){ const p=queue.shift(); if(!p) break;
+      try{ const f=await getOriginalFileSilent(p);
+        if(f){ const ex=await exifr.parse(f,{gps:true}).catch(()=>null); const a=altFromExif(ex); if(a!=null){ p.alt=a; found++; } }
+      }catch(e){}
+      p._altTried=true; done++;
+      if(done===total||done%5===0) loadNote("Loading — reading altitudes "+done+"/"+total+"…");
+    }
+  }));
+  etaEnd(); btn.disabled=false;
+  buildAltFilter(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState();
+  if(!found) alert("No altitudes could be read.\n\nEither the photos have no altitude in their metadata, or the photos folder isn't connected — click Refresh (or Open Folder) to connect it, then try again.");
+}
 
 /* area (box) filter */
 const areaBtn=document.getElementById("areaBtn");
@@ -937,7 +1285,7 @@ function dUp(e){
     if(!tiny){
       // Smart zoom: if the window contains photos (under the current filters), zoom to the extent
       // of that cluster; an empty window zooms precisely to what was drawn.
-      const inWin=photos.filter(p=>p.lat!=null&&passDate(p)&&passSearch(p)&&passTags(p)&&(!boxBounds||boxBounds.contains([p.lat,p.lng]))&&b.contains([p.lat,p.lng]));
+      const inWin=photos.filter(p=>p.lat!=null&&passDate(p)&&passSearch(p)&&passTags(p)&&passActs(p)&&passAlt(p)&&(!boxBounds||boxBounds.contains([p.lat,p.lng]))&&b.contains([p.lat,p.lng]));
       if(inWin.length) map.fitBounds(L.latLngBounds(inWin.map(p=>[p.lat,p.lng])),{padding:[46,46],maxZoom:20});
       else map.fitBounds(b);
     }
@@ -946,7 +1294,7 @@ function dUp(e){
   map.off("mousedown",dDown); drawing=false; drawMode=null; map.dragging.enable(); map.getContainer().style.cursor="";
   if(mode==="select"){   // select every visible dot inside the box so they can be dragged together
     if(!tiny){
-      const inWin=photos.filter(p=>p.lat!=null&&passDate(p)&&passSearch(p)&&passTags(p)&&(!boxBounds||boxBounds.contains([p.lat,p.lng]))&&b.contains([p.lat,p.lng]));
+      const inWin=photos.filter(p=>p.lat!=null&&passDate(p)&&passSearch(p)&&passTags(p)&&passActs(p)&&passAlt(p)&&(!boxBounds||boxBounds.contains([p.lat,p.lng]))&&b.contains([p.lat,p.lng]));
       selSet=new Set(inWin.map(p=>p.id));
     }
     setAreaBtn(); renderClusters(); return;
@@ -1026,7 +1374,7 @@ function updateGallery(keepLimit){
   const body=document.getElementById("galleryBody"); if(!photos.length) return;
   const bounds=map.getBounds(), center=map.getCenter();
   const spatial=boxBounds||bounds;
-  const passName=p=>passSearch(p)&&passTags(p);   // shared with the map so gallery + dots stay in sync
+  const passName=p=>passSearch(p)&&passTags(p)&&passActs(p)&&passAlt(p)&&(!actionFilter||actionFilter.has(p.id));   // shared with the map so gallery + dots stay in sync; actionFilter narrows to the selected actions' photos
   let inView=sortPhotos(photos.filter(p=>p.lat!=null&&passDate(p)&&passName(p)&&spatial.contains([p.lat,p.lng])),center);
   let noGeo=showNoGeo?sortPhotos(photos.filter(p=>p.lat==null&&passDate(p)&&passName(p)),center):[];
   /* keep the open viewer pinned to the same photo across re-sorts (lightboxIndex is positional) */
@@ -1042,6 +1390,7 @@ function updateGallery(keepLimit){
   const geoShow=showNoGeo?noGeo.slice(0,Math.max(0,galleryLimit-inShow.length)):[];
   const hidden=(inView.length-inShow.length)+((showNoGeo?noGeo.length:0)-geoShow.length);
   let html="";
+  if(actionFilter) html+='<div class="act-note">Photos for '+selActs.size+' selected action'+(selActs.size===1?'':'s')+' <button id="actNoteX" type="button">Show all</button></div>';
   if(inView.length) html+='<div class="section-label">On Map ('+inView.length+')</div><div class="grid">'+inShow.map(p=>cardHtml(p,false)).join("")+'</div>';
   if(showNoGeo&&geoShow.length) html+='<div class="section-label">No Location ('+noGeo.length+')</div><div class="grid">'+geoShow.map(p=>cardHtml(p,true)).join("")+'</div>';
   if(hidden>0) html+='<button class="gal-more" id="galMore">Show more ('+hidden.toLocaleString()+' remaining)</button>';
@@ -1049,6 +1398,7 @@ function updateGallery(keepLimit){
   body.innerHTML=html;
   body.querySelectorAll(".card").forEach(el=>{ const p=photoById(Number(el.dataset.id)); el.addEventListener("click",()=>openViewer(p)); el.addEventListener("mouseenter",()=>highlightDot(p)); el.addEventListener("mouseleave",highlightCurrent); });
   const more=body.querySelector("#galMore"); if(more) more.addEventListener("click",()=>{ galleryLimit+=GALLERY_CHUNK*2; updateGallery(true); });
+  const anx=body.querySelector("#actNoteX"); if(anx) anx.addEventListener("click",clearActSel);
   if(!body._moreWired){ body._moreWired=true; body.addEventListener("scroll",()=>{ if(!document.getElementById("galMore")) return; if(body.scrollTop+body.clientHeight>body.scrollHeight-320){ galleryLimit+=GALLERY_CHUNK*2; updateGallery(true); } }); }
   document.getElementById("galCount").textContent=lightboxList.length+" shown";
   document.getElementById("stView").textContent=inView.length;
@@ -1096,7 +1446,8 @@ function openViewer(p){
   let i=lightboxList.findIndex(x=>x.id===p.id); if(i<0){ lightboxList=[p].concat(lightboxList); i=0; }
   lightboxIndex=i;
   const wasOpen=lb.classList.contains("open");
-  lb.classList.add("open"); loadViewer(); renderMapTags();
+  lb.classList.add("open"); if(rightTab!=="photo") setTab("photo");
+  loadViewer(); renderMapTags();
   if(!wasOpen){ setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); },30); }
 }
 /* The viewer shows the cached screenshot-quality preview by default — instant navigation, no disk
@@ -1113,6 +1464,7 @@ function loadViewer(){
   fullToken++;   // invalidate any pending full-quality load from the previous photo
   showPreview(p);
   renderPhotoTags(p);
+  renderIpActions();
   highlightCurrent();
   setTimeout(()=>{ if(curPhoto()===p) getOriginalFileSilent(p).catch(()=>{}); },60);   // warm the file handle in the background so a Full-quality tick starts instantly
 }
@@ -1150,19 +1502,42 @@ function renderPhotoTags(p){
   el.classList.toggle("filtered",tagFilters.size>0);
   wireTagPills(el,true);
 }
-/* Tag rail on the MAP (bottom-left): every existing tag, filter-only (no ×) — always visible,
-   including while a photo is open (the rail lives on the map, beside the photo panel). */
+/* Tag rail on the MAP (bottom-left): only the ACTIVE tag filters show as pills; below them sit the
+   Search tag button (filter-only popup) and the "Actions only" map filter. */
+let mapTagPopShown=false, mtQuery="";
 function renderMapTags(){
   let el=document.getElementById("mapTags");
   if(!el){ el=document.createElement("div"); el.id="mapTags"; el.className="map-tags"; map.getContainer().appendChild(el);
-    ["mousedown","pointerdown","dblclick","wheel"].forEach(ev=>el.addEventListener(ev,e=>e.stopPropagation())); }
+    ["mousedown","pointerdown","dblclick","wheel","contextmenu"].forEach(ev=>el.addEventListener(ev,e=>e.stopPropagation())); }
   const folders=allFolders();
-  if(!folders.length){ el.style.display="none"; return; }
+  if(!folders.length&&!actions.length&&!actOnlyMap){ el.style.display="none"; return; }
   el.style.display="";
-  el.innerHTML=tagPillsHtml(folders);
+  const active=folders.filter(f=>tagFilters.has(f));
+  el.innerHTML='<div class="mt-pills">'+(active.length?tagPillsHtml(active):"")+'</div>'
+    +'<div class="mt-btnrow"><button class="mt-btn'+(mapTagPopShown?' on':'')+'" id="mtSearch" type="button" title="Search tags to filter the map">Search tag ▴</button>'
+    +'<button class="mt-btn'+(actOnlyMap?' on':'')+'" id="mtActs" type="button" title="Show only photos that still have an uncompleted action">Actions only</button></div>'
+    +'<div class="mt-pop" id="mtPop"></div>';
   el.classList.toggle("filtered",tagFilters.size>0);
-  wireTagPills(el);
+  if(active.length) wireTagPills(el);
+  document.getElementById("mtSearch").addEventListener("click",e=>{ e.stopPropagation(); mapTagPopShown=!mapTagPopShown; if(!mapTagPopShown) mtQuery=""; renderMapTags(); if(mapTagPopShown){ const i=document.getElementById("mtQ"); if(i) i.focus(); } });
+  document.getElementById("mtActs").addEventListener("click",e=>{ e.stopPropagation(); actOnlyMap=!actOnlyMap; buildCluster(); renderClusters(); updateGallery(); renderMapTags(); persistState(); });
+  if(mapTagPopShown) fillMapTagPop();
 }
+function fillMapTagPop(){
+  const pop=document.getElementById("mtPop"); if(!pop) return;
+  pop.style.display="flex";
+  const q=mtQuery.trim().toLowerCase();
+  const folders=allFolders();
+  const matches=q?folders.filter(f=>folderLabel(f).toLowerCase().includes(q)||f.toLowerCase().includes(q)).slice(0,40)
+                 :folders.filter(f=>tagFilters.has(f)).concat(recentTags.filter(f=>folders.includes(f)&&!tagFilters.has(f))).slice(0,8);
+  pop.innerHTML='<input type="text" id="mtQ" placeholder="Type to find a tag…" autocomplete="off" />'
+    +'<div class="mt-results">'+(matches.length?matches.map(f=>'<button type="button" class="mt-item'+(tagFilters.has(f)?' on':'')+'" data-f="'+esc(f)+'" title="'+esc(f)+'">'+esc(folderLabel(f))+'</button>').join("")
+      :'<div class="ipa-none">'+(q?'No matching tags.':'Type to search all tags.')+'</div>')+'</div>';
+  const inp=document.getElementById("mtQ"); inp.value=mtQuery;
+  inp.addEventListener("input",()=>{ mtQuery=inp.value; fillMapTagPop(); const i2=document.getElementById("mtQ"); if(i2){ i2.focus(); i2.setSelectionRange(i2.value.length,i2.value.length); } });
+  pop.querySelectorAll(".mt-item").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); toggleTagFilter(b.dataset.f); }));
+}
+document.addEventListener("mousedown",e=>{ if(mapTagPopShown && !e.target.closest("#mapTags")){ mapTagPopShown=false; mtQuery=""; renderMapTags(); } },true);
 function showPreview(p,keepView){
   if(curUrl){ URL.revokeObjectURL(curUrl); curUrl=null; }
   let s=p.preview||p.thumb||"";
@@ -1311,12 +1686,7 @@ document.addEventListener("keydown",e=>{
 function refit(){ if(lbImg.naturalWidth) setupFit(lbImg.naturalWidth,lbImg.naturalHeight); }
 function positionTools(){ try{ const ls=document.getElementById("leftstack"), mainEl=document.getElementById("main"); const mr=map.getContainer().getBoundingClientRect(), pr=mainEl.getBoundingClientRect(); ls.style.left=((mr.left-pr.left)+mr.width/2)+"px"; }catch(e){} }
 window.addEventListener("resize",()=>{ if(lb.classList.contains("open")) refit(); positionTools(); });
-(function(){
-  const sp=document.getElementById("imgSplit"); let drag=false, raf=0;
-  sp.addEventListener("mousedown",e=>{ if(!lb.classList.contains("open"))return; drag=true; document.body.style.cursor="col-resize"; document.body.style.userSelect="none"; e.preventDefault(); });
-  window.addEventListener("mousemove",e=>{ if(!drag)return; const total=document.getElementById("main").clientWidth; let w=Math.max(240,Math.min(e.clientX,total-360)); lb.style.flex="0 0 "+w+"px"; lb.style.width=w+"px"; refit(); positionTools(); if(!raf) raf=requestAnimationFrame(()=>{ raf=0; map.invalidateSize(); }); });
-  window.addEventListener("mouseup",()=>{ if(!drag)return; drag=false; document.body.style.cursor=""; document.body.style.userSelect=""; map.invalidateSize(); renderClusters(); });
-})();
+/* the right panel (photo/gallery, whichever tab is active) resizes via the #splitter handle */
 positionTools();
 const lbMark=document.getElementById("lbMark"); const markCtx=lbMark.getContext("2d");
 const tbEditor=document.getElementById("tbEditor"), tbText=document.getElementById("tbText");
@@ -1451,7 +1821,7 @@ lbStage.addEventListener("contextmenu",e=>{ if(markTool==="poly"&&draft&&draft.t
 /* ---- file info popover ---- */
 let fileInfoShown=false;
 function closeFileInfo(){ fileInfoShown=false; document.getElementById("fileInfo").style.display="none"; }
-function buildInfoHTML(p){ const rows=[["Name",p.name||""]]; if(p.time)rows.push(["Taken",fmtDate(p.time)]); if(p.size!=null)rows.push(["Size",fmtSize(p.size)]); if(p.lat!=null){ rows.push(["Latitude",(+p.lat).toFixed(6)]); rows.push(["Longitude",(+p.lng).toFixed(6)]); } if(p.dir!=null)rows.push(["Heading",Math.round(p.dir)+"\u00B0"]); if(p.isHeic)rows.push(["Format","HEIC"]); if(p.path&&p.path!==p.name)rows.push(["Path",p.path]); return rows.map(r=>'<div class="firow"><span class="fik">'+esc(r[0])+'</span><span class="fiv">'+esc(String(r[1]))+'</span></div>').join(""); }
+function buildInfoHTML(p){ const rows=[["Name",p.name||""]]; if(p.time)rows.push(["Taken",fmtDate(p.time)]); if(p.size!=null)rows.push(["Size",fmtSize(p.size)]); if(p.lat!=null){ rows.push(["Latitude",(+p.lat).toFixed(6)]); rows.push(["Longitude",(+p.lng).toFixed(6)]); } if(p.alt!=null)rows.push(["Altitude",p.alt+" m"]); if(p.dir!=null)rows.push(["Heading",Math.round(p.dir)+"\u00B0"]); if(p.isHeic)rows.push(["Format","HEIC"]); if(p.path&&p.path!==p.name)rows.push(["Path",p.path]); return rows.map(r=>'<div class="firow"><span class="fik">'+esc(r[0])+'</span><span class="fiv">'+esc(String(r[1]))+'</span></div>').join(""); }
 document.getElementById("fileInfoBtn").addEventListener("click",e=>{ e.stopPropagation(); const fi=document.getElementById("fileInfo"); if(fileInfoShown){ closeFileInfo(); return; } const p=curPhoto(); if(!p)return; fi.innerHTML=buildInfoHTML(p); fi.style.display="block"; fileInfoShown=true; });
 document.addEventListener("mousedown",e=>{ if(fileInfoShown && !e.target.closest("#fileInfo") && e.target.id!=="fileInfoBtn"){ closeFileInfo(); } },true);
 
@@ -1534,7 +1904,7 @@ document.addEventListener("keydown",e=>{
   const tag=((e.target&&e.target.tagName)||"").toLowerCase();
   if(tag==="input"||tag==="select"||tag==="textarea") return;
   if(document.activeElement===tbText) return;
-  if(e.key==="Escape"){ if(drawing) stopDraw(); else if(measuring) stopMeasure(); else if(selSet.size) clearSel(); return; }
+  if(e.key==="Escape"){ if(drawing) stopDraw(); else if(measuring) stopMeasure(); else if(selSet.size) clearSel(); else if(selActs.size) clearActSel(); return; }
   if(e.key==="z"||e.key==="Z"){ toggleZoom(); }
   else if(e.key==="f"||e.key==="F"){ toggleFilter(); }
   else if(e.key==="m"||e.key==="M"){ toggleMeasure(); }
@@ -1622,7 +1992,7 @@ function openFolderPop(){
    undo by timestamp so "undo" always reverts whichever edit happened most recently. */
 let tagUndoStack=[], tagRedoStack=[], recentTags=[];   // recentTags: last folders assigned via the UI, newest first (speeds up bulk tagging)
 function noteRecentTag(f){ if(!f) return; recentTags=[f].concat(recentTags.filter(x=>x!==f)).slice(0,10); }
-function snapshotTags(p){ return {paths:physPaths(p).slice(), vpaths:virtPaths(p).slice(), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null)}; }
+function snapshotTags(p){ return {paths:physPaths(p).slice(), vpaths:virtPaths(p).slice(), acts:(Array.isArray(p.acts)?p.acts.slice():[]), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null)}; }
 function pushTagAction(items){   // one undo step, possibly touching many photos (e.g. a multi-selection move)
   items=items.filter(it=>JSON.stringify(it.before)!==JSON.stringify(it.after));
   if(!items.length) return;
@@ -1630,7 +2000,7 @@ function pushTagAction(items){   // one undo step, possibly touching many photos
   tagRedoStack=[];
 }
 function recordTagChange(p,before){ pushTagAction([{id:p.id,before,after:snapshotTags(p)}]); }
-function applySnapRaw(id,snap){ const p=photoById(id); if(!p) return; p.paths=snap.paths.slice(); p.vpaths=snap.vpaths.slice(); if(snap.lat!=null){ p.lat=snap.lat; p.lng=snap.lng; } if("glat" in snap){ p.glat=snap.glat; p.glng=snap.glng; } }
+function applySnapRaw(id,snap){ const p=photoById(id); if(!p) return; p.paths=snap.paths.slice(); p.vpaths=snap.vpaths.slice(); if(snap.acts) p.acts=snap.acts.slice(); if(snap.lat!=null){ p.lat=snap.lat; p.lng=snap.lng; } if("glat" in snap){ p.glat=snap.glat; p.glng=snap.glng; } }
 function applyTagSnapshot(id,snap){ applySnapRaw(id,snap); afterFolderChange(); if(folderPopShown) openFolderPop(); }
 function undoTag(){ const a=tagUndoStack.pop(); if(!a) return false; tagRedoStack.push(a); const its=a.items||[{id:a.id,before:a.before}]; its.forEach(it=>applySnapRaw(it.id,it.before)); afterFolderChange(); if(folderPopShown) openFolderPop(); return true; }
 function redoTag(){ const a=tagRedoStack.pop(); if(!a) return false; tagUndoStack.push(a); const its=a.items||[{id:a.id,after:a.after}]; its.forEach(it=>applySnapRaw(it.id,it.after)); afterFolderChange(); if(folderPopShown) openFolderPop(); return true; }
@@ -1649,7 +2019,8 @@ function redoLatest(open){
   if(tagRT===null||(markRT!==null&&markRT<=tagRT)){ curMarks().push(redoMarks.pop()); redrawMarks(); persistState(); }   // replay forward in time
   else redoTag();
 }
-function afterFolderChange(){ updateGallery(); buildCluster(); renderClusters(); highlightCurrent(); renderPhotoTags(curPhoto()); idbSet("lastState",serializeState(false)).catch(()=>{});
+function afterFolderChange(){ if(typeof rebuildActionFilter==="function"&&actionFilter) rebuildActionFilter();
+  buildCluster(); renderClusters(); highlightCurrent(); drawActionRings(); updateGallery(); renderPhotoTags(curPhoto()); renderActions(); renderIpActions(); renderMapTags(); idbSet("lastState",serializeState(false)).catch(()=>{});
   ensureJsonWrite(true).then(()=>scheduleAutoSave());   // grant write in the click gesture, then debounce so rapid tag toggles batch into ONE small file write
 }
 document.getElementById("lbFolder").addEventListener("click",e=>{ e.stopPropagation(); if(folderPopShown) closeFolderPop(); else openFolderPop(); });
@@ -1734,7 +2105,10 @@ async function resolveFileByPath(dir,path){
 /* sidebar resize */
 const splitter=document.getElementById("splitter"); let resizing=false;
 splitter.addEventListener("mousedown",e=>{ resizing=true; e.preventDefault(); document.body.style.userSelect="none"; });
-window.addEventListener("mousemove",e=>{ if(!resizing)return; let w=Math.max(220,Math.min(window.innerWidth*0.75,window.innerWidth-e.clientX-3)); document.documentElement.style.setProperty("--gallery-w",w+"px"); map.invalidateSize(); });
+window.addEventListener("mousemove",e=>{ if(!resizing)return; let w=Math.max(240,Math.min(window.innerWidth*0.75,window.innerWidth-e.clientX-45));   // 42px tab strip + splitter sit right of the panel
+  document.documentElement.style.setProperty(rightTab==="photo"?"--img-w":"--gallery-w",w+"px");
+  if(rightTab==="photo"&&lb.classList.contains("open")) refit();
+  positionTools(); map.invalidateSize(); });
 window.addEventListener("mouseup",()=>{ if(resizing){resizing=false;document.body.style.userSelect="";persistState();} });
 
 /* file ops */
@@ -1755,8 +2129,10 @@ function clearAll(redraw){
   if(boxRect){map.removeLayer(boxRect);boxRect=null;} boxBounds=null; setAreaBtn();
   photos=[]; nextId=1; cluster=null; markerLayer.clearLayers(); undoStack=[]; lightboxList=[]; lightboxIndex=0; sizeIndex=new Map();
   selSet.clear(); dotMarkers.clear(); setAreaBtn(); if(typeof closeCtx==="function") closeCtx();
+  actions=[]; nextActId=1; selActs.clear(); actionFilter=null; actRingLayer.clearLayers(); renderActions(); renderIpActions();
   if(measuring) stopMeasure();
   dateMin=dateMax=dateLo=dateHi=null; document.getElementById("datebar").classList.add("hidden");
+  altMinV=altMaxV=altLo=altHi=null; document.getElementById("altbar").classList.add("hidden");
   if(redraw){ updateStats(); document.getElementById("galCount").textContent="0 shown"; document.getElementById("stView").textContent="0";
     document.getElementById("galleryBody").innerHTML='<div class="empty-msg"><b>Map cleared.</b><br/>Open a folder to load photos again.</div>'; persistState(); }
 }
@@ -1884,17 +2260,20 @@ document.getElementById("jsonInput").addEventListener("change",async e=>{ const 
 function serializeState(includeImages){
   return {
     version:3, folderName, savedAt:new Date().toISOString(),
+    actions: actions.map(a=>({id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null})),
     settings:{ baseLayer: map.hasLayer(google)?"google":map.hasLayer(esri)?"esri":"none", showNoGeo, sortBy:currentSort,
       thumb:getComputedStyle(document.documentElement).getPropertyValue("--thumb").trim(),
       galleryW:getComputedStyle(document.documentElement).getPropertyValue("--gallery-w").trim(), dateLo, dateHi,
       box: boxBounds?[boxBounds.getSouth(),boxBounds.getWest(),boxBounds.getNorth(),boxBounds.getEast()]:null,
-      recentTags: recentTags.slice(0,10),
+      recentTags: recentTags.slice(0,10), rightTab, actShowOpenOnly, actOnlyMap, altLo, altHi, altBlank,
       view:{ center:[map.getCenter().lat, map.getCenter().lng], zoom:map.getZoom() } },
     photos: photos.map(p=>{ const o={path:p.path,name:p.name,lat:p.lat,lng:p.lng,time:p.time,dir:p.dir,size:p.size,isHeic:p.isHeic};
       if(Array.isArray(p.paths)&&(p.paths.length!==1||p.paths[0]!==p.path))o.paths=p.paths;   // physical locations (incl. empty when pruned from disk)
       if(Array.isArray(p.vpaths)&&p.vpaths.length)o.vpaths=p.vpaths;   // in-app tag memberships — never pruned by disk syncs
       if(p.rot)o.rot=p.rot;
       if(p.glat!=null){ o.glat=p.glat; o.glng=p.glng; }   // dot was repositioned in-app; lat/lng show it, glat/glng keep the photo's true GPS
+      if(Array.isArray(p.acts)&&p.acts.length)o.acts=p.acts;
+      if(p.alt!=null)o.alt=p.alt;
       if(p.marks&&p.marks.length)o.marks=p.marks;
       if(includeImages){ if(p.thumb){ o.thumb=p.thumb; if(p.tv)o.tv=p.tv; } if(p.preview)o.preview=p.preview; }   // thumb + screenshot-quality preview; full quality always comes from disk
       return o; })
@@ -1912,13 +2291,14 @@ function loadStateText(text){
 }
 function applyState(st){
   clearAll(false); folderName=st.folderName||"";
+  actions=normActs(st.actions);
   if(st.savedAt){ const t=Date.parse(st.savedAt); if(!isNaN(t)) lastSavedAt=t; }
   (st.photos||[]).forEach(m=>{
     let phys=Array.isArray(m.paths)?m.paths:(m.path?[m.path]:[]), vp=Array.isArray(m.vpaths)?m.vpaths:null;
     if(vp===null){   // legacy file (mixed paths): keep the anchor path as physical, treat extras as virtual so tags can never be wrongly pruned
       vp=phys.filter(pa=>pa!==m.path); phys=m.path?[m.path]:phys.slice(0,1);
     }
-    photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,rot:m.rot||0,lat:m.lat,lng:m.lng,glat:(m.glat!=null?m.glat:null),glng:(m.glng!=null?m.glng:null),time:m.time,dir:m.dir,marks:Array.isArray(m.marks)?m.marks:[]});
+    photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,rot:m.rot||0,lat:m.lat,lng:m.lng,glat:(m.glat!=null?m.glat:null),glng:(m.glng!=null?m.glng:null),time:m.time,dir:m.dir,alt:(m.alt!=null?m.alt:null),acts:Array.isArray(m.acts)?m.acts.slice():[],marks:Array.isArray(m.marks)?m.marks:[]});
   });   // baked full-quality renditions from old files are intentionally dropped
   if(lastFullCache) overlayImagesFromCache(lastFullCache);   // the .json is metadata-only — fill thumbs/previews back in from the browser image cache
   const s=st.settings||{};
@@ -1927,8 +2307,11 @@ function applyState(st){
   if(s.baseLayer==="esri"){ map.removeLayer(google); esri.addTo(map); } else if(s.baseLayer==="none"){ map.removeLayer(google); }
   showNoGeo=!!s.showNoGeo; document.getElementById("showNoGeo").checked=showNoGeo;
   if(Array.isArray(s.recentTags)) recentTags=s.recentTags.slice(0,10);
+  actShowOpenOnly=!!s.actShowOpenOnly; actOnlyMap=!!s.actOnlyMap; setTab(s.rightTab==="gallery"?"gallery":"photo"); renderActions();
   currentSort=s.sortBy||"date_desc"; document.getElementById("sortSel").value=currentSort;
   buildDateFilter(); if(s.dateLo!=null&&dateMin!=null){ dateLo=s.dateLo; dateHi=s.dateHi; syncSliderUI(); }
+  altBlank=(s.altBlank!==false); document.getElementById("altBlank").checked=altBlank;
+  if(s.altLo!=null&&altMinV!=null){ altLo=Math.max(altMinV,s.altLo); altHi=Math.min(altMaxV,(s.altHi!=null?s.altHi:altMaxV)); syncAltUI(); }
   if(boxRect){map.removeLayer(boxRect);boxRect=null;} boxBounds=null;
   if(s.box){ boxBounds=L.latLngBounds([s.box[0],s.box[1]],[s.box[2],s.box[3]]); boxRect=L.rectangle(boxBounds,{color:"#5865F2",weight:2,fill:false,dashArray:"6 4"}).addTo(map); }
   setAreaBtn();
@@ -1942,8 +2325,8 @@ function applyState(st){
    metadata onto a reloaded session so folder additions are never lost. Matched by a stable key. */
 function metaKey(p){ const la=(p.glat!=null?p.glat:p.lat), ln=(p.glng!=null?p.glng:p.lng);   // identity uses the ORIGINAL GPS so in-app dot corrections never orphan a photo's cache/metadata
   return (p.name||"")+"|"+(p.size!=null?p.size:"")+"|"+(la!=null?Number(la).toFixed(5):"")+"|"+(ln!=null?Number(ln).toFixed(5):""); }
-function snapshotMeta(list){ const m=new Map(); for(const p of (list||[])){ const k=metaKey(p); if(!m.has(k)) m.set(k,{paths:Array.isArray(p.paths)?p.paths.slice():null, vpaths:Array.isArray(p.vpaths)?p.vpaths.slice():null, rot:p.rot||0, marks:Array.isArray(p.marks)&&p.marks.length?p.marks:null, lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null)}); } return m; }
-function applyMetaMap(m){ if(!m||!m.size) return; for(const p of photos){ const meta=m.get(metaKey(p)); if(!meta) continue; if(meta.paths&&meta.paths.length) p.paths=meta.paths.slice(); if(meta.vpaths&&meta.vpaths.length) p.vpaths=meta.vpaths.slice(); if(meta.marks) p.marks=meta.marks;
+function snapshotMeta(list){ const m=new Map(); for(const p of (list||[])){ const k=metaKey(p); if(!m.has(k)) m.set(k,{paths:Array.isArray(p.paths)?p.paths.slice():null, vpaths:Array.isArray(p.vpaths)?p.vpaths.slice():null, acts:(Array.isArray(p.acts)&&p.acts.length)?p.acts.slice():null, alt:(p.alt!=null?p.alt:null), rot:p.rot||0, marks:Array.isArray(p.marks)&&p.marks.length?p.marks:null, lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null)}); } return m; }
+function applyMetaMap(m){ if(!m||!m.size) return; for(const p of photos){ const meta=m.get(metaKey(p)); if(!meta) continue; if(meta.paths&&meta.paths.length) p.paths=meta.paths.slice(); if(meta.vpaths&&meta.vpaths.length) p.vpaths=meta.vpaths.slice(); if(meta.acts) p.acts=meta.acts.slice(); if(meta.alt!=null&&p.alt==null) p.alt=meta.alt; if(meta.marks) p.marks=meta.marks;
   if(meta.glat!=null){ p.glat=meta.glat; p.glng=meta.glng; if(meta.lat!=null){ p.lat=meta.lat; p.lng=meta.lng; } }   // newer session moved this dot — carry the correction over
   if(meta.rot&&!p.rot){ p.rot=meta.rot; const d=rotDelta(p.rot); (async()=>{ if(p.thumb)p.thumb=await rotateDataURL(p.thumb,d,THUMB_Q); if(p.preview)p.preview=await rotateDataURL(p.preview,d,PREVIEW_Q); cacheFullSession(); })(); } } }
 
@@ -2062,7 +2445,8 @@ function parseShareHash(){
       applyState(full);
       // lastState (image-free autosave) is written on every change; if newer than the cached full snapshot, overlay its fresh folders.
       if(last && Array.isArray(last.photos) && last.savedAt && (!full.savedAt || last.savedAt>full.savedAt)){
-        applyMetaMap(snapshotMeta(last.photos)); buildCluster(); renderClusters(); updateGallery(); persistState();
+        if(Array.isArray(last.actions)) actions=normActs(last.actions);   // actions list travels with the newer metadata
+        applyMetaMap(snapshotMeta(last.photos)); buildCluster(); renderClusters(); updateGallery(); renderActions(); persistState();
       }
     }
     else if(last && last.photos && last.photos.length){ applyState(last); }
