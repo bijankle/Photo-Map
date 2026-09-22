@@ -2699,11 +2699,18 @@ function parseShareHash(){
       return { tag:r.headers.get("etag")||r.headers.get("last-modified")||null, lm:r.headers.get("last-modified")||null };
     }catch(e){ return null; }
   }
-  function hardReload(){ location.replace(location.pathname+"?v="+Date.now()); }   // cache-busting: guarantees the fresh copy
+  async function hardReload(){   // do what Ctrl+F5 does: force-refresh the cached copy of the page, then navigate to it
+    try{ sessionStorage.setItem("pmUpdTried",String(Date.now())); }catch(e){}
+    let ok=false;
+    try{ const r=await fetch(location.pathname,{cache:"reload"}); ok=!!(r&&r.ok); }catch(e){}
+    location.replace(ok?location.pathname:location.pathname+"?v="+Date.now());
+  }
+  function updTriedRecently(){ try{ return Date.now()-(+sessionStorage.getItem("pmUpdTried")||0)<90000; }catch(e){ return false; } }
   function showPill(tag){
     if(pill) return;
+    const stuck=updTriedRecently();
     pill=document.createElement("div"); pill.id="updpill";
-    pill.innerHTML='<span>A newer version of PhotoMap is available.</span><button class="updgo" type="button">Refresh</button><button class="updx" type="button" title="Not now">×</button>';
+    pill.innerHTML='<span>'+(stuck?"Still on the old version — your browser cache is being stubborn. Hold <b>Ctrl</b> and press <b>F5</b>, or try again.":"A newer version of PhotoMap is available.")+'</span><button class="updgo" type="button">'+(stuck?"Try again":"Refresh")+'</button><button class="updx" type="button" title="Not now">×</button>';
     document.body.appendChild(pill);
     pill.querySelector(".updgo").addEventListener("click",hardReload);
     pill.querySelector(".updx").addEventListener("click",()=>{ dismissedTag=tag; pill.remove(); pill=null; });
@@ -2713,6 +2720,7 @@ function parseShareHash(){
     // The browser can serve a STALE cached page: compare this copy's publish time with the server's.
     const srvLM=t.lm?Date.parse(t.lm):NaN;
     if(docLM&&!isNaN(srvLM)&&srvLM-docLM>20000&&t.tag!==dismissedTag){ showPill(t.tag); return; }
+    try{ sessionStorage.removeItem("pmUpdTried"); }catch(e){}   // up to date: clear the "refresh didn't stick" state
     if(!baseTag){ baseTag=t.tag; return; }             // first read = the running build (only trusted when times matched)
     if(t.tag!==baseTag && t.tag!==dismissedTag) showPill(t.tag);
   }
