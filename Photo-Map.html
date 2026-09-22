@@ -320,10 +320,11 @@
   .dropzone.show{display:flex;}
   @media (max-width:900px){ .stats{display:none;} }
   /* ---- layout order: actions | map | splitter | photo/gallery | tab strip ---- */
-  .actpanel{order:1;} #map{order:2;} #splitter{order:3;} .imgpanel{order:4;} .gallery{order:5;} .rtabs{order:6;}
+  .actpanel{order:1;} #actSplit{order:1;} #map{order:2;} #splitter{order:3;} .imgpanel{order:4;} .gallery{order:5;} .rtabs{order:6;}
 
   /* left actions panel */
-  .actpanel{width:270px;flex:0 0 270px;min-width:200px;height:100%;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:2;}
+  .actpanel{width:var(--act-w,270px);flex:0 0 var(--act-w,270px);min-width:170px;height:100%;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:2;}
+  .act-edit{width:100%;box-sizing:border-box;font:inherit;font-size:13px;color:var(--ink);background:var(--panel);border:1px solid var(--accent);border-radius:7px;padding:4px 7px;outline:none;}
   .act-head{display:flex;align-items:center;gap:8px;padding:12px 12px 8px;}
   .act-head .title{font-weight:700;color:var(--ink);font-size:14px;}
   .act-head .count{font-family:var(--mono);font-size:10px;color:var(--dim);flex:1;}
@@ -463,6 +464,7 @@
     <div class="act-new"><input type="text" id="actNewInput" placeholder="+ New action — Enter to add" autocomplete="off" /></div>
     <div class="act-list" id="actList"></div>
   </aside>
+  <div class="splitter" id="actSplit"></div>
   <div class="imgpanel" id="imgPanel">
     <div class="ip-empty" id="ipEmpty"><div><b>No photo open.</b><br/><span class="hint">Click a dot on the map, a gallery thumbnail, or an action.</span></div></div>
     <div class="lb-stage" id="lbStage">
@@ -822,7 +824,22 @@ function createAction(text,pids){
   return a;
 }
 function setActionDone(a,done){ a.done=!!done; a.doneAt=a.done?Date.now():null; afterFolderChange(); }
-function renameAction(a){ const t=prompt("Action text:",a.text); if(t==null) return; const v=t.trim(); if(v){ a.text=v; afterFolderChange(); } }
+/* Inline rename: the row's text becomes an input in place (double-click a row, or right-click -> Rename).
+   Enter or clicking away commits; Escape cancels. */
+function startActEdit(a,row){
+  const body=row.querySelector(".act-body"); if(!body||body.querySelector(".act-edit")) return;
+  const t=body.querySelector(".t"); t.style.display="none";
+  const inp=document.createElement("input"); inp.type="text"; inp.className="act-edit"; inp.value=a.text;
+  body.insertBefore(inp,t); inp.focus(); inp.select();
+  let done=false;
+  const finish=(commit)=>{ if(done) return; done=true;
+    const v=inp.value.trim();
+    if(commit&&v&&v!==a.text){ a.text=v; afterFolderChange(); } else renderActions(); };
+  inp.addEventListener("keydown",e=>{ e.stopPropagation(); if(e.key==="Enter") finish(true); else if(e.key==="Escape") finish(false); });
+  inp.addEventListener("blur",()=>finish(true));
+  ["click","dblclick","mousedown","contextmenu"].forEach(ev=>inp.addEventListener(ev,e=>e.stopPropagation()));
+}
+function renameAction(a){ const row=document.querySelector('.act-row[data-aid="'+a.id+'"]'); if(row) startActEdit(a,row); }
 function deleteAction(a){
   const n=actPhotos(a).length;
   if(!confirm('Delete the action "'+a.text+'"?\n\nIt will be removed from '+n+' photo'+(n===1?'':'s')+'. (Removing it from photos is undoable; the action itself is not.)')) return;
@@ -874,7 +891,9 @@ function renderActions(){
   list.querySelectorAll(".act-row").forEach(el=>{
     const a=actById(Number(el.dataset.aid)); if(!a) return;
     el.querySelector("input").addEventListener("click",e=>{ e.stopPropagation(); setActionDone(a,e.target.checked); });
-    el.addEventListener("click",e=>{ if(e.target.closest(".act-chk")) return; clickAction(a); });
+    /* single click selects/navigates (slightly delayed so a double-click can win); double click renames in place */
+    el.addEventListener("click",e=>{ if(e.target.closest(".act-chk")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); el._ct=setTimeout(()=>clickAction(a),260); });
+    el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); startActEdit(a,el); });
     el.addEventListener("contextmenu",e=>{ e.preventDefault(); e.stopPropagation(); openActMenu(a,e); });
   });
 }
@@ -2115,6 +2134,12 @@ async function resolveFileByPath(dir,path){
   const fh=await h.getFileHandle(segs[segs.length-1]); return await fh.getFile();
 }
 
+/* actions panel resize */
+const actSplit=document.getElementById("actSplit"); let actResizing=false;
+actSplit.addEventListener("mousedown",e=>{ actResizing=true; e.preventDefault(); document.body.style.userSelect="none"; });
+window.addEventListener("mousemove",e=>{ if(!actResizing) return; const w=Math.max(170,Math.min(window.innerWidth*0.4,e.clientX)); document.documentElement.style.setProperty("--act-w",w+"px"); positionTools(); map.invalidateSize(); });
+window.addEventListener("mouseup",()=>{ if(actResizing){ actResizing=false; document.body.style.userSelect=""; persistState(); } });
+
 /* sidebar resize */
 const splitter=document.getElementById("splitter"); let resizing=false;
 splitter.addEventListener("mousedown",e=>{ resizing=true; e.preventDefault(); document.body.style.userSelect="none"; });
@@ -2276,7 +2301,8 @@ function serializeState(includeImages){
     actions: actions.map(a=>({id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null})),
     settings:{ baseLayer: map.hasLayer(google)?"google":map.hasLayer(esri)?"esri":"none", showNoGeo, sortBy:currentSort,
       thumb:getComputedStyle(document.documentElement).getPropertyValue("--thumb").trim(),
-      galleryW:getComputedStyle(document.documentElement).getPropertyValue("--gallery-w").trim(), dateLo, dateHi,
+      galleryW:getComputedStyle(document.documentElement).getPropertyValue("--gallery-w").trim(),
+      actW:getComputedStyle(document.documentElement).getPropertyValue("--act-w").trim()||null, dateLo, dateHi,
       box: boxBounds?[boxBounds.getSouth(),boxBounds.getWest(),boxBounds.getNorth(),boxBounds.getEast()]:null,
       recentTags: recentTags.slice(0,10), rightTab, actShowOpenOnly, actOnlyMap, altLo, altHi, altBlank,
       view:{ center:[map.getCenter().lat, map.getCenter().lng], zoom:map.getZoom() } },
@@ -2317,6 +2343,7 @@ function applyState(st){
   const s=st.settings||{};
   if(s.thumb){ document.documentElement.style.setProperty("--thumb",s.thumb); document.getElementById("thumbSize").value=parseInt(s.thumb)||120; }
   if(s.galleryW) document.documentElement.style.setProperty("--gallery-w",s.galleryW);
+  if(s.actW) document.documentElement.style.setProperty("--act-w",s.actW);
   if(s.baseLayer==="esri"){ map.removeLayer(google); esri.addTo(map); } else if(s.baseLayer==="none"){ map.removeLayer(google); }
   showNoGeo=!!s.showNoGeo; document.getElementById("showNoGeo").checked=showNoGeo;
   if(Array.isArray(s.recentTags)) recentTags=s.recentTags.slice(0,10);
