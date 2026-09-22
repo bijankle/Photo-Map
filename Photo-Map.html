@@ -747,8 +747,8 @@ function passSearch(p){
 function passTags(p){ if(!tagFilters.size) return true; for(const f of tagFilters) if(!photoInFolder(p,f)) return false; return true; }
 function buildCluster(){
   const hl=hlPhotoSet();   // clusters aggregate how many highlighted photos they contain, so the BUBBLE can flash
-  const feats=photos.filter(p=>p.lat!=null && passDate(p) && passSearch(p) && passTags(p) && passActs(p) && passAlt(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng]))).map(p=>({type:"Feature",properties:{pid:p.id,hl:hl.has(p.id)?1:0},geometry:{type:"Point",coordinates:[p.lng,p.lat]}}));
-  cluster=new Supercluster(Object.assign({maxZoom:21,map:pr=>({hl:pr.hl||0}),reduce:(acc,pr)=>{acc.hl+=pr.hl;}},clusterOpts()));
+  const feats=photos.filter(p=>p.lat!=null && passDate(p) && passSearch(p) && passTags(p) && passActs(p) && passAlt(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng]))).map(p=>({type:"Feature",properties:{pid:p.id,hl:hl.has(p.id)?1:0,sel:selSet.has(p.id)?1:0},geometry:{type:"Point",coordinates:[p.lng,p.lat]}}));
+  cluster=new Supercluster(Object.assign({maxZoom:21,map:pr=>({hl:pr.hl||0,sel:pr.sel||0}),reduce:(acc,pr)=>{acc.hl+=pr.hl;acc.sel+=pr.sel;}},clusterOpts()));
   cluster.load(feats);
 }
 /* Cluster sensitivity (Settings): 0% = dots never merge, 50% = the classic radius, 100% = merge very easily. */
@@ -767,10 +767,14 @@ function renderClusters(){
     const [lng,lat]=c.geometry.coordinates;
     if(c.properties.cluster){
       const cnt=c.properties.point_count, size=cnt<10?34:cnt<100?42:cnt<1000?52:62, fs=cnt<100?13:cnt<1000?12:11;
-      const icon=L.divIcon({className:"",html:'<div class="cl-bubble" style="width:'+size+'px;height:'+size+'px;font-size:'+fs+'px">'+c.properties.point_count_abbreviated+'</div>',iconSize:[size,size],iconAnchor:[size/2,size/2]});
+      const grabbable=(c.properties.sel||0)>0&&selSet.size>0;   // holds selected photos: dragging the bubble moves the whole selection
+      const icon=L.divIcon({className:"",html:'<div class="cl-bubble" style="width:'+size+'px;height:'+size+'px;font-size:'+fs+'px'+(grabbable?';cursor:move':'')+'">'+c.properties.point_count_abbreviated+'</div>',iconSize:[size,size],iconAnchor:[size/2,size/2]});
       const m=L.marker([lat,lng],{icon}); const cid=c.properties.cluster_id;
+      let ring=null;
+      if(grabbable) m.on("mousedown",e=>{ const oe=e.originalEvent; if(oe&&oe.button===0){ L.DomEvent.stop(oe); startClusterDrag(m,ring); } });
       m.on("click",()=>{   // zoom to the extent of ALL the photos in this cluster — deep enough that only they fill the view
         uiClickT=Date.now();
+        if(Date.now()-dotDropT<450) return;   // the click after dropping a dragged cluster must not zoom
         try{ const leaves=cluster.getLeaves(cid,Infinity);
           if(leaves.length){
             const bb=L.latLngBounds(leaves.map(f=>[f.geometry.coordinates[1],f.geometry.coordinates[0]]));
@@ -782,7 +786,7 @@ function renderClusters(){
           } }catch(err){}
         const ez=Math.min(cluster.getClusterExpansionZoom(cid),map.getMaxZoom()); map.flyTo([lat,lng],ez,{duration:.45});   // fallback
       });
-      if(c.properties.hl) markerLayer.addLayer(L.circleMarker([lat,lng],{radius:size/2+5,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.25,interactive:false,className:"hl-dot"}));   // cluster holds selected photos: the bubble itself flashes
+      if(c.properties.hl){ ring=L.circleMarker([lat,lng],{radius:size/2+5,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.25,interactive:false,className:"hl-dot"}); markerLayer.addLayer(ring); }   // cluster holds selected photos: the bubble itself flashes
       markerLayer.addLayer(m);
     } else {
       const p=photoById(c.properties.pid); if(!p) continue;
@@ -814,14 +818,23 @@ function startDotDrag(p,hit,dot){
   const group=selSet.has(p.id)?[...selSet]:null;
   let origs=null;
   if(group){ origs=new Map(); for(const pid of group){ if(pid===p.id) continue; const mk=dotMarkers.get(pid); if(mk&&mk.dot) origs.set(pid,{ll:mk.dot.getLatLng(),hit:mk.hit,dot:mk.dot,hl:mk.hl}); } }
-  dotDrag={p,hit,dot,start:dot.getLatLng(),group,origs,viewerPhoto:dotSelected(p),moved:false};
+  dotDrag={p,hit,dot,ring:null,start:dot.getLatLng(),group,origs,viewerPhoto:dotSelected(p),moved:false};
+}
+function startClusterDrag(marker,ring){   // dragging a flashing cluster moves the WHOLE selection, same as dragging a selected dot
+  if(!selSet.size) return;
+  hideHover(); try{ map.dragging.disable(); }catch(e){}
+  map.getContainer().style.cursor="grabbing";
+  const group=[...selSet], origs=new Map();
+  for(const pid of group){ const mk=dotMarkers.get(pid); if(mk&&mk.dot) origs.set(pid,{ll:mk.dot.getLatLng(),hit:mk.hit,dot:mk.dot,hl:mk.hl}); }
+  dotDrag={p:null,hit:marker,dot:marker,ring:ring||null,start:marker.getLatLng(),group,origs,viewerPhoto:false,moved:false};
 }
 map.on("mousemove",e=>{
   if(!dotDrag) return; dotDrag.moved=true;
   const dLat=e.latlng.lat-dotDrag.start.lat, dLng=e.latlng.lng-dotDrag.start.lng;
   if(dotDrag.origs) for(const o of dotDrag.origs.values()){ const ll=[o.ll.lat+dLat,o.ll.lng+dLng]; o.hit.setLatLng(ll); o.dot.setLatLng(ll); if(o.hl) o.hl.setLatLng(ll); }
   dotDrag.hit.setLatLng(e.latlng); dotDrag.dot.setLatLng(e.latlng);
-  const gm=dotMarkers.get(dotDrag.p.id); if(gm&&gm.hl) gm.hl.setLatLng(e.latlng);
+  if(dotDrag.ring) dotDrag.ring.setLatLng(e.latlng);
+  if(dotDrag.p){ const gm=dotMarkers.get(dotDrag.p.id); if(gm&&gm.hl) gm.hl.setLatLng(e.latlng); }
   if(hlMarker&&dotDrag.viewerPhoto) hlMarker.setLatLng(e.latlng);
 });
 window.addEventListener("mouseup",()=>{
