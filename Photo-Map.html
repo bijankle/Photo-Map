@@ -935,11 +935,12 @@ function createAction(text,pids){
   text=(text||"").trim(); if(!text) return null;
   const a={id:nextActId++,text,desc:"",done:false,created:Date.now(),doneAt:null};
   actions.unshift(a);
-  if(pids&&pids.length) assignActs([a.id],pids.map(photoById).filter(Boolean));
-  else afterFolderChange();
+  const items=(pids&&pids.length)?buildAssign([a.id],pids.map(photoById).filter(Boolean)):[];
+  pushUndo({actCreate:{data:Object.assign({},a),index:0},items});   // creation (incl. its links) is one undo step
+  afterFolderChange();
   return a;
 }
-function setActionDone(a,done){ a.done=!!done; a.doneAt=a.done?Date.now():null; afterFolderChange(); }
+function setActionDone(a,done){ const before=actState(a); a.done=!!done; a.doneAt=a.done?Date.now():null; recordActEdit(a,before); afterFolderChange(); }
 /* Inline editing (titles and descriptions, in both the Actions panel and the under-photo strip):
    double-click the text to edit in place. Enter (Shift+Enter = new line in a description) or
    clicking away commits; Escape cancels. */
@@ -964,12 +965,12 @@ function refreshActUI(){ renderActions(); renderIpActions(); }
 function startActEdit(a,row){
   inlineEdit(row.querySelector(".t"),a.text,false,v=>{
     const t=(v==null?"":v.trim());
-    if(t&&t!==a.text){ a.text=t; afterFolderChange(); } else refreshActUI();
+    if(t&&t!==a.text){ const before=actState(a); a.text=t; recordActEdit(a,before); afterFolderChange(); } else refreshActUI();
   });
 }
 function startActDescEdit(a,row){
   inlineEdit(row.querySelector(".d"),a.desc||"",true,v=>{
-    if(v!=null&&v.trim()!==(a.desc||"")){ a.desc=v.trim(); afterFolderChange(); } else refreshActUI();
+    if(v!=null&&v.trim()!==(a.desc||"")){ const before=actState(a); a.desc=v.trim(); recordActEdit(a,before); afterFolderChange(); } else refreshActUI();
   });
 }
 function renameAction(a){ const row=document.querySelector('.act-row[data-aid="'+a.id+'"]'); if(row) startActEdit(a,row); }
@@ -990,18 +991,20 @@ function deleteAction(a){   // no confirm needed: Ctrl+Z restores the action and
   for(const p of photos){ if(Array.isArray(p.acts)&&p.acts.includes(a.id)){ const before=snapshotTags(p); p.acts=p.acts.filter(x=>x!==a.id); items.push({id:p.id,before,after:snapshotTags(p)}); } }
   const idx=actions.indexOf(a);
   actions=actions.filter(x=>x!==a); selActs.delete(a.id);
-  // one undo step restores the action itself (same spot, same id) AND its photo links
-  tagUndoStack.push({act:{data:Object.assign({},a),index:idx},items,t:Date.now()}); if(tagUndoStack.length>200) tagUndoStack.shift();
-  tagRedoStack=[];
+  pushUndo({act:{data:Object.assign({},a),index:idx},items});   // one undo step restores the action AND its photo links
   afterFolderChange();
 }
-function assignActs(actIds,phList){
+function buildAssign(actIds,phList){
   const items=[];
   for(const p of phList){
     const before=snapshotTags(p); const set=new Set(p.acts||[]); let ch=false;
     for(const id of actIds){ if(!set.has(id)){ set.add(id); ch=true; } }
     if(!ch) continue; p.acts=[...set]; items.push({id:p.id,before,after:snapshotTags(p)});
   }
+  return items;
+}
+function assignActs(actIds,phList){
+  const items=buildAssign(actIds,phList);
   if(items.length) pushTagAction(items);
   afterFolderChange();
 }
@@ -1043,10 +1046,7 @@ function renderActions(){
   document.getElementById("actCount").textContent=openN+" open / "+actions.length;
   document.getElementById("actOpenOnly").classList.toggle("on",actShowOpenOnly);
   const shown=actShowOpenOnly?actions.filter(a=>!a.done):actions;
-  if(!shown.length){
-    list.innerHTML='<div class="empty-msg">'+(actions.length?'No open actions — all done ✓':'No actions yet.<br/><span class="hint">Type above, or right-click a photo dot → “New action”.</span>')+'</div>';
-    return;
-  }
+  if(!shown.length){ list.innerHTML=""; return; }
   list.innerHTML=shown.map(a=>{ const n=actPhotos(a).length;
     return '<div class="act-row'+(a.done?' done':'')+(selActs.has(a.id)?' sel':'')+'" data-aid="'+a.id+'">'
       +'<label class="act-chk" title="'+(a.done?'Reopen this action':'Mark completed')+'"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
@@ -1078,7 +1078,7 @@ function renderIpActions(){
     +'<label class="act-chk"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
     +'<div class="ipa-body"><span class="t" title="Double-click to edit">'+esc(a.text)+'</span>'+descHtml(a)+'</div>'
     +expBtnHtml(a)+'<button class="ipa-x" title="Remove this action from this photo">&times;</button></div>').join("")
-    :'<div class="ipa-none">No actions on this photo.</div>';
+    :"";
   listEl.querySelectorAll(".ipa-row").forEach(el=>{
     const a=actById(Number(el.dataset.aid)); if(!a) return;
     el.querySelector("input").addEventListener("click",e=>{ e.stopPropagation(); setActionDone(a,e.target.checked); });
@@ -1571,6 +1571,13 @@ function dUp(e){
     if(!tiny){
       const inWin=photos.filter(p=>p.lat!=null&&passDate(p)&&passSearch(p)&&passTags(p)&&passActs(p)&&passAlt(p)&&(!boxBounds||boxBounds.contains([p.lat,p.lng]))&&b.contains([p.lat,p.lng]));
       selSet=new Set(inWin.map(p=>p.id));
+      // a cluster BUBBLE inside the box selects its whole cluster, even photos hanging outside the box
+      try{ if(cluster){ const z=Math.round(map.getZoom());
+        for(const c of cluster.getClusters([Math.max(-180,b.getWest()),Math.max(-85,b.getSouth()),Math.min(180,b.getEast()),Math.min(85,b.getNorth())],z)){
+          if(!c.properties.cluster) continue;
+          if(!b.contains([c.geometry.coordinates[1],c.geometry.coordinates[0]])) continue;
+          for(const f of cluster.getLeaves(c.properties.cluster_id,Infinity)) selSet.add(f.properties.pid);
+        } } }catch(err){}
     }
     setAreaBtn(); buildCluster(); renderClusters(); return;
   }
@@ -1712,7 +1719,7 @@ function hideHover(){ hoverview.classList.remove("show"); }
 const lb=document.getElementById("imgPanel"),lbStage=document.getElementById("lbStage"),lbImg=document.getElementById("lbImg");
 const lbRef=document.getElementById("lbRef"),lbRefImg=document.getElementById("lbRefImg"),lbRefBox=document.getElementById("lbRefBox");
 const lbZoom=document.getElementById("lbZoom"),lbFull=document.getElementById("lbFull"),lbFullWrap=document.getElementById("lbFullWrap");
-let fsMode=false, lastFsNav=0, markTool="none", draft=null, polyPrev=null, dragging=false, erasing=false, redoMarks=[];
+let fsMode=false, lastFsNav=0, markTool="none", draft=null, polyPrev=null, dragging=false, erasing=false, redoMarks=[], eraseSnap=null, erasePhoto=null;
 let vScale=1,vTx=0,vTy=0,fitW=0,fitH=0,curUrl=null;
 const REF_W=160,MAXS=8;
 function openViewer(p){
@@ -1875,16 +1882,21 @@ function rotMarks(marks,delta){
   }
 }
 let rotBusy=false;
+async function applyRotation(p,delta){   // rotate a photo's data (works even if it isn't the one on screen — undo needs that)
+  p.rot=(((p.rot||0)+delta)%360+360)%360;
+  rotMarks(p.marks,delta);
+  if(p.thumb) p.thumb=await rotateDataURL(p.thumb,delta,THUMB_Q);
+  if(p.preview) p.preview=await rotateDataURL(p.preview,delta,PREVIEW_Q);
+  if(curPhoto()===p&&lb.classList.contains("open")) loadViewer();   // re-display at the new orientation (fit zoom)
+  updateGallery(true); persistState(); cacheFullSession();
+}
 async function rotatePhoto(delta){
   const p=curPhoto(); if(!p||rotBusy||!lb.classList.contains("open")) return;
   rotBusy=true;
   try{
-    p.rot=(((p.rot||0)+delta)%360+360)%360;
-    rotMarks(p.marks,delta); draft=null; polyPrev=null; redoMarks=[];
-    if(p.thumb) p.thumb=await rotateDataURL(p.thumb,delta,THUMB_Q);
-    if(p.preview) p.preview=await rotateDataURL(p.preview,delta,PREVIEW_Q);
-    loadViewer();                                   // re-display at the new orientation (fit zoom)
-    updateGallery(true); persistState(); cacheFullSession();
+    draft=null; polyPrev=null; redoMarks=[];
+    await applyRotation(p,delta);
+    pushUndo({rot:{id:p.id,delta}});
   } finally{ rotBusy=false; }
 }
 // Regenerate cached renditions from the image ALREADY decoded on screen — zero extra file reads.
@@ -1980,7 +1992,7 @@ function setMarkTool(t){ if(selMark) deselectText(); markTool=t; draft=null; pol
 function setEditOpen(open){ lb.classList.toggle("edit-open",open); const eb=document.getElementById("lbEdit"); if(eb) eb.classList.toggle("on",open); if(!open&&markTool!=="none") setMarkTool("none"); }
 document.getElementById("lbEdit").addEventListener("click",e=>{ e.stopPropagation(); setEditOpen(!lb.classList.contains("edit-open")); });
 document.querySelectorAll(".ip-marktools .mk[data-tool]").forEach(b=>{ b.addEventListener("click",e=>{ e.stopPropagation(); setMarkTool(b.dataset.tool===markTool?"none":b.dataset.tool); }); });
-document.getElementById("mkClear").addEventListener("click",e=>{ e.stopPropagation(); if(selMark) deselectText(); const p=curPhoto(); if(p){ p.marks=[]; draft=null; polyPrev=null; afterMarkChange(); } });
+document.getElementById("mkClear").addEventListener("click",e=>{ e.stopPropagation(); if(selMark) deselectText(); const p=curPhoto(); if(p&&p.marks&&p.marks.length){ const before=cpMarks(p.marks); p.marks=[]; draft=null; polyPrev=null; pushMarksSnap(p,before,[]); afterMarkChange(); } });
 document.getElementById("mkRotate").addEventListener("click",e=>{ e.stopPropagation(); rotatePhoto(e.shiftKey?-90:90); });
 document.getElementById("lbCopy").addEventListener("click",e=>{ e.stopPropagation(); copyCurrentView(e.currentTarget,false); });
 document.getElementById("lbCopyHQ").addEventListener("click",e=>{ e.stopPropagation(); copyCurrentView(e.currentTarget,true); });
@@ -2047,7 +2059,7 @@ document.getElementById("tbPlus").addEventListener("mousedown",e=>e.preventDefau
 document.getElementById("tbMinus").addEventListener("click",e=>{ e.stopPropagation(); if(selMark){ selMark.th=Math.max(0.012,(selMark.th||0.03)*0.85); positionEditor(); } });
 document.getElementById("tbPlus").addEventListener("click",e=>{ e.stopPropagation(); if(selMark){ selMark.th=Math.min(0.3,(selMark.th||0.03)*1.18); positionEditor(); } });
 document.getElementById("tbDel").addEventListener("mousedown",e=>e.preventDefault());
-document.getElementById("tbDel").addEventListener("click",e=>{ e.stopPropagation(); const m=selMark, ph=selPhoto; selMark=null; selPhoto=null; tbEditor.style.display="none"; if(m&&ph&&ph.marks){ const i=ph.marks.indexOf(m); if(i>=0) ph.marks.splice(i,1); } afterMarkChange(); });
+document.getElementById("tbDel").addEventListener("click",e=>{ e.stopPropagation(); const m=selMark, ph=selPhoto; selMark=null; selPhoto=null; tbEditor.style.display="none"; if(m&&ph&&ph.marks){ const i=ph.marks.indexOf(m); if(i>=0){ const before=cpMarks(ph.marks); ph.marks.splice(i,1); pushMarksSnap(ph,before,cpMarks(ph.marks)); } } afterMarkChange(); });
 (function(){ const mv=document.getElementById("tbMove"); let on=false,sx0,sy0,ox0,oy0; mv.addEventListener("mousedown",e=>{ if(!selMark)return; e.preventDefault(); e.stopPropagation(); on=true; sx0=e.clientX; sy0=e.clientY; ox0=selMark.x; oy0=selMark.y; }); window.addEventListener("mousemove",e=>{ if(!on||!selMark)return; selMark.x=Math.max(0,Math.min(0.99,ox0+(e.clientX-sx0)/(fitW*vScale))); selMark.y=Math.max(0,Math.min(0.99,oy0+(e.clientY-sy0)/(fitH*vScale))); positionEditor(); }); window.addEventListener("mouseup",()=>{ if(on){ on=false; persistState(); } }); })();
 
 function onDown(e){
@@ -2060,7 +2072,7 @@ function onDown(e){
   if(markTool==="pen"){ draft={t:"pen",p:[[n.x,n.y]],c:markColor,k:markThick,_sx:n.x,_sy:n.y}; dragging=true; redoMarks=[]; redrawMarks(); return; }
   if(markTool==="arrow"){ draft={t:"arrow",x:n.x,y:n.y,x2:n.x,y2:n.y,c:markColor,k:markThick}; dragging=true; redoMarks=[]; return; }
   if(markTool==="rect"||markTool==="oval"){ draft={t:markTool,x:n.x,y:n.y,w:0,h:0,_sx:n.x,_sy:n.y,c:markColor,k:markThick}; dragging=true; redoMarks=[]; return; }
-  if(markTool==="erase"){ erasing=true; eraseAt(n); return; }
+  if(markTool==="erase"){ erasing=true; eraseSnap=cpMarks(curMarks()); erasePhoto=curPhoto(); eraseAt(n); return; }
   if(markTool==="poly"){ if(!draft||draft.t!=="poly"){ draft={t:"poly",p:[[n.x,n.y]],c:markColor,k:markThick}; } else { const last=draft.p[draft.p.length-1]; let pt=[n.x,n.y]; if(e.shiftKey) pt=orthoNorm(last,pt); if(distPx(last,pt)>=6) draft.p.push(pt); } redoMarks=[]; redrawMarks(); return; }
 }
 function onMove(e){
@@ -2075,7 +2087,9 @@ function onMove(e){
 }
 function finishPen(){ if(draft&&draft.t==="pen"){ if(draft.p.length){ curMarks().push({t:"pen",p:draft.p,c:draft.c,k:draft.k}); afterMarkChange(); } draft=null; dragging=false; redrawMarks(); } }
 function onUp(){
-  panning=false; lbStage.classList.remove("panning"); erasing=false;
+  panning=false; lbStage.classList.remove("panning");
+  if(erasing&&erasePhoto){ pushMarksSnap(erasePhoto,eraseSnap,cpMarks(erasePhoto.marks)); eraseSnap=null; erasePhoto=null; }   // one undo step per erase stroke
+  erasing=false;
   if(dragging&&draft){
     if(draft.t==="pen"){ finishPen(); return; }
     if(draft.t==="arrow"){ if(distPx([draft.x,draft.y],[draft.x2,draft.y2])>4){ curMarks().push({t:"arrow",x:draft.x,y:draft.y,x2:draft.x2,y2:draft.y2,c:draft.c,k:draft.k}); afterMarkChange(); } }
@@ -2268,21 +2282,41 @@ function openFolderPop(){
 let tagUndoStack=[], tagRedoStack=[], recentTags=[];   // recentTags: last folders assigned via the UI, newest first (speeds up bulk tagging)
 function noteRecentTag(f){ if(!f) return; recentTags=[f].concat(recentTags.filter(x=>x!==f)).slice(0,10); }
 function snapshotTags(p){ return {paths:physPaths(p).slice(), vpaths:virtPaths(p).slice(), acts:(Array.isArray(p.acts)?p.acts.slice():[]), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null)}; }
+/* EVERY data change goes through pushUndo so Ctrl+Z always works — keep it that way for new features.
+   Entry fields (any combination): items (photo snapshots), act (deleted action), actCreate (new action),
+   actEdit (title/description/done change), marksSnap (a photo's whole markup array), rot (rotation). */
+function pushUndo(entry){ entry.t=Date.now(); tagUndoStack.push(entry); if(tagUndoStack.length>200) tagUndoStack.shift(); tagRedoStack=[]; }
 function pushTagAction(items){   // one undo step, possibly touching many photos (e.g. a multi-selection move)
   items=items.filter(it=>JSON.stringify(it.before)!==JSON.stringify(it.after));
   if(!items.length) return;
-  tagUndoStack.push({items,t:Date.now()}); if(tagUndoStack.length>200) tagUndoStack.shift();
-  tagRedoStack=[];
+  pushUndo({items});
 }
 function recordTagChange(p,before){ pushTagAction([{id:p.id,before,after:snapshotTags(p)}]); }
+function actState(a){ return {text:a.text,desc:a.desc||"",done:!!a.done,doneAt:a.doneAt||null}; }
+function recordActEdit(a,before){ const after=actState(a); if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({actEdit:{id:a.id,before,after}}); }
+function cpMarks(ms){ return JSON.parse(JSON.stringify(ms||[])); }
+function pushMarksSnap(p,before,after){ if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({marksSnap:{id:p.id,before,after}}); }
 function applySnapRaw(id,snap){ const p=photoById(id); if(!p) return; p.paths=snap.paths.slice(); p.vpaths=snap.vpaths.slice(); if(snap.acts) p.acts=snap.acts.slice(); if(snap.lat!=null){ p.lat=snap.lat; p.lng=snap.lng; } if("glat" in snap){ p.glat=snap.glat; p.glng=snap.glng; } }
 function applyTagSnapshot(id,snap){ applySnapRaw(id,snap); afterFolderChange(); if(folderPopShown) openFolderPop(); }
-function undoTag(){ const a=tagUndoStack.pop(); if(!a) return false; tagRedoStack.push(a);
-  if(a.act){ const d=a.act.data; if(!actById(d.id)){ actions.splice(Math.min(a.act.index,actions.length),0,Object.assign({},d)); if(nextActId<=d.id) nextActId=d.id+1; } }   // deleted action comes back
-  const its=a.items||[{id:a.id,before:a.before}]; its.forEach(it=>applySnapRaw(it.id,it.before)); afterFolderChange(); if(folderPopShown) openFolderPop(); return true; }
-function redoTag(){ const a=tagRedoStack.pop(); if(!a) return false; tagUndoStack.push(a);
-  if(a.act){ actions=actions.filter(x=>x.id!==a.act.data.id); selActs.delete(a.act.data.id); }   // redo of a delete removes it again
-  const its=a.items||[{id:a.id,after:a.after}]; its.forEach(it=>applySnapRaw(it.id,it.after)); afterFolderChange(); if(folderPopShown) openFolderPop(); return true; }
+function applyUndoEntry(a,dir){   // dir: "before" (undo) or "after" (redo)
+  const undo=dir==="before";
+  if(a.act){   // deleted action: undo restores it, redo deletes again
+    if(undo){ const d=a.act.data; if(!actById(d.id)){ actions.splice(Math.min(a.act.index,actions.length),0,Object.assign({},d)); if(nextActId<=d.id) nextActId=d.id+1; } }
+    else { actions=actions.filter(x=>x.id!==a.act.data.id); selActs.delete(a.act.data.id); }
+  }
+  if(a.actCreate){   // created action: undo removes it, redo recreates it
+    if(undo){ actions=actions.filter(x=>x.id!==a.actCreate.data.id); selActs.delete(a.actCreate.data.id); }
+    else { const d=a.actCreate.data; if(!actById(d.id)){ actions.splice(Math.min(a.actCreate.index,actions.length),0,Object.assign({},d)); if(nextActId<=d.id) nextActId=d.id+1; } }
+  }
+  if(a.actEdit){ const x=actById(a.actEdit.id); if(x) Object.assign(x,undo?a.actEdit.before:a.actEdit.after); }
+  if(a.marksSnap){ const p=photoById(a.marksSnap.id); if(p){ p.marks=cpMarks(undo?a.marksSnap.before:a.marksSnap.after); if(curPhoto()===p&&lb.classList.contains("open")) redrawMarks(); } }
+  if(a.rot){ const p=photoById(a.rot.id); if(p){ const d=((a.rot.delta%360)+360)%360; applyRotation(p,undo?(360-d)%360:d).catch(()=>{}); } }
+  const its=a.items?a.items:(a.id!=null?[{id:a.id,before:a.before,after:a.after}]:[]);
+  its.forEach(it=>applySnapRaw(it.id,undo?it.before:it.after));
+  afterFolderChange(); if(folderPopShown) openFolderPop();
+}
+function undoTag(){ const a=tagUndoStack.pop(); if(!a) return false; tagRedoStack.push(a); applyUndoEntry(a,"before"); return true; }
+function redoTag(){ const a=tagRedoStack.pop(); if(!a) return false; tagUndoStack.push(a); applyUndoEntry(a,"after"); return true; }
 function undoLatest(open){
   const ms=open?curMarks():null;
   const markT=(ms&&ms.length)?(ms[ms.length-1]._t||0):null;
