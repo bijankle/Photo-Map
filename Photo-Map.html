@@ -975,13 +975,14 @@ function wireActRowCommon(el,a){
   const d=el.querySelector(".d");
   if(d) d.addEventListener("dblclick",e=>{ e.stopPropagation(); clearTimeout(el._ct); startActDescEdit(a,el); });   // cancel the row's pending single-click select, or it re-renders and closes the editor
 }
-function deleteAction(a){
-  const n=actPhotos(a).length;
-  if(!confirm('Delete the action "'+a.text+'"?\n\nIt will be removed from '+n+' photo'+(n===1?'':'s')+'. (Removing it from photos is undoable; the action itself is not.)')) return;
+function deleteAction(a){   // no confirm needed: Ctrl+Z restores the action and all its photo links
   const items=[];
   for(const p of photos){ if(Array.isArray(p.acts)&&p.acts.includes(a.id)){ const before=snapshotTags(p); p.acts=p.acts.filter(x=>x!==a.id); items.push({id:p.id,before,after:snapshotTags(p)}); } }
-  if(items.length) pushTagAction(items);
+  const idx=actions.indexOf(a);
   actions=actions.filter(x=>x!==a); selActs.delete(a.id);
+  // one undo step restores the action itself (same spot, same id) AND its photo links
+  tagUndoStack.push({act:{data:Object.assign({},a),index:idx},items,t:Date.now()}); if(tagUndoStack.length>200) tagUndoStack.shift();
+  tagRedoStack=[];
   afterFolderChange();
 }
 function assignActs(actIds,phList){
@@ -2215,8 +2216,12 @@ function pushTagAction(items){   // one undo step, possibly touching many photos
 function recordTagChange(p,before){ pushTagAction([{id:p.id,before,after:snapshotTags(p)}]); }
 function applySnapRaw(id,snap){ const p=photoById(id); if(!p) return; p.paths=snap.paths.slice(); p.vpaths=snap.vpaths.slice(); if(snap.acts) p.acts=snap.acts.slice(); if(snap.lat!=null){ p.lat=snap.lat; p.lng=snap.lng; } if("glat" in snap){ p.glat=snap.glat; p.glng=snap.glng; } }
 function applyTagSnapshot(id,snap){ applySnapRaw(id,snap); afterFolderChange(); if(folderPopShown) openFolderPop(); }
-function undoTag(){ const a=tagUndoStack.pop(); if(!a) return false; tagRedoStack.push(a); const its=a.items||[{id:a.id,before:a.before}]; its.forEach(it=>applySnapRaw(it.id,it.before)); afterFolderChange(); if(folderPopShown) openFolderPop(); return true; }
-function redoTag(){ const a=tagRedoStack.pop(); if(!a) return false; tagUndoStack.push(a); const its=a.items||[{id:a.id,after:a.after}]; its.forEach(it=>applySnapRaw(it.id,it.after)); afterFolderChange(); if(folderPopShown) openFolderPop(); return true; }
+function undoTag(){ const a=tagUndoStack.pop(); if(!a) return false; tagRedoStack.push(a);
+  if(a.act){ const d=a.act.data; if(!actById(d.id)){ actions.splice(Math.min(a.act.index,actions.length),0,Object.assign({},d)); if(nextActId<=d.id) nextActId=d.id+1; } }   // deleted action comes back
+  const its=a.items||[{id:a.id,before:a.before}]; its.forEach(it=>applySnapRaw(it.id,it.before)); afterFolderChange(); if(folderPopShown) openFolderPop(); return true; }
+function redoTag(){ const a=tagRedoStack.pop(); if(!a) return false; tagUndoStack.push(a);
+  if(a.act){ actions=actions.filter(x=>x.id!==a.act.data.id); selActs.delete(a.act.data.id); }   // redo of a delete removes it again
+  const its=a.items||[{id:a.id,after:a.after}]; its.forEach(it=>applySnapRaw(it.id,it.after)); afterFolderChange(); if(folderPopShown) openFolderPop(); return true; }
 function undoLatest(open){
   const ms=open?curMarks():null;
   const markT=(ms&&ms.length)?(ms[ms.length-1]._t||0):null;
