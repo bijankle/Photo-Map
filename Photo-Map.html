@@ -1694,8 +1694,9 @@ function updateGallery(keepLimit){
   const bounds=map.getBounds(), center=map.getCenter();
   const spatial=boxBounds||bounds;
   const passName=p=>passSearch(p)&&passTags(p)&&passActs(p)&&passAlt(p)&&(!actionFilter||actionFilter.has(p.id));   // shared with the map so gallery + dots stay in sync; actionFilter narrows to the selected actions' photos
-  let inView=sortPhotos(photos.filter(p=>p.lat!=null&&passDate(p)&&passName(p)&&spatial.contains([p.lat,p.lng])),center);
-  let noGeo=showNoGeo?sortPhotos(photos.filter(p=>p.lat==null&&passDate(p)&&passName(p)),center):[];
+  const spatialOK=p=>actionFilter?true:spatial.contains([p.lat,p.lng]);   // an action's photos list regardless of where the map sits
+  let inView=sortPhotos(photos.filter(p=>p.lat!=null&&passDate(p)&&passName(p)&&spatialOK(p)),center);
+  let noGeo=(showNoGeo||actionFilter)?sortPhotos(photos.filter(p=>p.lat==null&&passDate(p)&&passName(p)),center):[];
   /* keep the open viewer pinned to the same photo across re-sorts (lightboxIndex is positional) */
   const openP=lb.classList.contains("open")?lightboxList[lightboxIndex]:null;
   lightboxList=inView.concat(noGeo);
@@ -1706,12 +1707,12 @@ function updateGallery(keepLimit){
     document.getElementById("galCount").textContent="0 shown"; document.getElementById("stView").textContent=inView.length; return;
   }
   const inShow=inView.slice(0,galleryLimit);
-  const geoShow=showNoGeo?noGeo.slice(0,Math.max(0,galleryLimit-inShow.length)):[];
-  const hidden=(inView.length-inShow.length)+((showNoGeo?noGeo.length:0)-geoShow.length);
+  const geoShow=(showNoGeo||actionFilter)?noGeo.slice(0,Math.max(0,galleryLimit-inShow.length)):[];
+  const hidden=(inView.length-inShow.length)+(((showNoGeo||actionFilter)?noGeo.length:0)-geoShow.length);
   let html="";
   if(actionFilter) html+='<div class="act-note">Photos for '+selActs.size+' selected action'+(selActs.size===1?'':'s')+' <button id="actNoteX" type="button">Show all</button></div>';
   if(inView.length) html+='<div class="section-label">On Map ('+inView.length+')</div><div class="grid">'+inShow.map(p=>cardHtml(p,false)).join("")+'</div>';
-  if(showNoGeo&&geoShow.length) html+='<div class="section-label">No Location ('+noGeo.length+')</div><div class="grid">'+geoShow.map(p=>cardHtml(p,true)).join("")+'</div>';
+  if(geoShow.length) html+='<div class="section-label">No Location ('+noGeo.length+')</div><div class="grid">'+geoShow.map(p=>cardHtml(p,true)).join("")+'</div>';
   if(hidden>0) html+='<button class="gal-more" id="galMore">Show more ('+hidden.toLocaleString()+' remaining)</button>';
   if(!html) html='<div class="empty-msg"><b>No photos in this view.</b><br/>Pan or zoom the map, widen the date range, or load another folder.</div>';
   body.innerHTML=html;
