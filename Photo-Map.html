@@ -849,6 +849,7 @@ function addSingleDot(p,lat,lng,isSel){
   hit.on("click",e=>{ uiClickT=Date.now(); if(Date.now()-dotDropT<450) return;
     const oe=e.originalEvent;
     if(oe&&(oe.ctrlKey||oe.metaKey)){ if(selSet.has(p.id)) selSet.delete(p.id); else selSet.add(p.id); setAreaBtn(); buildCluster(); renderClusters(); return; }   // ctrl+click toggles the dot in the selection
+    if(selSet.size){ selSet=new Set([p.id]); setAreaBtn(); buildCluster(); renderClusters(); }   // plain click collapses the selection to just this photo
     openViewer(p); });
   hit.on("contextmenu",e=>{ L.DomEvent.stop(e.originalEvent); openDotMenu(p,e.originalEvent); });
   const dot=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:6,color:"#3A41B0",weight:2,fillColor:"#5865F2",fillOpacity:.95,interactive:false});
@@ -1745,6 +1746,7 @@ function updateGallery(keepLimit){
         if(selSet.has(p.id)) selSet.delete(p.id); else selSet.add(p.id);
         el.classList.toggle("sel",selSet.has(p.id));
         setAreaBtn(); buildCluster(); renderClusters(); return; }
+      if(selSet.size){ selSet=new Set([p.id]); body.querySelectorAll(".card").forEach(c=>c.classList.toggle("sel",Number(c.dataset.id)===p.id)); setAreaBtn(); buildCluster(); renderClusters(); }   // plain click collapses the selection to just this photo
       openViewer(p); });
     el.addEventListener("mouseenter",()=>highlightDot(p)); el.addEventListener("mouseleave",highlightCurrent); });
   const more=body.querySelector("#galMore"); if(more) more.addEventListener("click",()=>{ galleryLimit+=GALLERY_CHUNK*2; updateGallery(true); });
