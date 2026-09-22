@@ -317,6 +317,15 @@
   .dropzone{position:fixed;inset:0;z-index:2500;display:none;align-items:center;justify-content:center;background:rgba(255,255,255,.86);border:3px dashed var(--accent);margin:14px;border-radius:18px;font-family:var(--font);font-weight:700;font-size:26px;color:var(--accent);pointer-events:none;}
   .dropzone.show{display:flex;}
   @media (max-width:900px){ .stats{display:none;} }
+  /* new-version pill (only appears when the app is served from the web, e.g. GitHub Pages) */
+  #updpill{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:6000;display:flex;align-items:center;gap:10px;
+    background:var(--panel);border:1px solid var(--accent);border-radius:999px;padding:8px 10px 8px 16px;
+    box-shadow:0 6px 24px #1E1F2226;font-size:13px;color:var(--ink);}
+  #updpill .updgo{border:none;border-radius:999px;background:var(--accent);color:#fff;font:inherit;font-weight:600;
+    padding:5px 14px;cursor:pointer;box-shadow:0 2px 0 var(--accent2);}
+  #updpill .updgo:hover{background:var(--accent2);}
+  #updpill .updx{border:none;background:none;color:var(--dim);font-size:16px;cursor:pointer;padding:2px 6px;line-height:1;}
+  #updpill .updx:hover{color:var(--ink);}
 </style>
 </head>
 <body>
@@ -1956,6 +1965,37 @@ function parseShareHash(){
   if(jsonHandle){ if(!loadedJsonName) loadedJsonName=jsonHandle.name||null; armFileSync(); }   // on first interaction, pull the latest from the file and enable auto-save
   if(dirHandle){ try{ if((await dirHandle.queryPermission({mode:"read"}))!=="granted") armFolderPermission(); }catch(e){} }
   renderProjHead();
+})();
+
+/* ---- app self-update check (active only when served from the web, e.g. GitHub Pages) ----
+   The page asks the server for its own file's version tag (ETag/Last-Modified) and compares it
+   to the one it was loaded with; when a newer build has been published it offers a refresh.
+   Refreshing never touches project data — the .json and browser cache are independent of the app file. */
+(function(){
+  if(!/^https?:$/.test(location.protocol)) return;   // local file / offline copy: nothing to check
+  let baseTag=null, dismissedTag=null, pill=null;
+  async function fetchTag(){
+    try{ const r=await fetch(location.href,{method:"HEAD",cache:"no-store"});
+      if(!r.ok) return null;
+      return r.headers.get("etag")||r.headers.get("last-modified")||null;
+    }catch(e){ return null; }
+  }
+  function showPill(tag){
+    if(pill) return;
+    pill=document.createElement("div"); pill.id="updpill";
+    pill.innerHTML='<span>A newer version of PhotoMap is available.</span><button class="updgo" type="button">Refresh</button><button class="updx" type="button" title="Not now">×</button>';
+    document.body.appendChild(pill);
+    pill.querySelector(".updgo").addEventListener("click",()=>{ location.reload(); });
+    pill.querySelector(".updx").addEventListener("click",()=>{ dismissedTag=tag; pill.remove(); pill=null; });
+  }
+  async function check(){
+    const t=await fetchTag(); if(!t) return;
+    if(!baseTag){ baseTag=t; return; }                 // first successful read = the running build
+    if(t!==baseTag && t!==dismissedTag) showPill(t);
+  }
+  check();                                             // capture the running build's tag
+  setInterval(check, 5*60*1000);                       // then look for updates every 5 minutes…
+  document.addEventListener("visibilitychange",()=>{ if(!document.hidden) check(); });   // …and when you come back to the tab
 })();
 </script>
 </body>
