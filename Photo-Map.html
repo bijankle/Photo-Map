@@ -521,18 +521,18 @@
   <div class="progress" id="progress"></div>
   <div class="leftstack" id="leftstack">
     <div class="btnrow"><button class="areabtn" id="selBtn">Select area</button><button class="areabtn" id="areaBtn">Filter area</button><button class="areabtn" id="zoomBtn">Zoom window</button><button class="areabtn" id="measureBtn">Measure</button></div>
-    <div class="datebar hidden" id="datebar">
-      <div class="dhead"><span class="t">Capture Date Range</span><button class="reset" id="dateReset">Reset</button></div>
-      <div class="vals"><span id="dStart">—</span><span id="dEnd">—</span></div>
-      <div class="slider-wrap"><div class="slider-track"></div><div class="slider-fill" id="sliderFill"></div>
-        <input type="range" id="rangeMin" min="0" max="100" value="0" /><input type="range" id="rangeMax" min="0" max="100" value="100" /></div>
-    </div>
     <div class="datebar hidden" id="altbar">
       <div class="dhead"><span class="t">Altitude Range</span><label class="ab-blank" title="Also show photos with no altitude in their metadata"><input type="checkbox" id="altBlank" checked /> incl. blank</label><button class="reset" id="altReset">Reset</button></div>
       <div class="vals"><span id="aStart">&mdash;</span><span id="aEnd">&mdash;</span></div>
       <div class="slider-wrap"><div class="slider-track"></div><div class="slider-fill" id="altFill"></div>
         <input type="range" id="altMin" min="0" max="100" value="0" /><input type="range" id="altMax" min="0" max="100" value="100" /></div>
       <button class="ab-read hidden" id="altRead">Read altitudes from the photo files</button>
+    </div>
+    <div class="datebar hidden" id="datebar">
+      <div class="dhead"><span class="t">Capture Date Range</span><button class="reset" id="dateReset">Reset</button></div>
+      <div class="vals"><span id="dStart">—</span><span id="dEnd">—</span></div>
+      <div class="slider-wrap"><div class="slider-track"></div><div class="slider-fill" id="sliderFill"></div>
+        <input type="range" id="rangeMin" min="0" max="100" value="0" /><input type="range" id="rangeMax" min="0" max="100" value="100" /></div>
     </div>
   </div>
   <div class="splitter" id="splitter"></div>
