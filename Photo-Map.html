@@ -338,6 +338,17 @@
   .act-exp.on{transform:rotate(180deg);}
   .act-body .d,.ipa-body .d{font-size:12px;color:var(--muted);line-height:1.45;white-space:pre-wrap;word-wrap:break-word;margin:2px 0;}
   .act-body .d.empty,.ipa-body .d.empty{color:var(--faint);font-style:italic;}
+  .act-steps{display:flex;flex-direction:column;gap:4px;margin:4px 0 2px;}
+  .st-row{display:flex;align-items:center;gap:7px;}
+  .st-chk{width:18px;height:18px;flex-shrink:0;box-sizing:border-box;border:2px solid var(--line2);border-radius:6px;background:var(--panel);cursor:pointer;padding:0;font-size:11px;line-height:1;color:#fff;}
+  .st-chk:hover{border-color:var(--good);}
+  .st-chk.on{background:var(--good);border-color:var(--good);}
+  .st-t{flex:1;min-width:0;font-size:12.5px;color:var(--ink);line-height:1.35;word-wrap:break-word;}
+  .st-t.done{text-decoration:line-through;color:var(--dim);}
+  .st-x{border:none;background:none;color:var(--faint);font-size:15px;cursor:pointer;padding:0 3px;line-height:1;}
+  .st-x:hover{color:var(--bad);}
+  .st-new{box-sizing:border-box;font:inherit;font-size:12px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:4px 8px;outline:none;margin-top:2px;}
+  .st-new:focus{border-color:var(--accent);}
   .act-row .act-del{align-self:flex-start;}
   .ipa-body{flex:1;min-width:0;display:flex;flex-direction:column;}
   .ipa-row{align-items:flex-start;}
@@ -960,13 +971,14 @@ function actById(id){ return actions.find(a=>a.id===id)||null; }
 function actPhotos(a){ return a?photos.filter(p=>Array.isArray(p.acts)&&p.acts.includes(a.id)):[]; }
 function hasOpenAct(p){ return Array.isArray(p.acts)&&p.acts.some(id=>{ const a=actById(id); return a&&!a.done; }); }
 function passActs(p){ return !actOnlyMap||hasOpenAct(p); }
-function normActs(list){ let mx=0; const out=(list||[]).map(a=>({id:+a.id||0,text:String(a.text||""),desc:String(a.desc||""),done:!!a.done,created:a.created||null,doneAt:a.doneAt||null})).filter(a=>a.id>0&&a.text); out.forEach(a=>{ if(a.id>mx)mx=a.id; }); nextActId=mx+1; return out; }
+function normActs(list){ let mx=0; const out=(list||[]).map(a=>({id:+a.id||0,text:String(a.text||""),desc:String(a.desc||""),done:!!a.done,created:a.created||null,doneAt:a.doneAt||null,
+  steps:Array.isArray(a.steps)?a.steps.map(s=>({t:String(s.t||""),d:!!s.d})).filter(s=>s.t):[]})).filter(a=>a.id>0&&a.text); out.forEach(a=>{ if(a.id>mx)mx=a.id; }); nextActId=mx+1; return out; }
 function rebuildActionFilter(){ actionFilter=selActs.size?new Set([...selActs].flatMap(id=>actPhotos(actById(id)).map(p=>p.id))):null; }
 function drawActionRings(){ buildCluster(); renderClusters(); }   // highlights are rendered with the clusters (bubbles flash when they contain selected photos)
 function clearActSel(){ if(!selActs.size) return; selActs.clear(); actionFilter=null; renderActions(); drawActionRings(); updateGallery(); }
 function createAction(text,pids){
   text=(text||"").trim(); if(!text) return null;
-  const a={id:nextActId++,text,desc:"",done:false,created:Date.now(),doneAt:null};
+  const a={id:nextActId++,text,desc:"",done:false,created:Date.now(),doneAt:null,steps:[]};
   actions.unshift(a);
   const items=(pids&&pids.length)?buildAssign([a.id],pids.map(photoById).filter(Boolean)):[];
   pushUndo({actCreate:{data:Object.assign({},a),index:0},items});   // creation (incl. its links) is one undo step
@@ -1012,7 +1024,34 @@ function descHtml(a,set){
   if(!set.has(a.id)) return "";
   return '<div class="d'+(a.desc?'':' empty')+'" title="Double-click to edit the description">'+(a.desc?esc(a.desc):'Double-click to add a description…')+'</div>';
 }
-function expBtnHtml(a,set){ return '<button class="act-exp'+(set.has(a.id)?' on':'')+'" type="button" title="'+(set.has(a.id)?'Hide':'Show')+' description">▾</button>'; }
+function expBtnHtml(a,set){ return '<button class="act-exp'+(set.has(a.id)?' on':'')+'" type="button" title="'+(set.has(a.id)?'Hide':'Show')+' details">▾</button>'; }
+function stepsHtml(a,set){
+  if(!set.has(a.id)) return "";
+  const rows=(a.steps||[]).map((s,i)=>'<div class="st-row" data-si="'+i+'">'
+    +'<button class="st-chk'+(s.d?' on':'')+'" type="button" title="'+(s.d?'Reopen step':'Mark step done')+'">'+(s.d?'✓':'')+'</button>'
+    +'<span class="st-t'+(s.d?' done':'')+'" title="Double-click to edit">'+esc(s.t)+'</span>'
+    +'<button class="st-x" type="button" title="Remove step">&times;</button></div>').join("");
+  return '<div class="act-steps">'+rows+'<input class="st-new" type="text" placeholder="+ step" autocomplete="off" /></div>';
+}
+function wireSteps(el,a){
+  const box=el.querySelector(".act-steps"); if(!box) return;
+  ["click","dblclick","mousedown"].forEach(ev=>box.addEventListener(ev,e=>{ e.stopPropagation(); clearTimeout(el._ct); }));
+  box.querySelectorAll(".st-row").forEach(row=>{
+    const i=Number(row.dataset.si), s=(a.steps||[])[i]; if(!s) return;
+    row.querySelector(".st-chk").addEventListener("click",()=>{ const b=actState(a); s.d=!s.d; recordActEdit(a,b); afterFolderChange(); });
+    row.querySelector(".st-x").addEventListener("click",()=>{ const b=actState(a); a.steps.splice(i,1); recordActEdit(a,b); afterFolderChange(); });
+    row.querySelector(".st-t").addEventListener("dblclick",()=>{
+      inlineEdit(row.querySelector(".st-t"),s.t,false,v=>{ const t=(v==null?"":v.trim()); if(t&&t!==s.t){ const b=actState(a); s.t=t; recordActEdit(a,b); afterFolderChange(); } else refreshActUI(); });
+    });
+  });
+  const inp=box.querySelector(".st-new");
+  inp.addEventListener("keydown",e=>{
+    e.stopPropagation();
+    if(e.key!=="Enter") return; const v=inp.value.trim(); if(!v) return;
+    const b=actState(a); if(!Array.isArray(a.steps)) a.steps=[]; a.steps.push({t:v,d:false}); recordActEdit(a,b); afterFolderChange();
+    const row2=document.querySelector('.act-row[data-aid="'+a.id+'"] .st-new'); if(row2) row2.focus();   // keep typing the next step
+  });
+}
 function wireActRowCommon(el,a,set){
   const ex=el.querySelector(".act-exp");
   if(ex) ex.addEventListener("click",e=>{ e.stopPropagation(); if(set.has(a.id)) set.delete(a.id); else set.add(a.id); refreshActUI(); });
@@ -1108,7 +1147,10 @@ function renderActions(){
     const isCur=!!(cp&&Array.isArray(cp.acts)&&cp.acts.includes(a.id));
     return '<div class="act-row'+(a.done?' done':'')+(selActs.has(a.id)?' sel':'')+(isCur?' cur':'')+'" data-aid="'+a.id+'">'
       +'<label class="act-chk" title="'+(a.done?'Reopen this action':'Mark completed')+'"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
-      +'<div class="act-body"><div class="t">'+esc(a.text)+'</div>'+descHtml(a,expActs)+'<div class="m">'+n+' photo'+(n===1?'':'s')+(a.done&&a.doneAt?' · done '+fmtDate(a.doneAt):'')+'</div></div>'
+      +'<div class="act-body"><div class="t">'+esc(a.text)+'</div>'+descHtml(a,expActs)+stepsHtml(a,expActs)
+      +'<div class="m">'+n+' photo'+(n===1?'':'s')
+      +((a.steps&&a.steps.length)?' · steps '+a.steps.filter(s=>s.d).length+'/'+a.steps.length:'')
+      +(a.done&&a.doneAt?' · done '+fmtDate(a.doneAt):'')+'</div></div>'
       +expBtnHtml(a,expActs)+'<button class="ipa-x act-del" type="button" title="'+(isCur?'Remove this action from the open photo':'Delete this action')+'">&times;</button></div>'; }).join("");
   list.querySelectorAll(".act-row").forEach(el=>{
     const a=actById(Number(el.dataset.aid)); if(!a) return;
@@ -1117,10 +1159,11 @@ function renderActions(){
       const cp2=lb.classList.contains("open")?curPhoto():null;
       if(cp2&&Array.isArray(cp2.acts)&&cp2.acts.includes(a.id)) unassignAct(a,cp2);   // open photo is linked: X just removes that link
       else deleteAction(a); });
+    wireSteps(el,a);
     wireActRowCommon(el,a,expActs);
     /* single click selects/navigates (slightly delayed so a double-click can win); double click edits in place */
-    el.addEventListener("click",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); el._ct=setTimeout(()=>clickAction(a,e),260); });
-    el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); if(e.target.closest(".d")) startActDescEdit(a,el); else startActEdit(a,el); });
+    el.addEventListener("click",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); el._ct=setTimeout(()=>clickAction(a,e),260); });
+    el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); if(e.target.closest(".d")) startActDescEdit(a,el); else startActEdit(a,el); });
     el.addEventListener("contextmenu",e=>{ e.preventDefault(); e.stopPropagation(); openActMenu(a,e); });
   });
 }
@@ -2442,7 +2485,7 @@ function pushTagAction(items){   // one undo step, possibly touching many photos
   pushUndo({items});
 }
 function recordTagChange(p,before){ pushTagAction([{id:p.id,before,after:snapshotTags(p)}]); }
-function actState(a){ return {text:a.text,desc:a.desc||"",done:!!a.done,doneAt:a.doneAt||null}; }
+function actState(a){ return {text:a.text,desc:a.desc||"",done:!!a.done,doneAt:a.doneAt||null,steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d}))}; }
 function recordActEdit(a,before){ const after=actState(a); if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({actEdit:{id:a.id,before,after}}); }
 function cpMarks(ms){ return JSON.parse(JSON.stringify(ms||[])); }
 function pushMarksSnap(p,before,after){ if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({marksSnap:{id:p.id,before,after}}); }
@@ -2458,7 +2501,7 @@ function applyUndoEntry(a,dir){   // dir: "before" (undo) or "after" (redo)
     if(undo){ actions=actions.filter(x=>x.id!==a.actCreate.data.id); selActs.delete(a.actCreate.data.id); }
     else { const d=a.actCreate.data; if(!actById(d.id)){ actions.splice(Math.min(a.actCreate.index,actions.length),0,Object.assign({},d)); if(nextActId<=d.id) nextActId=d.id+1; } }
   }
-  if(a.actEdit){ const x=actById(a.actEdit.id); if(x) Object.assign(x,undo?a.actEdit.before:a.actEdit.after); }
+  if(a.actEdit){ const x=actById(a.actEdit.id); if(x){ const src=undo?a.actEdit.before:a.actEdit.after; x.text=src.text; x.desc=src.desc; x.done=src.done; x.doneAt=src.doneAt; if(src.steps) x.steps=src.steps.map(s=>({t:s.t,d:!!s.d})); } }
   if(a.marksSnap){ const p=photoById(a.marksSnap.id); if(p){ p.marks=cpMarks(undo?a.marksSnap.before:a.marksSnap.after); if(selObj&&!p.marks.includes(selObj)) selObj=null; if(curPhoto()===p&&lb.classList.contains("open")) redrawMarks(); } }
   if(a.sizeSnap){ const p=photoById(a.sizeSnap.id); if(p){ const s=undo?a.sizeSnap.before:a.sizeSnap.after; p.mkw=(s.mkw==null?null:s.mkw); p.mth=(s.mth==null?null:s.mth); if(curPhoto()===p&&lb.classList.contains("open")){ redrawMarks(); syncSizeBars(); if(selMark) positionEditor(); } } }
   if(a.rot){ const p=photoById(a.rot.id); if(p){ const d=((a.rot.delta%360)+360)%360; applyRotation(p,undo?(360-d)%360:d).catch(()=>{}); } }
@@ -2730,7 +2773,7 @@ document.getElementById("jsonInput").addEventListener("change",async e=>{ const 
 function serializeState(includeImages){
   return {
     version:3, folderName, savedAt:new Date().toISOString(),
-    actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.desc)o.desc=a.desc; return o; }),
+    actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.desc)o.desc=a.desc; if(a.steps&&a.steps.length)o.steps=a.steps.map(s=>({t:s.t,d:!!s.d})); return o; }),
     settings:{ baseLayer: map.hasLayer(google)?"google":map.hasLayer(esri)?"esri":"none", showNoGeo, sortBy:currentSort,
       thumb:getComputedStyle(document.documentElement).getPropertyValue("--thumb").trim(),
       sideW:getComputedStyle(document.documentElement).getPropertyValue("--side-w").trim(),
