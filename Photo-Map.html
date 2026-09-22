@@ -398,6 +398,36 @@
   .mt-item:hover{border-color:var(--accent);color:var(--accent);}
   .mt-item.on{background:var(--accent);border-color:var(--accent);color:#fff;}
 
+  /* settings (cog) modal */
+  .cogbtn{border:none;background:none;color:var(--muted);cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;}
+  .cogbtn svg{width:20px;height:20px;fill:currentColor;}
+  .cogbtn:hover{color:var(--accent);background:var(--panel2);}
+  .setmodal{position:fixed;inset:0;z-index:8000;background:#1E1F2255;backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;}
+  .setmodal.show{display:flex;}
+  .set-win{display:flex;width:min(640px,92vw);height:min(440px,84vh);background:var(--panel);border:1px solid var(--line2);border-radius:14px;box-shadow:0 24px 64px #1e1f2244;overflow:hidden;}
+  .set-side{width:150px;flex:0 0 150px;background:var(--panel2);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:14px 10px;gap:4px;}
+  .set-title{font-weight:700;color:var(--ink);font-size:15px;padding:0 8px 10px;}
+  .set-tab{text-align:left;border:none;background:none;font:inherit;font-size:13px;color:var(--muted);padding:8px 10px;border-radius:8px;cursor:pointer;}
+  .set-tab:hover{color:var(--accent);background:var(--accent-tint);}
+  .set-tab.on{background:var(--accent);color:#fff;}
+  .set-main{flex:1;position:relative;padding:18px 22px;overflow-y:auto;}
+  .set-close{position:absolute;top:10px;right:12px;border:none;background:none;color:var(--dim);font-size:22px;cursor:pointer;line-height:1;padding:4px;}
+  .set-close:hover{color:var(--ink);}
+  .set-sec{display:none;}
+  .set-sec.on{display:block;}
+  .set-sec h3{margin:0 0 14px;font-size:15px;color:var(--ink);}
+  .set-row{display:flex;align-items:flex-start;gap:16px;padding:12px 0;border-bottom:1px solid var(--line);}
+  .set-row:last-child{border-bottom:none;}
+  .set-lbl{flex:1;font-size:13px;color:var(--ink);}
+  .set-lbl .set-sub{display:block;font-size:11px;color:var(--dim);margin-top:3px;line-height:1.5;}
+  .set-ctl{display:flex;align-items:center;gap:10px;min-width:180px;}
+  .set-ctl input[type=range]{width:140px;}
+  .set-ctl input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer;}
+  .set-val{font-family:var(--mono);font-size:11px;color:var(--accent);min-width:36px;text-align:right;}
+  .set-radios{display:flex;flex-direction:column;gap:6px;}
+  .set-radios label{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text);cursor:pointer;}
+  .set-radios input{accent-color:var(--accent);cursor:pointer;}
+
   /* altitude bar extras */
   .ab-blank{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;color:var(--muted);cursor:pointer;margin-left:auto;margin-right:10px;}
   .ab-blank input{accent-color:var(--accent);cursor:pointer;}
@@ -450,7 +480,59 @@
   </div>
   <div class="spacer"></div>
   <label class="toggle"><input type="checkbox" id="showNoGeo" /><span class="switch"></span><span class="lbl">Show photos without location</span></label>
+  <button class="cogbtn" id="btnSettings" title="Settings"><svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm8.6 3.5c0-.6-.05-1.1-.15-1.6l2-1.55-2-3.4-2.35.95a8 8 0 0 0-2.75-1.6L14.95 2h-4l-.4 2.8a8 8 0 0 0-2.75 1.6L5.45 5.45l-2 3.4 2 1.55c-.1.5-.15 1-.15 1.6s.05 1.1.15 1.6l-2 1.55 2 3.4 2.35-.95a8 8 0 0 0 2.75 1.6l.4 2.8h4l.4-2.8a8 8 0 0 0 2.75-1.6l2.35.95 2-3.4-2-1.55c.1-.5.15-1 .15-1.6z"/></svg></button>
 </header>
+
+<div class="setmodal" id="setModal">
+  <div class="set-win">
+    <div class="set-side">
+      <div class="set-title">Settings</div>
+      <button class="set-tab on" data-sec="map">Map</button>
+      <button class="set-tab" data-sec="photos">Photos</button>
+      <button class="set-tab" data-sec="actions">Actions</button>
+    </div>
+    <div class="set-main">
+      <button class="set-close" id="setClose">&times;</button>
+      <div class="set-sec on" data-sec="map">
+        <h3>Map</h3>
+        <div class="set-row">
+          <div class="set-lbl">Cluster sensitivity<span class="set-sub">How readily dots merge into numbered clusters. 0% = dots never cluster, 100% = they cluster very easily.</span></div>
+          <div class="set-ctl"><input type="range" id="setClusterSens" min="0" max="100" step="5" /><b class="set-val" id="setClusterVal">50%</b></div>
+        </div>
+        <div class="set-row">
+          <div class="set-lbl">Base map<span class="set-sub">The imagery behind the dots.</span></div>
+          <div class="set-ctl set-radios">
+            <label><input type="radio" name="setBase" value="google" /> Google</label>
+            <label><input type="radio" name="setBase" value="esri" /> Esri</label>
+            <label><input type="radio" name="setBase" value="none" /> None</label>
+          </div>
+        </div>
+      </div>
+      <div class="set-sec" data-sec="photos">
+        <h3>Photos</h3>
+        <div class="set-row">
+          <div class="set-lbl">Show photos without location<span class="set-sub">Adds a "No Location" section to the gallery.</span></div>
+          <div class="set-ctl"><input type="checkbox" id="setNoGeo" /></div>
+        </div>
+        <div class="set-row">
+          <div class="set-lbl">Thumbnail size<span class="set-sub">Card size in the gallery.</span></div>
+          <div class="set-ctl"><input type="range" id="setThumb" min="64" max="260" /></div>
+        </div>
+      </div>
+      <div class="set-sec" data-sec="actions">
+        <h3>Actions</h3>
+        <div class="set-row">
+          <div class="set-lbl">List: open actions only<span class="set-sub">Hide completed actions in the Actions panel.</span></div>
+          <div class="set-ctl"><input type="checkbox" id="setActOpen" /></div>
+        </div>
+        <div class="set-row">
+          <div class="set-lbl">Map: actions only<span class="set-sub">Show only photos that still have an uncompleted action.</span></div>
+          <div class="set-ctl"><input type="checkbox" id="setActMap" /></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="reconnect" id="reconnect">
   <span class="msg" id="rcMsg">—</span>
@@ -532,7 +614,7 @@
       <button class="ab-read hidden" id="altRead">Read altitudes from the photo files</button>
     </div>
     <div class="datebar hidden" id="datebar">
-      <div class="dhead"><span class="t">Capture Date Range</span><button class="reset" id="dateReset">Reset</button></div>
+      <div class="dhead"><span class="t">Capture Date Range</span><label class="ab-blank" title="Also show photos with no capture date in their metadata"><input type="checkbox" id="dateBlank" checked /> incl. blank</label><button class="reset" id="dateReset">Reset</button></div>
       <div class="vals"><span id="dStart">—</span><span id="dEnd">—</span></div>
       <div class="slider-wrap"><div class="slider-track"></div><div class="slider-fill" id="sliderFill"></div>
         <input type="range" id="rangeMin" min="0" max="100" value="0" /><input type="range" id="rangeMax" min="0" max="100" value="100" /></div>
@@ -666,9 +748,12 @@ function passTags(p){ if(!tagFilters.size) return true; for(const f of tagFilter
 function buildCluster(){
   const hl=hlPhotoSet();   // clusters aggregate how many highlighted photos they contain, so the BUBBLE can flash
   const feats=photos.filter(p=>p.lat!=null && passDate(p) && passSearch(p) && passTags(p) && passActs(p) && passAlt(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng]))).map(p=>({type:"Feature",properties:{pid:p.id,hl:hl.has(p.id)?1:0},geometry:{type:"Point",coordinates:[p.lng,p.lat]}}));
-  cluster=new Supercluster({radius:64,maxZoom:21,minPoints:2,map:pr=>({hl:pr.hl||0}),reduce:(acc,pr)=>{acc.hl+=pr.hl;}});
+  cluster=new Supercluster(Object.assign({maxZoom:21,map:pr=>({hl:pr.hl||0}),reduce:(acc,pr)=>{acc.hl+=pr.hl;}},clusterOpts()));
   cluster.load(feats);
 }
+/* Cluster sensitivity (Settings): 0% = dots never merge, 50% = the classic radius, 100% = merge very easily. */
+let clusterSens=50;
+function clusterOpts(){ return clusterSens<=0?{radius:1,minPoints:1e9}:{radius:Math.max(1,Math.round(clusterSens*1.28)),minPoints:2}; }
 function hlPhotoSet(){ const s=new Set(selSet); for(const id of selActs) for(const p of actPhotos(actById(id))) s.add(p.id); return s; }
 function renderClusters(){
   markerLayer.clearLayers(); dotMarkers.clear();
@@ -967,6 +1052,42 @@ function openActMenu(a,ev){
 }
 renderActions();   // initial (empty) state of the panel
 
+/* ---- settings window (cog) ---- */
+const setModal=document.getElementById("setModal");
+function openSettings(){ syncSettingsUI(); setModal.classList.add("show"); }
+function closeSettings(){ setModal.classList.remove("show"); }
+document.getElementById("btnSettings").addEventListener("click",openSettings);
+document.getElementById("setClose").addEventListener("click",closeSettings);
+setModal.addEventListener("mousedown",e=>{ if(e.target===setModal) closeSettings(); });
+window.addEventListener("keydown",e=>{ if(e.key==="Escape"&&setModal.classList.contains("show")){ e.stopPropagation(); closeSettings(); } },true);
+setModal.querySelectorAll(".set-tab").forEach(b=>b.addEventListener("click",()=>{
+  setModal.querySelectorAll(".set-tab").forEach(x=>x.classList.toggle("on",x===b));
+  setModal.querySelectorAll(".set-sec").forEach(s=>s.classList.toggle("on",s.dataset.sec===b.dataset.sec));
+}));
+function syncSettingsUI(){
+  document.getElementById("setClusterSens").value=clusterSens;
+  document.getElementById("setClusterVal").textContent=clusterSens+"%";
+  const base=map.hasLayer(google)?"google":map.hasLayer(esri)?"esri":"none";
+  setModal.querySelectorAll('input[name="setBase"]').forEach(r=>r.checked=(r.value===base));
+  document.getElementById("setNoGeo").checked=showNoGeo;
+  document.getElementById("setThumb").value=parseInt(getComputedStyle(document.documentElement).getPropertyValue("--thumb"))||120;
+  document.getElementById("setActOpen").checked=actShowOpenOnly;
+  document.getElementById("setActMap").checked=actOnlyMap;
+}
+document.getElementById("setClusterSens").addEventListener("input",e=>{
+  clusterSens=Math.max(0,Math.min(100,+e.target.value||0));
+  document.getElementById("setClusterVal").textContent=clusterSens+"%";
+  buildCluster(); renderClusters(); persistState();   // live preview behind the window
+});
+setModal.querySelectorAll('input[name="setBase"]').forEach(r=>r.addEventListener("change",()=>{
+  [google,esri,none].forEach(l=>{ if(map.hasLayer(l)) map.removeLayer(l); });
+  ({google,esri,none})[r.value].addTo(map); persistState();
+}));
+document.getElementById("setNoGeo").addEventListener("change",e=>{ showNoGeo=e.target.checked; document.getElementById("showNoGeo").checked=showNoGeo; updateGallery(); persistState(); });
+document.getElementById("setThumb").addEventListener("input",e=>{ document.documentElement.style.setProperty("--thumb",e.target.value+"px"); document.getElementById("thumbSize").value=e.target.value; persistState(); });
+document.getElementById("setActOpen").addEventListener("change",e=>{ actShowOpenOnly=e.target.checked; renderActions(); persistState(); });
+document.getElementById("setActMap").addEventListener("change",e=>{ actOnlyMap=e.target.checked; buildCluster(); renderClusters(); updateGallery(); renderMapTags(); persistState(); });
+
 /* right-click on empty map: general commands */
 map.on("contextmenu",e=>{
   if(drawing||measuring||dotDrag) return;
@@ -1225,11 +1346,14 @@ const _bdf=buildDateFilter; buildDateFilter=function(){ _bdf(); buildAltFilter()
 const rMin=document.getElementById("rangeMin"),rMax=document.getElementById("rangeMax"),sliderFill=document.getElementById("sliderFill");
 function pctFromTime(t){ return dateMax===dateMin?0:(t-dateMin)/(dateMax-dateMin)*100; }
 function timeFromPct(p){ return dateMin+(dateMax-dateMin)*(p/100); }
-function syncSliderUI(){ const lo=pctFromTime(dateLo),hi=pctFromTime(dateHi); rMin.value=lo; rMax.value=hi; sliderFill.style.left=lo+"%"; sliderFill.style.width=(hi-lo)+"%"; document.getElementById("dStart").textContent=fmtDate(dateLo); document.getElementById("dEnd").textContent=fmtDate(dateHi); }
+function fmtDay(t){ try{ return new Date(t).toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"}); }catch(e){ return String(t); } }
+function syncSliderUI(){ const lo=pctFromTime(dateLo),hi=pctFromTime(dateHi); rMin.value=lo; rMax.value=hi; sliderFill.style.left=lo+"%"; sliderFill.style.width=(hi-lo)+"%"; document.getElementById("dStart").textContent=fmtDay(dateLo); document.getElementById("dEnd").textContent=fmtDay(dateHi); }
 function onSlider(){ let lo=parseFloat(rMin.value),hi=parseFloat(rMax.value); if(lo>hi){const t=lo;lo=hi;hi=t;} dateLo=timeFromPct(lo); dateHi=timeFromPct(hi); syncSliderUI(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); }
 rMin.addEventListener("input",onSlider); rMax.addEventListener("input",onSlider);
 document.getElementById("dateReset").addEventListener("click",()=>{ dateLo=dateMin; dateHi=dateMax; syncSliderUI(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); });
-function passDate(p){ if(dateLo==null||p.time==null)return true; return p.time>=dateLo&&p.time<=dateHi; }
+let dateBlank=true;
+function passDate(p){ if(dateLo==null)return true; if(p.time==null)return dateBlank; return p.time>=dateLo&&p.time<=dateHi; }
+document.getElementById("dateBlank").addEventListener("change",e=>{ dateBlank=e.target.checked; buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); });
 
 /* altitude filter (from photo GPS metadata; meters). Photos without altitude pass while "incl. blank" is ticked. */
 let altMinV=null,altMaxV=null,altLo=null,altHi=null,altBlank=true;
@@ -2300,7 +2424,7 @@ function serializeState(includeImages){
       galleryW:getComputedStyle(document.documentElement).getPropertyValue("--gallery-w").trim(),
       actW:getComputedStyle(document.documentElement).getPropertyValue("--act-w").trim()||null, dateLo, dateHi,
       box: boxBounds?[boxBounds.getSouth(),boxBounds.getWest(),boxBounds.getNorth(),boxBounds.getEast()]:null,
-      recentTags: recentTags.slice(0,10), rightTab, actShowOpenOnly, actOnlyMap, altLo, altHi, altBlank,
+      recentTags: recentTags.slice(0,10), rightTab, actShowOpenOnly, actOnlyMap, altLo, altHi, altBlank, dateBlank, clusterSens,
       view:{ center:[map.getCenter().lat, map.getCenter().lng], zoom:map.getZoom() } },
     photos: photos.map(p=>{ const o={path:p.path,name:p.name,lat:p.lat,lng:p.lng,time:p.time,dir:p.dir,size:p.size,isHeic:p.isHeic};
       if(Array.isArray(p.paths)&&(p.paths.length!==1||p.paths[0]!==p.path))o.paths=p.paths;   // physical locations (incl. empty when pruned from disk)
@@ -2347,6 +2471,8 @@ function applyState(st){
   currentSort=s.sortBy||"date_desc"; document.getElementById("sortSel").value=currentSort;
   buildDateFilter(); if(s.dateLo!=null&&dateMin!=null){ dateLo=s.dateLo; dateHi=s.dateHi; syncSliderUI(); }
   altBlank=(s.altBlank!==false); document.getElementById("altBlank").checked=altBlank;
+  dateBlank=(s.dateBlank!==false); document.getElementById("dateBlank").checked=dateBlank;
+  clusterSens=(typeof s.clusterSens==="number"?Math.max(0,Math.min(100,s.clusterSens)):50);
   if(s.altLo!=null&&altMinV!=null){ altLo=Math.max(altMinV,s.altLo); altHi=Math.min(altMaxV,(s.altHi!=null?s.altHi:altMaxV)); syncAltUI(); }
   if(boxRect){map.removeLayer(boxRect);boxRect=null;} boxBounds=null;
   if(s.box){ boxBounds=L.latLngBounds([s.box[0],s.box[1]],[s.box[2],s.box[3]]); boxRect=L.rectangle(boxBounds,{color:"#5865F2",weight:2,fill:false,dashArray:"6 4"}).addTo(map); }
