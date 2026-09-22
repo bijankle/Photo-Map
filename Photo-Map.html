@@ -955,7 +955,7 @@ function setActionDone(a,done){ const before=actState(a); a.done=!!done; a.doneA
 /* Inline editing (titles and descriptions, in both the Actions panel and the under-photo strip):
    double-click the text to edit in place. Enter (Shift+Enter = new line in a description) or
    clicking away commits; Escape cancels. */
-let expActs=new Set();   // actions whose description is expanded (session-only)
+let expActs=new Set(), expActsIp=new Set();   // expanded descriptions — separate per view (left panel vs photo strip), session-only
 function inlineEdit(el,value,multiline,onCommit){
   if(!el||el.parentElement.querySelector(".act-edit")) return;
   el.style.display="none";
@@ -986,14 +986,14 @@ function startActDescEdit(a,row){
 }
 function renameAction(a){ const row=document.querySelector('.act-row[data-aid="'+a.id+'"]'); if(row) startActEdit(a,row); }
 function editActionDesc(a){ expActs.add(a.id); refreshActUI(); const row=document.querySelector('.act-row[data-aid="'+a.id+'"]'); if(row) startActDescEdit(a,row); }
-function descHtml(a){
-  if(!expActs.has(a.id)) return "";
+function descHtml(a,set){
+  if(!set.has(a.id)) return "";
   return '<div class="d'+(a.desc?'':' empty')+'" title="Double-click to edit the description">'+(a.desc?esc(a.desc):'Double-click to add a description…')+'</div>';
 }
-function expBtnHtml(a){ return '<button class="act-exp'+(expActs.has(a.id)?' on':'')+'" type="button" title="'+(expActs.has(a.id)?'Hide':'Show')+' description">▾</button>'; }
-function wireActRowCommon(el,a){
+function expBtnHtml(a,set){ return '<button class="act-exp'+(set.has(a.id)?' on':'')+'" type="button" title="'+(set.has(a.id)?'Hide':'Show')+' description">▾</button>'; }
+function wireActRowCommon(el,a,set){
   const ex=el.querySelector(".act-exp");
-  if(ex) ex.addEventListener("click",e=>{ e.stopPropagation(); if(expActs.has(a.id)) expActs.delete(a.id); else expActs.add(a.id); refreshActUI(); });
+  if(ex) ex.addEventListener("click",e=>{ e.stopPropagation(); if(set.has(a.id)) set.delete(a.id); else set.add(a.id); refreshActUI(); });
   const d=el.querySelector(".d");
   if(d) d.addEventListener("dblclick",e=>{ e.stopPropagation(); clearTimeout(el._ct); startActDescEdit(a,el); });   // cancel the row's pending single-click select, or it re-renders and closes the editor
 }
@@ -1062,13 +1062,13 @@ function renderActions(){
   list.innerHTML=shown.map(a=>{ const n=actPhotos(a).length;
     return '<div class="act-row'+(a.done?' done':'')+(selActs.has(a.id)?' sel':'')+'" data-aid="'+a.id+'">'
       +'<label class="act-chk" title="'+(a.done?'Reopen this action':'Mark completed')+'"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
-      +'<div class="act-body"><div class="t">'+esc(a.text)+'</div>'+descHtml(a)+'<div class="m">'+n+' photo'+(n===1?'':'s')+(a.done&&a.doneAt?' · done '+fmtDate(a.doneAt):'')+'</div></div>'
-      +expBtnHtml(a)+'<button class="ipa-x act-del" type="button" title="Delete this action">&times;</button></div>'; }).join("");
+      +'<div class="act-body"><div class="t">'+esc(a.text)+'</div>'+descHtml(a,expActs)+'<div class="m">'+n+' photo'+(n===1?'':'s')+(a.done&&a.doneAt?' · done '+fmtDate(a.doneAt):'')+'</div></div>'
+      +expBtnHtml(a,expActs)+'<button class="ipa-x act-del" type="button" title="Delete this action">&times;</button></div>'; }).join("");
   list.querySelectorAll(".act-row").forEach(el=>{
     const a=actById(Number(el.dataset.aid)); if(!a) return;
     el.querySelector("input").addEventListener("click",e=>{ e.stopPropagation(); setActionDone(a,e.target.checked); });
     el.querySelector(".act-del").addEventListener("click",e=>{ e.stopPropagation(); deleteAction(a); });
-    wireActRowCommon(el,a);
+    wireActRowCommon(el,a,expActs);
     /* single click selects/navigates (slightly delayed so a double-click can win); double click edits in place */
     el.addEventListener("click",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); el._ct=setTimeout(()=>clickAction(a,e),260); });
     el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); if(e.target.closest(".d")) startActDescEdit(a,el); else startActEdit(a,el); });
@@ -1088,14 +1088,14 @@ function renderIpActions(){
   const listEl=document.getElementById("ipaList");
   listEl.innerHTML=shown.length?shown.map(a=>'<div class="ipa-row'+(a.done?' done':'')+'" data-aid="'+a.id+'">'
     +'<label class="act-chk"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
-    +'<div class="ipa-body"><span class="t" title="Double-click to edit">'+esc(a.text)+'</span>'+descHtml(a)+'</div>'
-    +expBtnHtml(a)+'<button class="ipa-x" title="Remove this action from this photo">&times;</button></div>').join("")
+    +'<div class="ipa-body"><span class="t" title="Double-click to edit">'+esc(a.text)+'</span>'+descHtml(a,expActsIp)+'</div>'
+    +expBtnHtml(a,expActsIp)+'<button class="ipa-x" title="Remove this action from this photo">&times;</button></div>').join("")
     :"";
   listEl.querySelectorAll(".ipa-row").forEach(el=>{
     const a=actById(Number(el.dataset.aid)); if(!a) return;
     el.querySelector("input").addEventListener("click",e=>{ e.stopPropagation(); setActionDone(a,e.target.checked); });
     el.querySelector(".ipa-x").addEventListener("click",e=>{ e.stopPropagation(); unassignAct(a,curPhoto()); });
-    wireActRowCommon(el,a);
+    wireActRowCommon(el,a,expActsIp);
     el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.act-exp,.ipa-x")||el.querySelector(".act-edit")) return; if(e.target.closest(".d")) startActDescEdit(a,el); else startActEdit(a,el); });
   });
 }
