@@ -325,6 +325,16 @@
   /* left actions panel */
   .actpanel{width:var(--act-w,270px);flex:0 0 var(--act-w,270px);min-width:170px;height:100%;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:2;}
   .act-edit{width:100%;box-sizing:border-box;font:inherit;font-size:13px;color:var(--ink);background:var(--panel);border:1px solid var(--accent);border-radius:7px;padding:4px 7px;outline:none;}
+  textarea.act-edit{resize:vertical;min-height:48px;font-size:12.5px;line-height:1.45;}
+  .act-exp{border:none;background:none;color:var(--dim);cursor:pointer;padding:2px 3px;font-size:12px;line-height:1;align-self:flex-start;transition:transform .15s;}
+  .act-exp:hover{color:var(--accent);}
+  .act-exp.on{transform:rotate(180deg);}
+  .act-body .d,.ipa-body .d{font-size:12px;color:var(--muted);line-height:1.45;white-space:pre-wrap;word-wrap:break-word;margin:2px 0;}
+  .act-body .d.empty,.ipa-body .d.empty{color:var(--faint);font-style:italic;}
+  .act-row .act-del{align-self:flex-start;}
+  .ipa-body{flex:1;min-width:0;display:flex;flex-direction:column;}
+  .ipa-row{align-items:flex-start;}
+  .ipa-row .act-chk,.ipa-row .ipa-x,.ipa-row .act-exp{margin-top:1px;}
   .act-head{display:flex;align-items:center;gap:8px;padding:12px 12px 8px;}
   .act-head .title{font-weight:700;color:var(--ink);font-size:14px;}
   .act-head .count{font-family:var(--mono);font-size:10px;color:var(--dim);flex:1;}
@@ -905,35 +915,64 @@ function actById(id){ return actions.find(a=>a.id===id)||null; }
 function actPhotos(a){ return a?photos.filter(p=>Array.isArray(p.acts)&&p.acts.includes(a.id)):[]; }
 function hasOpenAct(p){ return Array.isArray(p.acts)&&p.acts.some(id=>{ const a=actById(id); return a&&!a.done; }); }
 function passActs(p){ return !actOnlyMap||hasOpenAct(p); }
-function normActs(list){ let mx=0; const out=(list||[]).map(a=>({id:+a.id||0,text:String(a.text||""),done:!!a.done,created:a.created||null,doneAt:a.doneAt||null})).filter(a=>a.id>0&&a.text); out.forEach(a=>{ if(a.id>mx)mx=a.id; }); nextActId=mx+1; return out; }
+function normActs(list){ let mx=0; const out=(list||[]).map(a=>({id:+a.id||0,text:String(a.text||""),desc:String(a.desc||""),done:!!a.done,created:a.created||null,doneAt:a.doneAt||null})).filter(a=>a.id>0&&a.text); out.forEach(a=>{ if(a.id>mx)mx=a.id; }); nextActId=mx+1; return out; }
 function rebuildActionFilter(){ actionFilter=selActs.size?new Set([...selActs].flatMap(id=>actPhotos(actById(id)).map(p=>p.id))):null; }
 function drawActionRings(){ buildCluster(); renderClusters(); }   // highlights are rendered with the clusters (bubbles flash when they contain selected photos)
 function clearActSel(){ if(!selActs.size) return; selActs.clear(); actionFilter=null; renderActions(); drawActionRings(); updateGallery(); }
 function createAction(text,pids){
   text=(text||"").trim(); if(!text) return null;
-  const a={id:nextActId++,text,done:false,created:Date.now(),doneAt:null};
+  const a={id:nextActId++,text,desc:"",done:false,created:Date.now(),doneAt:null};
   actions.unshift(a);
   if(pids&&pids.length) assignActs([a.id],pids.map(photoById).filter(Boolean));
   else afterFolderChange();
   return a;
 }
 function setActionDone(a,done){ a.done=!!done; a.doneAt=a.done?Date.now():null; afterFolderChange(); }
-/* Inline rename: the row's text becomes an input in place (double-click a row, or right-click -> Rename).
-   Enter or clicking away commits; Escape cancels. */
-function startActEdit(a,row){
-  const body=row.querySelector(".act-body"); if(!body||body.querySelector(".act-edit")) return;
-  const t=body.querySelector(".t"); t.style.display="none";
-  const inp=document.createElement("input"); inp.type="text"; inp.className="act-edit"; inp.value=a.text;
-  body.insertBefore(inp,t); inp.focus(); inp.select();
+/* Inline editing (titles and descriptions, in both the Actions panel and the under-photo strip):
+   double-click the text to edit in place. Enter (Shift+Enter = new line in a description) or
+   clicking away commits; Escape cancels. */
+let expActs=new Set();   // actions whose description is expanded (session-only)
+function inlineEdit(el,value,multiline,onCommit){
+  if(!el||el.parentElement.querySelector(".act-edit")) return;
+  el.style.display="none";
+  const inp=document.createElement(multiline?"textarea":"input");
+  if(!multiline) inp.type="text";
+  inp.className="act-edit"; inp.value=value; if(multiline) inp.rows=3;
+  el.parentElement.insertBefore(inp,el);
+  inp.focus(); inp.select();
   let done=false;
-  const finish=(commit)=>{ if(done) return; done=true;
-    const v=inp.value.trim();
-    if(commit&&v&&v!==a.text){ a.text=v; afterFolderChange(); } else renderActions(); };
-  inp.addEventListener("keydown",e=>{ e.stopPropagation(); if(e.key==="Enter") finish(true); else if(e.key==="Escape") finish(false); });
+  const finish=(commit)=>{ if(done) return; done=true; onCommit(commit?inp.value:null); };
+  inp.addEventListener("keydown",e=>{ e.stopPropagation();
+    if(e.key==="Enter"&&(!multiline||!e.shiftKey)){ e.preventDefault(); finish(true); }
+    else if(e.key==="Escape") finish(false); });
   inp.addEventListener("blur",()=>finish(true));
   ["click","dblclick","mousedown","contextmenu"].forEach(ev=>inp.addEventListener(ev,e=>e.stopPropagation()));
 }
+function refreshActUI(){ renderActions(); renderIpActions(); }
+function startActEdit(a,row){
+  inlineEdit(row.querySelector(".t"),a.text,false,v=>{
+    const t=(v==null?"":v.trim());
+    if(t&&t!==a.text){ a.text=t; afterFolderChange(); } else refreshActUI();
+  });
+}
+function startActDescEdit(a,row){
+  inlineEdit(row.querySelector(".d"),a.desc||"",true,v=>{
+    if(v!=null&&v.trim()!==(a.desc||"")){ a.desc=v.trim(); afterFolderChange(); } else refreshActUI();
+  });
+}
 function renameAction(a){ const row=document.querySelector('.act-row[data-aid="'+a.id+'"]'); if(row) startActEdit(a,row); }
+function editActionDesc(a){ expActs.add(a.id); refreshActUI(); const row=document.querySelector('.act-row[data-aid="'+a.id+'"]'); if(row) startActDescEdit(a,row); }
+function descHtml(a){
+  if(!expActs.has(a.id)) return "";
+  return '<div class="d'+(a.desc?'':' empty')+'" title="Double-click to edit the description">'+(a.desc?esc(a.desc):'Double-click to add a description…')+'</div>';
+}
+function expBtnHtml(a){ return '<button class="act-exp'+(expActs.has(a.id)?' on':'')+'" type="button" title="'+(expActs.has(a.id)?'Hide':'Show')+' description">▾</button>'; }
+function wireActRowCommon(el,a){
+  const ex=el.querySelector(".act-exp");
+  if(ex) ex.addEventListener("click",e=>{ e.stopPropagation(); if(expActs.has(a.id)) expActs.delete(a.id); else expActs.add(a.id); refreshActUI(); });
+  const d=el.querySelector(".d");
+  if(d) d.addEventListener("dblclick",e=>{ e.stopPropagation(); startActDescEdit(a,el); });
+}
 function deleteAction(a){
   const n=actPhotos(a).length;
   if(!confirm('Delete the action "'+a.text+'"?\n\nIt will be removed from '+n+' photo'+(n===1?'':'s')+'. (Removing it from photos is undoable; the action itself is not.)')) return;
@@ -981,13 +1020,16 @@ function renderActions(){
   list.innerHTML=shown.map(a=>{ const n=actPhotos(a).length;
     return '<div class="act-row'+(a.done?' done':'')+(selActs.has(a.id)?' sel':'')+'" data-aid="'+a.id+'">'
       +'<label class="act-chk" title="'+(a.done?'Reopen this action':'Mark completed')+'"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
-      +'<div class="act-body"><div class="t">'+esc(a.text)+'</div><div class="m">'+n+' photo'+(n===1?'':'s')+(a.done&&a.doneAt?' · done '+fmtDate(a.doneAt):'')+'</div></div></div>'; }).join("");
+      +'<div class="act-body"><div class="t">'+esc(a.text)+'</div>'+descHtml(a)+'<div class="m">'+n+' photo'+(n===1?'':'s')+(a.done&&a.doneAt?' · done '+fmtDate(a.doneAt):'')+'</div></div>'
+      +expBtnHtml(a)+'<button class="ipa-x act-del" type="button" title="Delete this action">&times;</button></div>'; }).join("");
   list.querySelectorAll(".act-row").forEach(el=>{
     const a=actById(Number(el.dataset.aid)); if(!a) return;
     el.querySelector("input").addEventListener("click",e=>{ e.stopPropagation(); setActionDone(a,e.target.checked); });
-    /* single click selects/navigates (slightly delayed so a double-click can win); double click renames in place */
-    el.addEventListener("click",e=>{ if(e.target.closest(".act-chk")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); el._ct=setTimeout(()=>clickAction(a),260); });
-    el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); startActEdit(a,el); });
+    el.querySelector(".act-del").addEventListener("click",e=>{ e.stopPropagation(); deleteAction(a); });
+    wireActRowCommon(el,a);
+    /* single click selects/navigates (slightly delayed so a double-click can win); double click edits in place */
+    el.addEventListener("click",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); el._ct=setTimeout(()=>clickAction(a),260); });
+    el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); if(e.target.closest(".d")) startActDescEdit(a,el); else startActEdit(a,el); });
     el.addEventListener("contextmenu",e=>{ e.preventDefault(); e.stopPropagation(); openActMenu(a,e); });
   });
 }
@@ -1003,13 +1045,16 @@ function renderIpActions(){
   hideBtn.style.display=all.some(a=>a.done)?"":"none";
   const listEl=document.getElementById("ipaList");
   listEl.innerHTML=shown.length?shown.map(a=>'<div class="ipa-row'+(a.done?' done':'')+'" data-aid="'+a.id+'">'
-    +'<label class="act-chk"><input type="checkbox"'+(a.done?' checked':'')+'/></label><span class="t">'+esc(a.text)+'</span>'
-    +'<button class="ipa-x" title="Remove this action from this photo">&times;</button></div>').join("")
+    +'<label class="act-chk"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
+    +'<div class="ipa-body"><span class="t" title="Double-click to edit">'+esc(a.text)+'</span>'+descHtml(a)+'</div>'
+    +expBtnHtml(a)+'<button class="ipa-x" title="Remove this action from this photo">&times;</button></div>').join("")
     :'<div class="ipa-none">No actions on this photo.</div>';
   listEl.querySelectorAll(".ipa-row").forEach(el=>{
     const a=actById(Number(el.dataset.aid)); if(!a) return;
     el.querySelector("input").addEventListener("click",e=>{ e.stopPropagation(); setActionDone(a,e.target.checked); });
     el.querySelector(".ipa-x").addEventListener("click",e=>{ e.stopPropagation(); unassignAct(a,curPhoto()); });
+    wireActRowCommon(el,a);
+    el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.act-exp,.ipa-x")||el.querySelector(".act-edit")) return; if(e.target.closest(".d")) startActDescEdit(a,el); else startActEdit(a,el); });
   });
 }
 document.getElementById("actOpenOnly").addEventListener("click",()=>{ actShowOpenOnly=!actShowOpenOnly; renderActions(); persistState(); });
@@ -1060,6 +1105,7 @@ function openActMenu(a,ev){
     mkCtxItem("Assign → select photos first (Select area, or open a photo)",null,true);
   mkCtxItem(a.done?"Reopen action":"Mark completed",()=>setActionDone(a,!a.done));
   mkCtxItem("Rename…",()=>renameAction(a));
+  mkCtxItem("Edit description…",()=>editActionDesc(a));
   mkCtxItem("Delete action…",()=>deleteAction(a));
   showCtxAt(ev.clientX,ev.clientY);
 }
@@ -2431,7 +2477,7 @@ document.getElementById("jsonInput").addEventListener("change",async e=>{ const 
 function serializeState(includeImages){
   return {
     version:3, folderName, savedAt:new Date().toISOString(),
-    actions: actions.map(a=>({id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null})),
+    actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.desc)o.desc=a.desc; return o; }),
     settings:{ baseLayer: map.hasLayer(google)?"google":map.hasLayer(esri)?"esri":"none", showNoGeo, sortBy:currentSort,
       thumb:getComputedStyle(document.documentElement).getPropertyValue("--thumb").trim(),
       galleryW:getComputedStyle(document.documentElement).getPropertyValue("--gallery-w").trim(),
