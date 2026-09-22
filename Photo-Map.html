@@ -1041,8 +1041,7 @@ function clickAction(a,ev){
     if(selActs.has(a.id)) selActs.delete(a.id); else selActs.add(a.id);
     lastActClick=a.id;
   } else {
-    if(selActs.size===1&&selActs.has(a.id)) selActs.clear();   // clicking the only selected action deselects it
-    else selActs=new Set([a.id]);
+    selActs=new Set([a.id]);   // plain click always selects — re-clicking a selected action just re-navigates to its photos
     lastActClick=a.id;
   }
   rebuildActionFilter(); renderActions(); drawActionRings(); updateGallery();
