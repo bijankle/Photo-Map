@@ -915,6 +915,7 @@ map.on("click",e=>{
   if(Date.now()-uiClickT<400||Date.now()-dotDropT<450) return;
   if(selSet.size) clearSel();
   if(selActs.size) clearActSel();
+  closeViewer();   // blank the Photo tab too, so a stale viewed photo can't be picked up by a new action
 });
 
 /* ================= ACTIONS =================
@@ -1102,7 +1103,9 @@ document.getElementById("actNewInput").addEventListener("keydown",e=>{
   if(e.key==="Escape"&&pendingActPhotos){ e.stopPropagation(); armNewAction(null); return; }
   if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return;
   e.target.value="";
-  const pids=pendingActPhotos; armNewAction(null);
+  // Assign to whatever is current: armed photos > map selection > the photo open in the viewer > nothing.
+  const pids=pendingActPhotos||(selSet.size?[...selSet]:((lb.classList.contains("open")&&curPhoto())?[curPhoto().id]:null));
+  armNewAction(null);
   createAction(v,pids);
   document.getElementById("actNewInput").focus();   // keep typing to add the next one
 });
