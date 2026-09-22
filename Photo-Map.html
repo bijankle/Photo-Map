@@ -359,6 +359,8 @@
   .act-row{display:flex;align-items:flex-start;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 9px;cursor:pointer;user-select:none;}
   .act-row:hover{border-color:var(--accent);}
   .act-row.sel{border-color:var(--accent);background:var(--accent-tint);box-shadow:0 0 0 1px var(--accent);}
+  .act-row.cur{box-shadow:inset 3px 0 0 var(--accent);}   /* linked to the photo open in the viewer */
+  .act-row.sel.cur{box-shadow:0 0 0 1px var(--accent),inset 3px 0 0 var(--accent);}
   .act-row.done .t{text-decoration:line-through;color:var(--dim);}
   .act-chk{display:flex;align-items:center;padding-top:1px;cursor:pointer;}
   .act-chk input{width:15px;height:15px;accent-color:var(--good);cursor:pointer;}
@@ -1059,8 +1061,10 @@ function renderActions(){
   document.getElementById("actMapOnly").classList.toggle("on",actOnlyMap);
   const shown=actShowOpenOnly?actions.filter(a=>!a.done):actions;
   if(!shown.length){ list.innerHTML=""; return; }
+  const cp=lb.classList.contains("open")?curPhoto():null;   // the open photo's actions get a marker in this list
   list.innerHTML=shown.map(a=>{ const n=actPhotos(a).length;
-    return '<div class="act-row'+(a.done?' done':'')+(selActs.has(a.id)?' sel':'')+'" data-aid="'+a.id+'">'
+    const isCur=!!(cp&&Array.isArray(cp.acts)&&cp.acts.includes(a.id));
+    return '<div class="act-row'+(a.done?' done':'')+(selActs.has(a.id)?' sel':'')+(isCur?' cur':'')+'" data-aid="'+a.id+'">'
       +'<label class="act-chk" title="'+(a.done?'Reopen this action':'Mark completed')+'"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
       +'<div class="act-body"><div class="t">'+esc(a.text)+'</div>'+descHtml(a,expActs)+'<div class="m">'+n+' photo'+(n===1?'':'s')+(a.done&&a.doneAt?' · done '+fmtDate(a.doneAt):'')+'</div></div>'
       +expBtnHtml(a,expActs)+'<button class="ipa-x act-del" type="button" title="Delete this action">&times;</button></div>'; }).join("");
@@ -1759,6 +1763,7 @@ function loadViewer(){
   showPreview(p);
   renderPhotoTags(p);
   renderIpActions();
+  renderActions();   // mark this photo's actions in the left panel
   highlightCurrent();
   setTimeout(()=>{ if(curPhoto()===p) getOriginalFileSilent(p).catch(()=>{}); },60);   // warm the file handle in the background so a Full-quality tick starts instantly
 }
@@ -1959,7 +1964,7 @@ lbStage.addEventListener("wheel",e=>{ e.preventDefault(); const r=lbStage.getBou
 let panning=false,panX=0,panY=0;
 /* pointer handling consolidated in the markup engine below */
 function vStep(d){ if(!lightboxList.length)return; lightboxIndex=(lightboxIndex+d+lightboxList.length)%lightboxList.length; loadViewer(); }
-function closeViewer(){ if(!lb.classList.contains("open")) return; if(selMark) deselectText(); closeFileInfo(); if(typeof closeFolderPop==="function") closeFolderPop(); setMarkTool("none"); setEditOpen(false); draft=null; polyPrev=null; clearHighlight(); lb.classList.remove("open"); fullToken++; if(curUrl){URL.revokeObjectURL(curUrl);curUrl=null;} lbImg.src=""; renderMapTags(); setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); },30); }
+function closeViewer(){ if(!lb.classList.contains("open")) return; if(selMark) deselectText(); closeFileInfo(); if(typeof closeFolderPop==="function") closeFolderPop(); setMarkTool("none"); setEditOpen(false); draft=null; polyPrev=null; clearHighlight(); lb.classList.remove("open"); fullToken++; if(curUrl){URL.revokeObjectURL(curUrl);curUrl=null;} lbImg.src=""; renderMapTags(); renderActions(); setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); },30); }
 document.getElementById("lbClose").addEventListener("click",closeViewer);
 document.getElementById("lbPrev").addEventListener("click",e=>{e.stopPropagation();vStep(-1);});
 document.getElementById("lbNext").addEventListener("click",e=>{e.stopPropagation();vStep(1);});
