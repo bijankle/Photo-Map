@@ -664,13 +664,16 @@ function passSearch(p){
 // Multi-tag filter: a photo passes only if it is in EVERY active tag (overlap/intersection).
 function passTags(p){ if(!tagFilters.size) return true; for(const f of tagFilters) if(!photoInFolder(p,f)) return false; return true; }
 function buildCluster(){
-  const feats=photos.filter(p=>p.lat!=null && passDate(p) && passSearch(p) && passTags(p) && passActs(p) && passAlt(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng]))).map(p=>({type:"Feature",properties:{pid:p.id},geometry:{type:"Point",coordinates:[p.lng,p.lat]}}));
-  cluster=new Supercluster({radius:64,maxZoom:21,minPoints:2});
+  const hl=hlPhotoSet();   // clusters aggregate how many highlighted photos they contain, so the BUBBLE can flash
+  const feats=photos.filter(p=>p.lat!=null && passDate(p) && passSearch(p) && passTags(p) && passActs(p) && passAlt(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng]))).map(p=>({type:"Feature",properties:{pid:p.id,hl:hl.has(p.id)?1:0},geometry:{type:"Point",coordinates:[p.lng,p.lat]}}));
+  cluster=new Supercluster({radius:64,maxZoom:21,minPoints:2,map:pr=>({hl:pr.hl||0}),reduce:(acc,pr)=>{acc.hl+=pr.hl;}});
   cluster.load(feats);
 }
+function hlPhotoSet(){ const s=new Set(selSet); for(const id of selActs) for(const p of actPhotos(actById(id))) s.add(p.id); return s; }
 function renderClusters(){
   markerLayer.clearLayers(); dotMarkers.clear();
   if(!cluster) return;
+  const hlSet=hlPhotoSet();
   const b=map.getBounds();
   let w=Math.max(-180,b.getWest()),e=Math.min(180,b.getEast()),s=Math.max(-85,b.getSouth()),n=Math.min(85,b.getNorth());
   const z=Math.round(map.getZoom());
@@ -694,10 +697,11 @@ function renderClusters(){
           } }catch(err){}
         const ez=Math.min(cluster.getClusterExpansionZoom(cid),map.getMaxZoom()); map.flyTo([lat,lng],ez,{duration:.45});   // fallback
       });
+      if(c.properties.hl) markerLayer.addLayer(L.circleMarker([lat,lng],{radius:size/2+5,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.25,interactive:false,className:"hl-dot"}));   // cluster holds selected photos: the bubble itself flashes
       markerLayer.addLayer(m);
     } else {
       const p=photoById(c.properties.pid); if(!p) continue;
-      const isSel=selSet.has(p.id);
+      const isSel=hlSet.has(p.id);
       if(isSel){ const hl=mkHlDot(lat,lng); markerLayer.addLayer(hl); dotMarkers.set(p.id,{hl}); }   // selected = same pulsing highlight as a single open photo
       const hit=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:15,stroke:false,fill:true,fillOpacity:0});
       hit.on("mouseover",e=>{ if(dotDrag) return; if(isSel||dotSelected(p)) map.getContainer().style.cursor="move"; showHover(p,e.originalEvent); });
@@ -783,7 +787,7 @@ function restoreGps(list){
   if(!items.length) return;
   pushTagAction(items); afterFolderChange();
 }
-function clearSel(){ selSet.clear(); setAreaBtn(); renderClusters(); }
+function clearSel(){ selSet.clear(); setAreaBtn(); buildCluster(); renderClusters(); }
 /* A quick left click on empty map clears photo + action selections. Leaflet never fires "click"
    after a pan, so dragging the map is safe; clicks on dots, clusters, or menu dismissals are
    excluded via uiClickT. */
@@ -799,21 +803,13 @@ map.on("click",()=>{
    many photos, or many actions to one photo). Stored in the .json like tags; photos untouched. */
 let actions=[], nextActId=1, selActs=new Set(), actionFilter=null;
 let actShowOpenOnly=false, actOnlyMap=false, ipHideDone=false, rightTab="photo";
-const actRingLayer=L.layerGroup().addTo(map);
 function actById(id){ return actions.find(a=>a.id===id)||null; }
 function actPhotos(a){ return a?photos.filter(p=>Array.isArray(p.acts)&&p.acts.includes(a.id)):[]; }
 function hasOpenAct(p){ return Array.isArray(p.acts)&&p.acts.some(id=>{ const a=actById(id); return a&&!a.done; }); }
 function passActs(p){ return !actOnlyMap||hasOpenAct(p); }
 function normActs(list){ let mx=0; const out=(list||[]).map(a=>({id:+a.id||0,text:String(a.text||""),done:!!a.done,created:a.created||null,doneAt:a.doneAt||null})).filter(a=>a.id>0&&a.text); out.forEach(a=>{ if(a.id>mx)mx=a.id; }); nextActId=mx+1; return out; }
 function rebuildActionFilter(){ actionFilter=selActs.size?new Set([...selActs].flatMap(id=>actPhotos(actById(id)).map(p=>p.id))):null; }
-function drawActionRings(){
-  actRingLayer.clearLayers(); if(!selActs.size) return;
-  const seen=new Set();
-  for(const id of selActs) for(const p of actPhotos(actById(id))){
-    if(p.lat==null||seen.has(p.id)) continue; seen.add(p.id);
-    actRingLayer.addLayer(mkHlDot(p.lat,p.lng));
-  }
-}
+function drawActionRings(){ buildCluster(); renderClusters(); }   // highlights are rendered with the clusters (bubbles flash when they contain selected photos)
 function clearActSel(){ if(!selActs.size) return; selActs.clear(); actionFilter=null; renderActions(); drawActionRings(); updateGallery(); }
 function createAction(text,pids){
   text=(text||"").trim(); if(!text) return null;
@@ -1329,7 +1325,7 @@ function dUp(e){
       const inWin=photos.filter(p=>p.lat!=null&&passDate(p)&&passSearch(p)&&passTags(p)&&passActs(p)&&passAlt(p)&&(!boxBounds||boxBounds.contains([p.lat,p.lng]))&&b.contains([p.lat,p.lng]));
       selSet=new Set(inWin.map(p=>p.id));
     }
-    setAreaBtn(); renderClusters(); return;
+    setAreaBtn(); buildCluster(); renderClusters(); return;
   }
   if(tiny){ setAreaBtn(); return; }
   boxBounds=b; boxRect=L.rectangle(b,{color:"#5865F2",weight:2,fill:false,dashArray:"6 4"}).addTo(map);
@@ -2052,7 +2048,7 @@ function redoLatest(open){
   else redoTag();
 }
 function afterFolderChange(){ if(typeof rebuildActionFilter==="function"&&actionFilter) rebuildActionFilter();
-  buildCluster(); renderClusters(); highlightCurrent(); drawActionRings(); updateGallery(); renderPhotoTags(curPhoto()); renderActions(); renderIpActions(); renderMapTags(); idbSet("lastState",serializeState(false)).catch(()=>{});
+  buildCluster(); renderClusters(); highlightCurrent(); updateGallery(); renderPhotoTags(curPhoto()); renderActions(); renderIpActions(); renderMapTags(); idbSet("lastState",serializeState(false)).catch(()=>{});
   ensureJsonWrite(true).then(()=>scheduleAutoSave());   // grant write in the click gesture, then debounce so rapid tag toggles batch into ONE small file write
 }
 document.getElementById("lbFolder").addEventListener("click",e=>{ e.stopPropagation(); if(folderPopShown) closeFolderPop(); else openFolderPop(); });
@@ -2167,7 +2163,7 @@ function clearAll(redraw){
   if(boxRect){map.removeLayer(boxRect);boxRect=null;} boxBounds=null; setAreaBtn();
   photos=[]; nextId=1; cluster=null; markerLayer.clearLayers(); undoStack=[]; lightboxList=[]; lightboxIndex=0; sizeIndex=new Map();
   selSet.clear(); dotMarkers.clear(); setAreaBtn(); if(typeof closeCtx==="function") closeCtx();
-  actions=[]; nextActId=1; selActs.clear(); actionFilter=null; actRingLayer.clearLayers(); renderActions(); renderIpActions();
+  actions=[]; nextActId=1; selActs.clear(); actionFilter=null; renderActions(); renderIpActions();
   if(measuring) stopMeasure();
   dateMin=dateMax=dateLo=dateHi=null; document.getElementById("datebar").classList.add("hidden");
   altMinV=altMaxV=altLo=altHi=null; document.getElementById("altbar").classList.add("hidden");
