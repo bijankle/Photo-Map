@@ -28,6 +28,7 @@
   .brand .mark::after{content:"";position:absolute;inset:0;margin:auto;width:6px;height:6px;border-radius:50%;background:#fff;}
   .brand h1{font-family:var(--font);font-weight:700;font-size:17px;margin:0;color:var(--ink);}
   .brand h1 span{color:var(--accent);}
+  .brand .build{font-family:var(--mono);font-size:9px;color:var(--faint);margin-left:8px;align-self:flex-end;padding-bottom:2px;}
 
   .toolbar{display:flex;gap:6px;align-items:center;}
   .btn{font-family:var(--mono);font-size:11px;letter-spacing:.4px;text-transform:uppercase;border-radius:7px;padding:8px 11px;cursor:pointer;transition:all .12s ease;white-space:nowrap;}
@@ -427,7 +428,7 @@
 <body>
 
 <header>
-  <div class="brand"><div class="mark"></div><h1>Photo<span>Map</span></h1></div>
+  <div class="brand"><div class="mark"></div><h1>Photo<span>Map</span></h1><span class="build" id="buildStamp" title="When this copy of the app was published — if it's older than the latest change, you're running a stale copy"></span></div>
   <div class="toolbar">
     <button class="btn grpL" id="btnFolder">Open Folder</button>
     <button class="btn grpL" id="btnOpenJson">Open .JSON</button>
@@ -2425,6 +2426,8 @@ function parseShareHash(){
 
 /* startup */
 (async function init(){
+  // Build stamp: the file's publish/modified time — the quickest way to spot a stale copy.
+  try{ const d=new Date(document.lastModified); if(!isNaN(d)) document.getElementById("buildStamp").textContent="build "+d.toLocaleDateString(undefined,{day:"numeric",month:"short"})+" "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}); }catch(e){}
   // Ask the browser to protect this site's stored data (remembered .json/folder, image cache)
   // from automatic low-disk cleanup. Best-effort; ignored where unsupported (e.g. file://).
   try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist().catch(()=>{}); }catch(e){}
