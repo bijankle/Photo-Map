@@ -680,6 +680,7 @@ function renderClusters(){
       const icon=L.divIcon({className:"",html:'<div class="cl-bubble" style="width:'+size+'px;height:'+size+'px;font-size:'+fs+'px">'+c.properties.point_count_abbreviated+'</div>',iconSize:[size,size],iconAnchor:[size/2,size/2]});
       const m=L.marker([lat,lng],{icon}); const cid=c.properties.cluster_id;
       m.on("click",()=>{   // zoom to the extent of ALL the photos in this cluster — deep enough that only they fill the view
+        uiClickT=Date.now();
         try{ const leaves=cluster.getLeaves(cid,Infinity);
           if(leaves.length){
             const bb=L.latLngBounds(leaves.map(f=>[f.geometry.coordinates[1],f.geometry.coordinates[0]]));
@@ -701,7 +702,7 @@ function renderClusters(){
       hit.on("mousemove",e=>{ if(!dotDrag) positionHover(e.originalEvent); });
       hit.on("mouseout",()=>{ if(!dotDrag) map.getContainer().style.cursor=""; hideHover(); });
       hit.on("mousedown",e=>{ const oe=e.originalEvent; if(oe&&oe.button===0&&(selSet.has(p.id)||dotSelected(p))){ L.DomEvent.stop(oe); startDotDrag(p,hit,dot); } });
-      hit.on("click",()=>{ if(Date.now()-dotDropT<450) return; openViewer(p); });
+      hit.on("click",()=>{ uiClickT=Date.now(); if(Date.now()-dotDropT<450) return; openViewer(p); });
       hit.on("contextmenu",e=>{ L.DomEvent.stop(e.originalEvent); openDotMenu(p,e.originalEvent); });
       const dot=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:6,color:"#3A41B0",weight:2,fillColor:"#5865F2",fillOpacity:.95,interactive:false});
       if(isSel){ const mk=dotMarkers.get(p.id); mk.hit=hit; mk.dot=dot; }
@@ -714,7 +715,7 @@ function renderClusters(){
    then hold and drag a selected dot. A multi-selection moves together, keeping relative positions.
    Unselected dots never drag — the map pans as usual. Only where photos SHOW on this map changes;
    the original GPS is kept (glat/glng) and the photo files are never modified. */
-let dotDrag=null, dotDropT=0, selSet=new Set(), dotMarkers=new Map();
+let dotDrag=null, dotDropT=0, selSet=new Set(), dotMarkers=new Map(), uiClickT=0;   // uiClickT: last click that landed on a dot/cluster/menu — never treated as an empty-map click
 function dotSelected(p){ return lb.classList.contains("open") && curPhoto()===p; }
 function startDotDrag(p,hit,dot){
   hideHover(); try{ map.dragging.disable(); }catch(e){}
@@ -753,7 +754,7 @@ window.addEventListener("keydown",e=>{ if(e.key==="Escape"&&dotDrag){ e.stopProp
 /* right-click menu on a dot: restore the original GPS of that photo (or the whole selection) */
 const ctxMenu=document.createElement("div"); ctxMenu.id="ctxmenu"; document.body.appendChild(ctxMenu);
 function closeCtx(){ ctxMenu.style.display="none"; }
-document.addEventListener("mousedown",e=>{ if(ctxMenu.style.display==="block" && !e.target.closest("#ctxmenu")) closeCtx(); },true);
+document.addEventListener("mousedown",e=>{ if(ctxMenu.style.display==="block" && !e.target.closest("#ctxmenu")){ closeCtx(); uiClickT=Date.now(); } },true);
 window.addEventListener("keydown",e=>{ if(e.key==="Escape"&&ctxMenu.style.display==="block"){ e.stopPropagation(); closeCtx(); } },true);
 function openDotMenu(p,ev){
   hideHover();
@@ -781,6 +782,15 @@ function restoreGps(list){
   pushTagAction(items); afterFolderChange();
 }
 function clearSel(){ selSet.clear(); setAreaBtn(); renderClusters(); }
+/* A quick left click on empty map clears photo + action selections. Leaflet never fires "click"
+   after a pan, so dragging the map is safe; clicks on dots, clusters, or menu dismissals are
+   excluded via uiClickT. */
+map.on("click",()=>{
+  if(drawing||measuring||dotDrag) return;
+  if(Date.now()-uiClickT<400||Date.now()-dotDropT<450) return;
+  if(selSet.size) clearSel();
+  if(selActs.size) clearActSel();
+});
 
 /* ================= ACTIONS =================
    An action is a task with a tick box (tick = completed). Actions link to photos (one action to
@@ -1540,7 +1550,7 @@ function fillMapTagPop(){
   inp.addEventListener("input",()=>{ mtQuery=inp.value; fillMapTagPop(); const i2=document.getElementById("mtQ"); if(i2){ i2.focus(); i2.setSelectionRange(i2.value.length,i2.value.length); } });
   pop.querySelectorAll(".mt-item").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); toggleTagFilter(b.dataset.f); }));
 }
-document.addEventListener("mousedown",e=>{ if(mapTagPopShown && !e.target.closest("#mapTags")){ mapTagPopShown=false; mtQuery=""; renderMapTags(); } },true);
+document.addEventListener("mousedown",e=>{ if(mapTagPopShown && !e.target.closest("#mapTags")){ mapTagPopShown=false; mtQuery=""; renderMapTags(); uiClickT=Date.now(); } },true);
 function showPreview(p,keepView){
   if(curUrl){ URL.revokeObjectURL(curUrl); curUrl=null; }
   let s=p.preview||p.thumb||"";
@@ -1826,7 +1836,7 @@ let fileInfoShown=false;
 function closeFileInfo(){ fileInfoShown=false; document.getElementById("fileInfo").style.display="none"; }
 function buildInfoHTML(p){ const rows=[["Name",p.name||""]]; if(p.time)rows.push(["Taken",fmtDate(p.time)]); if(p.size!=null)rows.push(["Size",fmtSize(p.size)]); if(p.lat!=null){ rows.push(["Latitude",(+p.lat).toFixed(6)]); rows.push(["Longitude",(+p.lng).toFixed(6)]); } if(p.alt!=null)rows.push(["Altitude",p.alt+" m"]); if(p.dir!=null)rows.push(["Heading",Math.round(p.dir)+"\u00B0"]); if(p.isHeic)rows.push(["Format","HEIC"]); if(p.path&&p.path!==p.name)rows.push(["Path",p.path]); return rows.map(r=>'<div class="firow"><span class="fik">'+esc(r[0])+'</span><span class="fiv">'+esc(String(r[1]))+'</span></div>').join(""); }
 document.getElementById("fileInfoBtn").addEventListener("click",e=>{ e.stopPropagation(); const fi=document.getElementById("fileInfo"); if(fileInfoShown){ closeFileInfo(); return; } const p=curPhoto(); if(!p)return; fi.innerHTML=buildInfoHTML(p); fi.style.display="block"; fileInfoShown=true; });
-document.addEventListener("mousedown",e=>{ if(fileInfoShown && !e.target.closest("#fileInfo") && e.target.id!=="fileInfoBtn"){ closeFileInfo(); } },true);
+document.addEventListener("mousedown",e=>{ if(fileInfoShown && !e.target.closest("#fileInfo") && e.target.id!=="fileInfoBtn"){ closeFileInfo(); uiClickT=Date.now(); } },true);
 
 function flashIcon(btn){ if(!btn)return; btn.classList.add("ok"); setTimeout(()=>btn.classList.remove("ok"),900); }
 // Fraction [fx,fy,fw,fh] of the image currently visible in the stage, from the live zoom/pan.
@@ -2027,7 +2037,7 @@ function afterFolderChange(){ if(typeof rebuildActionFilter==="function"&&action
   ensureJsonWrite(true).then(()=>scheduleAutoSave());   // grant write in the click gesture, then debounce so rapid tag toggles batch into ONE small file write
 }
 document.getElementById("lbFolder").addEventListener("click",e=>{ e.stopPropagation(); if(folderPopShown) closeFolderPop(); else openFolderPop(); });
-document.addEventListener("mousedown",e=>{ if(folderPopShown && !e.target.closest("#folderPop") && e.target.id!=="lbFolder"){ closeFolderPop(); } },true);
+document.addEventListener("mousedown",e=>{ if(folderPopShown && !e.target.closest("#folderPop") && e.target.id!=="lbFolder"){ closeFolderPop(); uiClickT=Date.now(); } },true);
 
 /* In-memory index of originals (filename -> File) from a folder connected via the
    webkitdirectory input. This works even when the File System Access API is blocked
