@@ -220,11 +220,11 @@
   .areabtn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
   .measure-lbl{background:#fff;color:var(--accent);font-family:var(--mono);font-size:12px;font-weight:700;padding:3px 7px;border:1px solid var(--accent);border-radius:6px;white-space:nowrap;box-shadow:0 4px 14px #1e1f2226;}
   .measure-lbl.leaflet-tooltip-top:before{border-top-color:var(--accent);}
-  .datebar{background:#ffffffe8;backdrop-filter:blur(8px);border:1px solid var(--line2);border-radius:11px;padding:11px 15px 13px;width:min(440px,60vw);box-shadow:0 8px 24px #1e1f2222;}
+  .datebar{background:#ffffffe8;backdrop-filter:blur(8px);border:1px solid var(--line2);border-radius:11px;padding:8px 13px 10px;width:min(440px,60vw);box-shadow:0 8px 24px #1e1f2222;}
+  .dmid{display:flex;align-items:center;gap:12px;}
+  .dmid .ab-blank{margin:0;}
   .datebar.hidden{display:none;}
-  .datebar .dhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;}
-  .datebar .dhead .t{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);}
-  .datebar .dhead .reset{font-family:var(--mono);font-size:10px;color:var(--accent);cursor:pointer;background:none;border:none;}
+  .datebar .reset{font-family:var(--mono);font-size:10px;color:var(--accent);cursor:pointer;background:none;border:none;padding:0;}
   .datebar .vals{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--accent2);margin-bottom:8px;}
   .slider-wrap{position:relative;height:24px;}
   .slider-track{position:absolute;top:10px;left:0;right:0;height:4px;background:var(--line2);border-radius:2px;}
@@ -622,20 +622,18 @@
   <div id="map"></div>
   <div class="progress" id="progress"></div>
   <div class="leftstack" id="leftstack">
-    <div class="btnrow"><button class="areabtn" id="selBtn">Select area</button><button class="areabtn" id="areaBtn">Filter area</button><button class="areabtn" id="zoomBtn">Zoom window</button><button class="areabtn" id="measureBtn">Measure</button></div>
     <div class="datebar hidden" id="altbar">
-      <div class="dhead"><span class="t">Altitude Range</span><label class="ab-blank" title="Also show photos with no altitude in their metadata"><input type="checkbox" id="altBlank" checked /> incl. blank</label><button class="reset" id="altReset">Reset</button></div>
-      <div class="vals"><span id="aStart">&mdash;</span><span id="aEnd">&mdash;</span></div>
+      <div class="vals"><span id="aStart">&mdash;</span><span class="dmid"><label class="ab-blank" title="Also show photos with no altitude in their metadata"><input type="checkbox" id="altBlank" checked /> incl. blank</label><button class="reset" id="altReset">Reset</button></span><span id="aEnd">&mdash;</span></div>
       <div class="slider-wrap"><div class="slider-track"></div><div class="slider-fill" id="altFill"></div>
         <input type="range" id="altMin" min="0" max="100" value="0" /><input type="range" id="altMax" min="0" max="100" value="100" /></div>
       <button class="ab-read hidden" id="altRead">Read altitudes from the photo files</button>
     </div>
     <div class="datebar hidden" id="datebar">
-      <div class="dhead"><span class="t">Capture Date Range</span><label class="ab-blank" title="Also show photos with no capture date in their metadata"><input type="checkbox" id="dateBlank" checked /> incl. blank</label><button class="reset" id="dateReset">Reset</button></div>
-      <div class="vals"><span id="dStart">—</span><span id="dEnd">—</span></div>
+      <div class="vals"><span id="dStart">—</span><span class="dmid"><label class="ab-blank" title="Also show photos with no capture date in their metadata"><input type="checkbox" id="dateBlank" checked /> incl. blank</label><button class="reset" id="dateReset">Reset</button></span><span id="dEnd">—</span></div>
       <div class="slider-wrap"><div class="slider-track"></div><div class="slider-fill" id="sliderFill"></div>
         <input type="range" id="rangeMin" min="0" max="100" value="0" /><input type="range" id="rangeMax" min="0" max="100" value="100" /></div>
     </div>
+    <div class="btnrow"><button class="areabtn" id="selBtn">Select area</button><button class="areabtn" id="areaBtn">Filter area</button><button class="areabtn" id="zoomBtn">Zoom window</button><button class="areabtn" id="measureBtn">Measure</button></div>
   </div>
   <div class="splitter" id="splitter"></div>
   <div class="rtabs" id="rtabs">
