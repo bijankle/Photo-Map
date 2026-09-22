@@ -639,7 +639,8 @@ map.keyboard.disable();
   },true);
 })();
 let hlMarker=null;
-function highlightDot(p){ clearHighlight(); if(!p||p.lat==null)return; hlMarker=L.circleMarker([p.lat,p.lng],{radius:13,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.45,interactive:false,className:"hl-dot"}).addTo(highlightLayer); }
+function mkHlDot(lat,lng){ return L.circleMarker([lat,lng],{radius:13,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.45,interactive:false,className:"hl-dot"}); }   // the one selection visual, used everywhere
+function highlightDot(p){ clearHighlight(); if(!p||p.lat==null)return; hlMarker=mkHlDot(p.lat,p.lng).addTo(highlightLayer); }
 function clearHighlight(){ if(hlMarker){ highlightLayer.removeLayer(hlMarker); hlMarker=null; } }
 function highlightCurrent(){ if(lb.classList.contains("open")&&lightboxList[lightboxIndex]) highlightDot(lightboxList[lightboxIndex]); else clearHighlight(); }
 // Dots re-cluster immediately when the map settles on a new view (responsive, as originally);
@@ -694,6 +695,7 @@ function renderClusters(){
     } else {
       const p=photoById(c.properties.pid); if(!p) continue;
       const isSel=selSet.has(p.id);
+      if(isSel){ const hl=mkHlDot(lat,lng); markerLayer.addLayer(hl); dotMarkers.set(p.id,{hl}); }   // selected = same pulsing highlight as a single open photo
       const hit=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:15,stroke:false,fill:true,fillOpacity:0});
       hit.on("mouseover",e=>{ if(dotDrag) return; if(isSel||dotSelected(p)) map.getContainer().style.cursor="move"; showHover(p,e.originalEvent); });
       hit.on("mousemove",e=>{ if(!dotDrag) positionHover(e.originalEvent); });
@@ -701,8 +703,8 @@ function renderClusters(){
       hit.on("mousedown",e=>{ const oe=e.originalEvent; if(oe&&oe.button===0&&(selSet.has(p.id)||dotSelected(p))){ L.DomEvent.stop(oe); startDotDrag(p,hit,dot); } });
       hit.on("click",()=>{ if(Date.now()-dotDropT<450) return; openViewer(p); });
       hit.on("contextmenu",e=>{ L.DomEvent.stop(e.originalEvent); openDotMenu(p,e.originalEvent); });
-      const dot=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:6,color:isSel?"#B45309":"#3A41B0",weight:2,fillColor:isSel?"#F59E0B":"#5865F2",fillOpacity:.95,interactive:false});
-      if(isSel) dotMarkers.set(p.id,{hit,dot});
+      const dot=L.circleMarker([lat,lng],{renderer:dotRenderer,radius:6,color:"#3A41B0",weight:2,fillColor:"#5865F2",fillOpacity:.95,interactive:false});
+      if(isSel){ const mk=dotMarkers.get(p.id); mk.hit=hit; mk.dot=dot; }
       markerLayer.addLayer(hit); markerLayer.addLayer(dot);
     }
   }
@@ -719,14 +721,15 @@ function startDotDrag(p,hit,dot){
   map.getContainer().style.cursor="grabbing";
   const group=selSet.has(p.id)?[...selSet]:null;
   let origs=null;
-  if(group){ origs=new Map(); for(const pid of group){ if(pid===p.id) continue; const mk=dotMarkers.get(pid); if(mk) origs.set(pid,{ll:mk.dot.getLatLng(),hit:mk.hit,dot:mk.dot}); } }
+  if(group){ origs=new Map(); for(const pid of group){ if(pid===p.id) continue; const mk=dotMarkers.get(pid); if(mk&&mk.dot) origs.set(pid,{ll:mk.dot.getLatLng(),hit:mk.hit,dot:mk.dot,hl:mk.hl}); } }
   dotDrag={p,hit,dot,start:dot.getLatLng(),group,origs,viewerPhoto:dotSelected(p),moved:false};
 }
 map.on("mousemove",e=>{
   if(!dotDrag) return; dotDrag.moved=true;
   const dLat=e.latlng.lat-dotDrag.start.lat, dLng=e.latlng.lng-dotDrag.start.lng;
-  if(dotDrag.origs) for(const o of dotDrag.origs.values()){ const ll=[o.ll.lat+dLat,o.ll.lng+dLng]; o.hit.setLatLng(ll); o.dot.setLatLng(ll); }
+  if(dotDrag.origs) for(const o of dotDrag.origs.values()){ const ll=[o.ll.lat+dLat,o.ll.lng+dLng]; o.hit.setLatLng(ll); o.dot.setLatLng(ll); if(o.hl) o.hl.setLatLng(ll); }
   dotDrag.hit.setLatLng(e.latlng); dotDrag.dot.setLatLng(e.latlng);
+  const gm=dotMarkers.get(dotDrag.p.id); if(gm&&gm.hl) gm.hl.setLatLng(e.latlng);
   if(hlMarker&&dotDrag.viewerPhoto) hlMarker.setLatLng(e.latlng);
 });
 window.addEventListener("mouseup",()=>{
@@ -796,7 +799,7 @@ function drawActionRings(){
   const seen=new Set();
   for(const id of selActs) for(const p of actPhotos(actById(id))){
     if(p.lat==null||seen.has(p.id)) continue; seen.add(p.id);
-    actRingLayer.addLayer(L.circleMarker([p.lat,p.lng],{radius:12,color:"#D97706",weight:3,fill:false,dashArray:"4 4",interactive:false}));
+    actRingLayer.addLayer(mkHlDot(p.lat,p.lng));
   }
 }
 function clearActSel(){ if(!selActs.size) return; selActs.clear(); actionFilter=null; renderActions(); drawActionRings(); updateGallery(); }
