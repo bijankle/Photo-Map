@@ -1174,10 +1174,27 @@ document.getElementById("setThumb").addEventListener("input",e=>{ document.docum
 document.getElementById("setActOpen").addEventListener("change",e=>{ actShowOpenOnly=e.target.checked; renderActions(); persistState(); });
 document.getElementById("setActMap").addEventListener("change",e=>{ actOnlyMap=e.target.checked; buildCluster(); renderClusters(); updateGallery(); renderMapTags(); persistState(); });
 
-/* right-click on empty map: general commands */
+/* right-click: on/near a dot -> the DOT menu; only genuinely empty map gets the general commands */
+function dotAtPoint(pt){
+  if(!cluster) return null;
+  let best=null,bd=Infinity;
+  try{
+    const b=map.getBounds();
+    const w=Math.max(-180,b.getWest()),e2=Math.min(180,b.getEast()),s=Math.max(-85,b.getSouth()),n=Math.min(85,b.getNorth());
+    for(const c of cluster.getClusters([w,s,e2,n],Math.round(map.getZoom()))){
+      if(c.properties.cluster) continue;
+      const cp=map.latLngToContainerPoint([c.geometry.coordinates[1],c.geometry.coordinates[0]]);
+      const d=Math.hypot(cp.x-pt.x,cp.y-pt.y);
+      if(d<20&&d<bd){ bd=d; best=photoById(c.properties.pid); }
+    }
+  }catch(err){}
+  return best;
+}
 map.on("contextmenu",e=>{
   if(drawing||measuring||dotDrag) return;
   e.originalEvent.preventDefault();
+  const p=dotAtPoint(e.containerPoint);
+  if(p){ openDotMenu(p,e.originalEvent); return; }
   ctxMenu.innerHTML="";
   mkCtxItem("Select area [s]",toggleSelect);
   mkCtxItem("Filter area [f]",toggleFilter);
