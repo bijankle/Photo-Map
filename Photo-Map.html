@@ -407,7 +407,7 @@
   .act-chk input,.act-hold input{appearance:none;-webkit-appearance:none;width:15px;height:15px;margin:0;border:1px solid var(--line2);border-radius:3px;cursor:pointer;position:relative;}
   .act-chk input{background:#3BA55C33;}   /* faint green: this is the COMPLETE box */
   .a-num{color:var(--accent2);font-family:var(--mono);font-weight:700;margin-right:5px;}
-  .num-dot{width:22px;height:22px;border-radius:50%;background:#5865F2;border:2px solid #3A41B0;box-sizing:border-box;color:#fff;font:700 11px var(--mono);display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px #1e1f2255;}
+  .num-dot{width:26px;height:26px;border-radius:50%;background:#5865F2;border:2px solid #3A41B0;box-sizing:border-box;color:#fff;font:700 9px var(--mono);letter-spacing:.3px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px #1e1f2255;}
   .act-hold{display:flex;align-items:center;padding-top:1px;cursor:pointer;margin-left:1px;}
   .act-hold input{background:#E8A33D33;}   /* faint amber: this is the ON-HOLD box */
   .act-chk input:checked{background:var(--good);border-color:var(--good);}
@@ -991,11 +991,11 @@ let clusterSens=50;
 function clusterOpts(){ return clusterSens<=0?{radius:1,minPoints:1e9}:{radius:Math.max(1,Math.round(clusterSens*1.28)),minPoints:2}; }
 function hlPhotoSet(){ const s=new Set(selSet); for(const id of selActs) for(const p of actPhotos(actById(id))) s.add(p.id); return s; }
 function actSelPhotoSet(){ const s=new Set(); for(const id of selActs) for(const p of actPhotos(actById(id))){ if(p.lat!=null) s.add(p.id); } return s; }
-let _dotNums=null;   /* action-number labels on the dots, only while the Actions-only filter is on */
-function photoActNum(p){ if(!_dotNums||!Array.isArray(p.acts)) return null; let num=null;
-  for(const id of p.acts){ const a=actById(id); if(a&&!a.done&&!a.hold){ const n=_dotNums.get(id); if(n!=null&&(num==null||n<num)) num=n; } } return num; }
+let _dotNumsOn=false;   /* action-number labels on the dots, only while the Actions-only filter is on */
+function photoActNum(p){ if(!_dotNumsOn||!Array.isArray(p.acts)) return null; let best=null;
+  for(const id of p.acts){ const a=actById(id); if(a&&!a.done&&!a.hold&&(best==null||id<best)) best=id; } return best; }
 function renderClusters(){
-  _dotNums=actOnlyMap?actNumMap():null;
+  _dotNumsOn=actOnlyMap;
   markerLayer.clearLayers(); dotMarkers.clear();
   if(!cluster) return;
   const hlSet=hlPhotoSet();
@@ -1008,10 +1008,10 @@ function renderClusters(){
     if(c.properties.cluster){
       const cnt=c.properties.point_count, size=cnt<10?24:cnt<100?30:cnt<1000?38:46; let fs=cnt<100?13:cnt<1000?12:11;   // bubble hugs the number
       let label=c.properties.point_count_abbreviated;
-      if(_dotNums){   /* Actions-only filter: the bubble wears the ACTION number(s) of its photos, not the photo count */
+      if(_dotNumsOn){   /* Actions-only filter: the bubble wears the ACTION number(s) of its photos, not the photo count */
         try{ const st=new Set();
           for(const f of cluster.getLeaves(c.properties.cluster_id,Infinity)){ const p2=photoById(f.properties.pid); const n2=p2?photoActNum(p2):null; if(n2!=null) st.add(n2); }
-          if(st.size){ const arr=[...st].sort((x,y)=>x-y); label=arr.slice(0,3).join(",")+(arr.length>3?"\u2026":""); fs=String(label).length<=2?13:String(label).length<=4?11:10; }
+          if(st.size){ const arr=[...st].sort((x,y)=>x-y); label=actNo(arr[0])+(arr.length>1?"\u2026":""); fs=10; }
         }catch(err){} }
       const grabbable=(c.properties.sel||0)>0&&selSet.size>0;   // holds selected photos: dragging the bubble moves the whole selection
       const icon=L.divIcon({className:"",html:'<div class="cl-bubble'+(c.properties.hl?' cl-hl':'')+'" style="width:'+size+'px;height:'+size+'px;font-size:'+fs+'px'+(grabbable?';cursor:move':'')+'">'+label+'</div>',iconSize:[size,size],iconAnchor:[size/2,size/2]});
@@ -1059,7 +1059,7 @@ function addSingleDot(p,lat,lng,isSel){
   hit.on("contextmenu",e=>{ L.DomEvent.stop(e.originalEvent); openDotMenu(p,e.originalEvent); });
   const num=photoActNum(p);
   const dot=(num!=null)
-    ?L.marker([lat,lng],{interactive:false,icon:L.divIcon({className:"",html:'<div class="num-dot">'+num+'</div>',iconSize:[22,22],iconAnchor:[11,11]})})
+    ?L.marker([lat,lng],{interactive:false,icon:L.divIcon({className:"",html:'<div class="num-dot">'+actNo(num)+'</div>',iconSize:[26,26],iconAnchor:[13,13]})})
     :L.circleMarker([lat,lng],{renderer:dotRenderer,radius:6,color:"#3A41B0",weight:2,fillColor:"#5865F2",fillOpacity:.95,interactive:false});
   if(isSel){ const mk=dotMarkers.get(p.id); mk.hit=hit; mk.dot=dot; }
   markerLayer.addLayer(hit); markerLayer.addLayer(dot);
@@ -1250,7 +1250,7 @@ function createAction(text,pids){
   return a;
 }
 function stepLetter(i){ let t=""; do{ t=String.fromCharCode(97+(i%26))+t; i=Math.floor(i/26)-1; }while(i>=0); return t; }   /* a..z, aa, ab… */
-function actNumMap(){ const m=new Map(); actions.slice().sort((x,y)=>(x.done?1:0)-(y.done?1:0)).forEach((a,i)=>m.set(a.id,i+1)); return m; }   /* 1-based priority = list order, done sink last */
+function actNo(a){ return String(a&&a.id!=null?a.id:a).padStart(3,"0"); }   /* the action NUMBER: creation-sequential id, 001-style */
 function setActionDone(a,done){ const before=actState(a); a.done=!!done; a.doneAt=a.done?Date.now():null; recordActEdit(a,before); afterFolderChange(); }
 function setActionHold(a,hold){ const before=actState(a); a.hold=!!hold; recordActEdit(a,before); afterFolderChange(); }
 /* Inline editing (titles and descriptions, in both the Actions panel and the under-photo strip):
@@ -1576,7 +1576,6 @@ function renderActions(){
   const shown=(actShowOpenOnly?actions.filter(a=>!a.done):actions.slice()).sort((x,y)=>(x.done?1:0)-(y.done?1:0));   // completed actions sink to the bottom (display only — stored order unchanged)
   if(!shown.length){ list.innerHTML=""; return; }
   const cp=lb.classList.contains("open")?curPhoto():null;   // the open photo's actions get a marker in this list
-  const nums=actNumMap();
   list.innerHTML=shown.map(a=>{ const ap=actPhotos(a), n=ap.length;
     if(n) ensureAnnotThumb(ap[0]);
     const cov='<div class="act-cover"><div class="cov-rs" title="Drag to resize all covers"></div>'
@@ -1588,7 +1587,7 @@ function renderActions(){
     return '<div class="act-row'+(a.done?' done':'')+(a.hold?' hold':'')+(selActs.has(a.id)?' sel':'')+(isCur?' cur':'')+'" data-aid="'+a.id+'" draggable="true">'
       +'<label class="act-chk" title="'+(a.done?'Reopen this action':'Mark completed')+'"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
       +'<label class="act-hold" title="On hold — stays in this list but its photos leave the map"><input type="checkbox"'+(a.hold?' checked':'')+'/></label>'
-      +'<div class="act-body"><div class="bh"><div class="t"><span class="a-num">'+nums.get(a.id)+'.</span>'+esc(a.text)+'</div>'
+      +'<div class="act-body"><div class="bh"><div class="t"><span class="a-num">'+actNo(a)+'</span>'+esc(a.text)+'</div>'
         +expBtnHtml(a)+'<button class="ipa-x act-del" type="button" title="'+(isCur?'Remove this action from the open photo':'Delete this action')+'">&times;</button></div>'
       +(exp?('<div class="asec">'+stepsHtml(a)+'</div>'
         +(((a.steps&&a.steps.length)||(a.done&&a.doneAt))?('<div class="m">'
@@ -1834,37 +1833,35 @@ async function exportActionsXlsx(){
     const wb=new ExcelJS.Workbook(); wb.created=new Date();
     const ws=wb.addWorksheet("Actions",{views:[{state:"frozen",ySplit:1}]});
     ws.columns=[
-      {header:"#",key:"n",width:5},
+      {header:"#",key:"n",width:7},
       {header:"Action",key:"t",width:34},
       {header:"Status",key:"s",width:16},
       {header:"Sub-actions",key:"st",width:42},
-      {header:"Photos",key:"pc",width:8},
       {header:"Photo notes",key:"pn",width:42},
     ];
-    const nums=actNumMap();
-    const order=actions.slice().sort((x,y)=>(x.done?1:0)-(y.done?1:0));   // same order + numbers as the list
+    const order=actions.slice().sort((x,y)=>(x.done?1:0)-(y.done?1:0));   // same order as the list; # is the action's 001-style number
     let maxImgs=0, ri=2;
     for(const a of order){
       st.textContent="Compiling "+(ri-1)+" / "+order.length+"\u2026";
       const ps=actPhotos(a);
       const subs=(a.steps||[]).map((s2,i)=>stepLetter(i)+". "+(s2.d?"\u2611":"\u2610")+" "+s2.t).join("\n");
-      const notes=ps.filter(x=>x.note).map(x=>x.name+" \u2014 "+x.note).join("\n");
+      const notes=ps.map((x,i)=>x.note?("Photo "+(i+1)+" \u2014 "+x.note):null).filter(Boolean).join("\n");
       const status=a.done?("Done"+(a.doneAt?" "+fmtDate(a.doneAt):"")):(a.hold?"On hold":"Open");
-      const row=ws.addRow({n:nums.get(a.id),t:a.text,s:status,st:subs,pc:ps.length,pn:notes});
+      const row=ws.addRow({n:actNo(a),t:a.text,s:status,st:subs,pn:notes});
       row.alignment={vertical:"top",wrapText:true};
-      let ci=0,rowH=0;
-      for(const ph of ps){
-        const img=await xlsImage(ph); if(!img) continue;
-        const id=wb.addImage({base64:img.b64,extension:"jpeg"});
-        ws.addImage(id,{tl:{col:6+ci,row:ri-1},ext:{width:img.w,height:img.h}});
-        ci++; rowH=Math.max(rowH,img.h);
-      }
-      maxImgs=Math.max(maxImgs,ci);
+      const imgs=[];
+      for(const ph of ps){ const im2=await xlsImage(ph); if(im2) imgs.push(im2); }
+      const rowH=imgs.length?Math.max(...imgs.map(x=>x.h)):0;
+      const COLPX=187;   // ~26-char column in px; images centre inside their own cell
+      imgs.forEach((im2,ci2)=>{
+        const id=wb.addImage({base64:im2.b64,extension:"jpeg"});
+        ws.addImage(id,{tl:{col:5+ci2+Math.max(0,(COLPX-im2.w)/2)/COLPX,row:(ri-1)+Math.max(0,(rowH-im2.h)/2)/Math.max(rowH,1)},ext:{width:im2.w,height:im2.h}});
+      });
+      maxImgs=Math.max(maxImgs,imgs.length);
       row.height=Math.max(Math.round(rowH*0.78),46);   // px -> pt
       ri++;
     }
-    for(let i=0;i<maxImgs;i++) ws.getColumn(7+i).width=26;   // 180px image + breathing room
-    if(maxImgs) ws.getCell(1,7).value="Photos \u2192";
+    for(let i=0;i<maxImgs;i++){ ws.getColumn(6+i).width=26; ws.getCell(1,6+i).value="Photo "+(i+1); }
     const hr=ws.getRow(1); hr.font={bold:true}; hr.alignment={vertical:"middle"}; hr.height=18;
     st.textContent="Writing file\u2026";
     const buf=await wb.xlsx.writeBuffer();
@@ -3833,7 +3830,7 @@ function mShowList(){
       const hold=mHold(a);
       return '<div class="m-card'+(done?' done':'')+(hold?' hold':'')+'" data-k="'+k+'"><div class="m-chk'+(done?' on':'')+'">'+(done?'✓':'')+'</div>'
         +'<div class="m-hold'+(hold?' on':'')+'" data-hold="1" title="On hold">'+(hold?'❙❙':'')+'</div>'
-        +'<div class="m-cbody"><div class="m-ct"'+(done?' style="text-decoration:line-through;color:var(--muted)"':'')+'><span class="m-anum">'+(acts.indexOf(a)+1)+'.</span>'+esc(mTitle(a))+'</div>'
+        +'<div class="m-cbody"><div class="m-ct"'+(done?' style="text-decoration:line-through;color:var(--muted)"':'')+'>'+(a._new?'':'<span class="m-anum">'+actNo(a)+'</span>')+esc(mTitle(a))+'</div>'
         +'<div class="m-cm">'+(a._new?'<span style="color:var(--accent2);font-weight:600;">NEW · on phone</span>':'<b>'+(a.photos||[]).length+' photo'+((a.photos||[]).length===1?'':'s')+'</b>')
         +(st?'<span>steps '+sd+'/'+st+'</span>':'')+(d!=null?'<span>'+mFmtD(d)+' away</span>':'')+'</div></div>'
         +'<div style="align-self:center;color:var(--line2);font-size:22px;">›</div></div>';
@@ -3898,7 +3895,7 @@ function mBuildHomeMap(acts){
     const seen=new Set(), pts=[];
     acts.forEach((a,ix)=>{ if(mDone(a)||mHold(a)) return;
       for(const ph of (a.photos||[])){ if(ph.lat!=null&&!seen.has(ph.id)){ seen.add(ph.id); pts.push(ph);
-        L.marker([ph.lat,ph.lng],{interactive:false,icon:L.divIcon({className:"",html:'<div class="num-dot">'+(ix+1)+'</div>',iconSize:[22,22],iconAnchor:[11,11]})}).addTo(m2); } } });
+        L.marker([ph.lat,ph.lng],{interactive:false,icon:L.divIcon({className:"",html:'<div class="num-dot">'+(a._new?"\u2022":actNo(a))+'</div>',iconSize:[26,26],iconAnchor:[13,13]})}).addTo(m2); } } });
     const bb=pts.length?L.latLngBounds(pts.map(p=>[p.lat,p.lng])):null;
     if(mGeo){ m2._geoPin=L.marker([mGeo.lat,mGeo.lng],{icon:youAreHereIcon(30),interactive:false,zIndexOffset:900}).addTo(m2); if(bb) bb.extend([mGeo.lat,mGeo.lng]); }
     mHomeMap=m2; mHomeBB=bb;
