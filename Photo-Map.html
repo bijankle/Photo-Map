@@ -992,6 +992,8 @@ function clusterOpts(){ return clusterSens<=0?{radius:1,minPoints:1e9}:{radius:M
 function hlPhotoSet(){ const s=new Set(selSet); for(const id of selActs) for(const p of actPhotos(actById(id))) s.add(p.id); return s; }
 function actSelPhotoSet(){ const s=new Set(); for(const id of selActs) for(const p of actPhotos(actById(id))){ if(p.lat!=null) s.add(p.id); } return s; }
 let _dotNums=null;   /* action-number labels on the dots, only while the Actions-only filter is on */
+function photoActNum(p){ if(!_dotNums||!Array.isArray(p.acts)) return null; let num=null;
+  for(const id of p.acts){ const a=actById(id); if(a&&!a.done&&!a.hold){ const n=_dotNums.get(id); if(n!=null&&(num==null||n<num)) num=n; } } return num; }
 function renderClusters(){
   _dotNums=actOnlyMap?actNumMap():null;
   markerLayer.clearLayers(); dotMarkers.clear();
@@ -1004,9 +1006,15 @@ function renderClusters(){
   for(const c of cl){
     const [lng,lat]=c.geometry.coordinates;
     if(c.properties.cluster){
-      const cnt=c.properties.point_count, size=cnt<10?24:cnt<100?30:cnt<1000?38:46, fs=cnt<100?13:cnt<1000?12:11;   // bubble hugs the number
+      const cnt=c.properties.point_count, size=cnt<10?24:cnt<100?30:cnt<1000?38:46; let fs=cnt<100?13:cnt<1000?12:11;   // bubble hugs the number
+      let label=c.properties.point_count_abbreviated;
+      if(_dotNums){   /* Actions-only filter: the bubble wears the ACTION number(s) of its photos, not the photo count */
+        try{ const st=new Set();
+          for(const f of cluster.getLeaves(c.properties.cluster_id,Infinity)){ const p2=photoById(f.properties.pid); const n2=p2?photoActNum(p2):null; if(n2!=null) st.add(n2); }
+          if(st.size){ const arr=[...st].sort((x,y)=>x-y); label=arr.slice(0,3).join(",")+(arr.length>3?"\u2026":""); fs=String(label).length<=2?13:String(label).length<=4?11:10; }
+        }catch(err){} }
       const grabbable=(c.properties.sel||0)>0&&selSet.size>0;   // holds selected photos: dragging the bubble moves the whole selection
-      const icon=L.divIcon({className:"",html:'<div class="cl-bubble'+(c.properties.hl?' cl-hl':'')+'" style="width:'+size+'px;height:'+size+'px;font-size:'+fs+'px'+(grabbable?';cursor:move':'')+'">'+c.properties.point_count_abbreviated+'</div>',iconSize:[size,size],iconAnchor:[size/2,size/2]});
+      const icon=L.divIcon({className:"",html:'<div class="cl-bubble'+(c.properties.hl?' cl-hl':'')+'" style="width:'+size+'px;height:'+size+'px;font-size:'+fs+'px'+(grabbable?';cursor:move':'')+'">'+label+'</div>',iconSize:[size,size],iconAnchor:[size/2,size/2]});
       const m=L.marker([lat,lng],{icon}); const cid=c.properties.cluster_id;
       let ring=null;
       if(grabbable) m.on("mousedown",e=>{ const oe=e.originalEvent; if(oe&&oe.button===0){ L.DomEvent.stop(oe); startClusterDrag(m,ring); } });
@@ -1049,8 +1057,7 @@ function addSingleDot(p,lat,lng,isSel){
     if(selSet.size){ selSet=new Set([p.id]); setAreaBtn(); buildCluster(); renderClusters(); }   // plain click collapses the selection to just this photo
     openViewer(p); });
   hit.on("contextmenu",e=>{ L.DomEvent.stop(e.originalEvent); openDotMenu(p,e.originalEvent); });
-  let num=null;
-  if(_dotNums&&Array.isArray(p.acts)){ for(const id of p.acts){ const a=actById(id); if(a&&!a.done&&!a.hold){ const n2=_dotNums.get(id); if(n2!=null&&(num==null||n2<num)) num=n2; } } }
+  const num=photoActNum(p);
   const dot=(num!=null)
     ?L.marker([lat,lng],{interactive:false,icon:L.divIcon({className:"",html:'<div class="num-dot">'+num+'</div>',iconSize:[22,22],iconAnchor:[11,11]})})
     :L.circleMarker([lat,lng],{renderer:dotRenderer,radius:6,color:"#3A41B0",weight:2,fillColor:"#5865F2",fillOpacity:.95,interactive:false});
