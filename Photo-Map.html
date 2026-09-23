@@ -219,8 +219,9 @@
   .empty-msg b{color:var(--text);}
   .hint{font-family:var(--mono);font-size:10px;color:var(--muted);}
 
-  .leftstack{position:absolute;top:12px;left:12px;z-index:1000;display:flex;flex-direction:column;gap:5px;align-items:flex-start;}
-  .btnrow{display:flex;gap:6px;}
+  .leftstack,.toolstack{display:none;}   /* hidden until mounted onto the map as Leaflet controls */
+  .leftstack.onmap{display:flex;flex-direction:column;gap:5px;align-items:flex-start;}
+  .toolstack.onmap{display:flex;flex-direction:column;gap:5px;align-items:stretch;}
   .areabtn{font-family:var(--mono);font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:var(--text);background:#ffffffe8;backdrop-filter:blur(8px);border:1px solid var(--line2);border-radius:8px;padding:6px 9px;cursor:pointer;box-shadow:0 4px 14px #1e1f221f;white-space:nowrap;}
   .areabtn:hover{border-color:var(--accent);color:var(--accent);}
   .areabtn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
@@ -805,8 +806,8 @@
       <div class="slider-wrap"><div class="slider-track"></div><div class="slider-fill" id="sliderFill"></div>
         <input type="range" id="rangeMin" min="0" max="100" value="0" /><input type="range" id="rangeMax" min="0" max="100" value="100" /></div>
     </div>
-    <div class="btnrow"><button class="areabtn" id="selBtn">Select area</button><button class="areabtn" id="areaBtn">Filter area</button><button class="areabtn" id="zoomBtn">Zoom window</button><button class="areabtn" id="measureBtn">Measure</button></div>
   </div>
+  <div class="toolstack" id="toolstack"><button class="areabtn" id="selBtn">Select area</button><button class="areabtn" id="areaBtn">Filter area</button><button class="areabtn" id="zoomBtn">Zoom window</button><button class="areabtn" id="measureBtn">Measure</button></div>
   <div class="splitter" id="splitter"></div>
   <div class="rtabs" id="rtabs">
     <button class="rtab active" id="tabPhoto" title="Show the photo viewer">Photo</button>
@@ -890,6 +891,17 @@ L.control.layers({ "Google":google, "Esri":esri, "None":none },null,{position:"t
     lab.innerHTML='<span style="left:0">0</span><span style="left:25%">'+fmt(total/4,km)+'</span><span style="left:50%">'+fmt(total/2,km)+'</span><span style="left:100%">'+fmt(total,km)+'</span>';
   }
   map.on("zoomend moveend resize",updateScale); setTimeout(updateScale,0);   // end-events only — updating per animation frame caused zoom jitter
+})();
+/* Filter bars pin to the map's TOP-LEFT; the area/measure buttons stack vertically at the
+   BOTTOM-RIGHT just above the scale bar. Mounted as Leaflet controls so they anchor to the map
+   itself (bottom controls insert on top, so adding after the scalebar lands above it). */
+(function(){
+  const mk=(id,pos)=>{ const c=L.control({position:pos});
+    c.onAdd=function(){ const el=document.getElementById(id); el.classList.add("onmap");
+      L.DomEvent.disableClickPropagation(el); L.DomEvent.disableScrollPropagation(el); return el; };
+    c.addTo(map); };
+  mk("leftstack","topleft");
+  mk("toolstack","bottomright");
 })();
 const markerLayer=L.layerGroup().addTo(map);
 const highlightLayer=L.layerGroup().addTo(map);
