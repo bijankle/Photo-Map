@@ -405,6 +405,9 @@
   .act-row.done .t{text-decoration:line-through;color:var(--dim);}
   .act-chk{display:flex;align-items:center;padding-top:1px;cursor:pointer;}
   .act-chk input{width:15px;height:15px;accent-color:var(--good);cursor:pointer;}
+  .act-hold{display:flex;align-items:center;padding-top:1px;cursor:pointer;margin-left:1px;}
+  .act-hold input{width:15px;height:15px;accent-color:#E8A33D;cursor:pointer;}
+  .act-row.hold{opacity:.72;}   /* on hold: stays in the list, dots leave the map */
   .act-body{flex:1;min-width:0;}
   .act-body .t{font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.35;word-wrap:break-word;}
   .act-body .m{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:2px;}
@@ -541,6 +544,10 @@
   .m-card.done{border-left-color:var(--good);opacity:.65;}
   .m-chk{width:26px;height:26px;flex-shrink:0;margin-top:2px;box-sizing:border-box;border:2px solid var(--line2);border-radius:8px;background:var(--panel);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;}
   .m-chk.on{background:var(--good);border-color:var(--good);}
+  .m-hold{width:26px;height:26px;flex-shrink:0;margin-top:2px;box-sizing:border-box;border:2px solid var(--line2);border-radius:8px;background:var(--panel);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:11px;letter-spacing:1px;}
+  .m-hold.on{background:#E8A33D;border-color:#E8A33D;}
+  .m-card.hold{border-left-color:#E8A33D;opacity:.8;}
+  .m-homemap{height:50vh;height:50dvh;flex-shrink:0;border-top:1px solid var(--line);background:#ECEEF1;}   /* the bottom half of the home screen is the map */
   .m-cbody{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;}
   .m-ct{font-size:15px;font-weight:600;color:var(--ink);line-height:1.35;}
   .m-cm{font-family:var(--mono);font-size:10.5px;color:var(--dim);display:flex;gap:12px;}
@@ -562,12 +569,12 @@
   .m-in{box-sizing:border-box;width:100%;font:inherit;font-size:14px;color:var(--ink);background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:12px;outline:none;}
   .m-err{color:var(--bad);font-size:13px;line-height:1.5;}
   /* snap detail: map / full-screen photos / details, continuous scroll with gentle locking */
-  .m-snap{flex:1;min-height:0;overflow-y:hidden;background:var(--accent);}   /* the theme blue IS the grout between windows */
+  .m-snap{flex:1;min-height:0;overflow-y:hidden;background:#F2F3F5;}   /* neutral grout between windows */
   .m-page{position:relative;height:100%;scroll-snap-align:start;overflow:hidden;}
-  .m-pphoto{background:var(--accent);}
+  .m-pphoto{background:#F2F3F5;}
   .m-pphoto img{width:100%;height:100%;object-fit:contain;}
   .m-hsnap{position:absolute;top:19%;left:8px;right:8px;bottom:11%;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;background:#ECEEF1;border-radius:12px;}   /* the image window: 8px blue grout all around */
-  .m-thumbs{position:absolute;z-index:4;overflow:hidden;background:var(--accent);border-radius:0 0 12px 12px;padding:8px;display:grid;gap:8px;}
+  .m-thumbs{position:absolute;z-index:4;overflow:hidden;background:#F2F3F5;border-radius:0 0 12px 12px;padding:8px;display:grid;gap:8px;}
   .m-thumbs img{width:100%;height:100%;object-fit:contain;display:block;min-height:0;min-width:0;background:#000;border-radius:6px;}   /* scaled, never cropped or stretched; black fills the slot */
   .m-thumbs img.cur{display:none;}   /* previews show the OTHER images of this action */
   .m-hsnap::-webkit-scrollbar{display:none;}
@@ -581,7 +588,7 @@
   .m-cue{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:10px;color:#fff;text-shadow:0 1px 4px #000;pointer-events:none;z-index:500;}
   .m-inset{position:absolute;top:8px;left:8px;right:8px;height:calc(19% - 16px);z-index:4;display:flex;border-radius:12px;overflow:hidden;background:#ECEEF1;transition:opacity .2s;}
   .m-inset .mi-half{flex:1 1 50%;min-width:0;height:100%;}
-  .m-inset .mi-half+.mi-half{border-left:8px solid var(--accent);}
+  .m-inset .mi-half+.mi-half{border-left:8px solid #F2F3F5;}
   .m-sub2{position:absolute;left:8px;right:8px;bottom:8px;max-height:58%;z-index:4;box-sizing:border-box;overflow-y:auto;background:#ffffffe8;border:1px solid var(--line2);border-radius:12px;padding:6px 9px;box-shadow:0 4px 14px #1e1f221f;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}   /* content-sized: every sub-action visible, the image yields */
   .m-sub2 .s2row{display:flex;gap:7px;align-items:flex-start;font-size:16px;color:var(--ink);line-height:1.35;padding:3px 0;}
   .m-sub2 .s2row .n{color:var(--accent2);font-family:var(--mono);font-size:15px;font-weight:700;flex-shrink:0;margin-top:1px;}
@@ -597,7 +604,6 @@
   .s2x:active{color:var(--bad);}
   /* accent demarcation: the blue background is the grout; windows sit clean on it */
   .m-nin,.m-sub2,.m-sec,.m-ur .m-chip,.m-in,.m-card{border-color:var(--accent);}
-  .m-pdet .m-body{background:var(--accent);}   /* grout on the detail page only — the actions list stays light */
   .m-head{border-bottom:4px solid var(--accent);}
   /* the desktop's segregated windows carry the same accent demarcation */
   header{border-bottom:4px solid var(--accent);}
@@ -1189,14 +1195,16 @@ function reorderActPhoto(a,dragId,targetId,before){   // gallery drag: photo ord
   ids.splice(to,0,dragId);
   const b=actState(a); a.porder=ids; recordActEdit(a,b); afterFolderChange();
 }
-function hasOpenAct(p){ return Array.isArray(p.acts)&&p.acts.some(id=>{ const a=actById(id); return a&&!a.done; }); }
-function passActs(p){ return !actOnlyMap||hasOpenAct(p); }
+function hasOpenAct(p){ return Array.isArray(p.acts)&&p.acts.some(id=>{ const a=actById(id); return a&&!a.done&&!a.hold; }); }
+function heldHidden(p){ if(!Array.isArray(p.acts)||!p.acts.length) return false;   /* on-hold: photo leaves the map only when EVERY action it belongs to is held */
+  let held=false; for(const id of p.acts){ const a=actById(id); if(!a) continue; if(a.hold&&!selActs.has(a.id)) held=true; else return false; } return held; }
+function passActs(p){ if(heldHidden(p)) return false; return !actOnlyMap||hasOpenAct(p); }
 function normActs(list){ let mx=0; const out=(list||[]).map(a=>{
   const parts=[];   // retired fields (description, note lists, action-level note): stash for migration into a photo note
   if(a.desc&&String(a.desc).trim()) parts.push(String(a.desc).trim());
   if(typeof a.note==="string"&&a.note.trim()) parts.push(a.note.trim());
   if(Array.isArray(a.notes)) for(const n of a.notes){ if(n&&n.t) parts.push(String(n.t)); }
-  const o={id:+a.id||0,text:String(a.text||""),done:!!a.done,created:a.created||null,doneAt:a.doneAt||null,
+  const o={id:+a.id||0,text:String(a.text||""),done:!!a.done,hold:!!a.hold,created:a.created||null,doneAt:a.doneAt||null,
     steps:Array.isArray(a.steps)?a.steps.map(s=>({t:String(s.t||""),d:!!s.d})).filter(s=>s.t):[]};
   if(Array.isArray(a.porder)){ const po=a.porder.map(Number).filter(x=>x>0); if(po.length) o.porder=po; }
   if(parts.length) o._n=parts.join("\n");
@@ -1220,6 +1228,7 @@ function createAction(text,pids){
   return a;
 }
 function setActionDone(a,done){ const before=actState(a); a.done=!!done; a.doneAt=a.done?Date.now():null; recordActEdit(a,before); afterFolderChange(); }
+function setActionHold(a,hold){ const before=actState(a); a.hold=!!hold; recordActEdit(a,before); afterFolderChange(); }
 /* Inline editing (titles and descriptions, in both the Actions panel and the under-photo strip):
    double-click the text to edit in place. Enter (Shift+Enter = new line in a description) or
    clicking away commits; Escape cancels. */
@@ -1484,7 +1493,7 @@ function actNavigate(a){
     /* Fit ALL open actions' dots (plus the selected action's own), so the flashing selection
        reads in the context of the remaining work rather than filling the screen alone. */
     const seen=new Set(), ctx=[];
-    for(const x of actions){ if(x.done&&!selActs.has(x.id)) continue;
+    for(const x of actions){ if((x.done||x.hold)&&!selActs.has(x.id)) continue;
       for(const p of actPhotos(x)){ if(p.lat!=null&&!seen.has(p.id)){ seen.add(p.id); ctx.push(p); } } }
     const all=ctx.length?ctx:geo;
     const bb=L.latLngBounds(all.map(p=>[p.lat,p.lng]));
@@ -1553,8 +1562,9 @@ function renderActions(){
       +'</div>';
     const isCur=!!(cp&&Array.isArray(cp.acts)&&cp.acts.includes(a.id));
     const exp=!collActs.has(a.id);
-    return '<div class="act-row'+(a.done?' done':'')+(selActs.has(a.id)?' sel':'')+(isCur?' cur':'')+'" data-aid="'+a.id+'" draggable="true">'
+    return '<div class="act-row'+(a.done?' done':'')+(a.hold?' hold':'')+(selActs.has(a.id)?' sel':'')+(isCur?' cur':'')+'" data-aid="'+a.id+'" draggable="true">'
       +'<label class="act-chk" title="'+(a.done?'Reopen this action':'Mark completed')+'"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
+      +'<label class="act-hold" title="On hold — stays in this list but its photos leave the map"><input type="checkbox"'+(a.hold?' checked':'')+'/></label>'
       +'<div class="act-body"><div class="bh"><div class="t">'+esc(a.text)+'</div>'
         +expBtnHtml(a)+'<button class="ipa-x act-del" type="button" title="'+(isCur?'Remove this action from the open photo':'Delete this action')+'">&times;</button></div>'
       +(exp?('<div class="asec">'+stepsHtml(a)+'</div>'
@@ -1564,7 +1574,8 @@ function renderActions(){
       +'</div>'+cov+'</div>'; }).join("");
   list.querySelectorAll(".act-row").forEach(el=>{
     const a=actById(Number(el.dataset.aid)); if(!a) return;
-    el.querySelector("input").addEventListener("click",e=>{ e.stopPropagation(); setActionDone(a,e.target.checked); });
+    el.querySelector(".act-chk input").addEventListener("click",e=>{ e.stopPropagation(); setActionDone(a,e.target.checked); });
+    el.querySelector(".act-hold input").addEventListener("click",e=>{ e.stopPropagation(); setActionHold(a,e.target.checked); });
     el.querySelector(".act-del").addEventListener("click",e=>{ e.stopPropagation();
       const cp2=lb.classList.contains("open")?curPhoto():null;
       if(cp2&&Array.isArray(cp2.acts)&&cp2.acts.includes(a.id)) unassignAct(a,cp2);   // open photo is linked: X just removes that link
@@ -1573,7 +1584,7 @@ function renderActions(){
     wireActRowCommon(el,a);
     /* single click selects/navigates (slightly delayed so a double-click can win); double click edits in place */
     /* selection is INSTANT; only the zoom waits briefly so a double-click (edit) can cancel it */
-    el.addEventListener("click",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes")||el.querySelector(".act-edit")) return;
+    el.addEventListener("click",e=>{ if(e.target.closest(".act-chk,.act-hold,.act-exp,.act-del,.act-steps,.act-notes")||el.querySelector(".act-edit")) return;
       clearTimeout(el._ct); clickAction(a,e,true);
       if(!e.ctrlKey&&!e.metaKey&&!e.shiftKey) el._ct=setTimeout(()=>actNavigate(a),260); });
     el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes,.act-cover")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); startActEdit(a,el); });
@@ -1744,7 +1755,7 @@ async function buildMobilePack(){
   for(const a of open){
     const ps=[];
     for(const p of actPhotos(a)) ps.push({ id:p.id, name:p.name, note:(p.note||""), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), img:await annotatedPreview(p) });
-    pk.actions.push({ id:a.id, text:a.text, steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d})), photos:ps });
+    pk.actions.push({ id:a.id, text:a.text, hold:!!a.hold, steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d})), photos:ps });
   }
   return pk;
 }
@@ -3054,7 +3065,7 @@ function pushTagAction(items){   // one undo step, possibly touching many photos
   pushUndo({items});
 }
 function recordTagChange(p,before){ pushTagAction([{id:p.id,before,after:snapshotTags(p)}]); }
-function actState(a){ return {text:a.text,done:!!a.done,doneAt:a.doneAt||null,steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d})),porder:(Array.isArray(a.porder)&&a.porder.length)?a.porder.slice():null}; }
+function actState(a){ return {text:a.text,done:!!a.done,doneAt:a.doneAt||null,hold:!!a.hold,steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d})),porder:(Array.isArray(a.porder)&&a.porder.length)?a.porder.slice():null}; }
 function recordActEdit(a,before){ const after=actState(a); if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({actEdit:{id:a.id,before,after}}); }
 function cpMarks(ms){ return JSON.parse(JSON.stringify(ms||[])); }
 function pushMarksSnap(p,before,after){ if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({marksSnap:{id:p.id,before,after}}); }
@@ -3070,7 +3081,7 @@ function applyUndoEntry(a,dir){   // dir: "before" (undo) or "after" (redo)
     if(undo){ actions=actions.filter(x=>x.id!==a.actCreate.data.id); selActs.delete(a.actCreate.data.id); }
     else { const d=a.actCreate.data; if(!actById(d.id)){ actions.splice(Math.min(a.actCreate.index,actions.length),0,Object.assign({},d)); if(nextActId<=d.id) nextActId=d.id+1; } }
   }
-  if(a.actEdit){ const x=actById(a.actEdit.id); if(x){ const src=undo?a.actEdit.before:a.actEdit.after; x.text=src.text; x.done=src.done; x.doneAt=src.doneAt; if(src.steps) x.steps=src.steps.map(s=>({t:s.t,d:!!s.d})); x.porder=(src.porder&&src.porder.slice())||undefined; } }
+  if(a.actEdit){ const x=actById(a.actEdit.id); if(x){ const src=undo?a.actEdit.before:a.actEdit.after; x.text=src.text; x.done=src.done; x.doneAt=src.doneAt; x.hold=!!src.hold; if(src.steps) x.steps=src.steps.map(s=>({t:s.t,d:!!s.d})); x.porder=(src.porder&&src.porder.slice())||undefined; } }
   if(a.addPhotos){   // pasted/dropped photos: undo removes them (kept aside), redo puts them back
     if(undo){
       const ids=new Set(a.addPhotos);
@@ -3354,7 +3365,7 @@ document.getElementById("jsonInput").addEventListener("change",async e=>{ const 
 function serializeState(includeImages){
   return {
     version:3, folderName, savedAt:new Date().toISOString(),
-    actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.steps&&a.steps.length)o.steps=a.steps.map(s=>({t:s.t,d:!!s.d})); if(Array.isArray(a.porder)&&a.porder.length)o.porder=a.porder; return o; }),
+    actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.hold)o.hold=true; if(a.steps&&a.steps.length)o.steps=a.steps.map(s=>({t:s.t,d:!!s.d})); if(Array.isArray(a.porder)&&a.porder.length)o.porder=a.porder; return o; }),
     settings:{ baseLayer: map.hasLayer(google)?"google":map.hasLayer(esri)?"esri":"none", showNoGeo, sortBy:currentSort,
       thumb:getComputedStyle(document.documentElement).getPropertyValue("--thumb").trim(),
       sideW:getComputedStyle(document.documentElement).getPropertyValue("--side-w").trim(),
@@ -3536,7 +3547,7 @@ function parseShareHash(){
    Phone-sized touch screens get an actions-first UI at the SAME link. It reads the latest
    pack.json from the private data repo (token pasted once) and pushes ticks/notes back. */
 function isMobile(){ try{ return matchMedia("(pointer:coarse)").matches && Math.min(screen.width,screen.height)<600 && !localStorage.getItem("pmForceDesktop"); }catch(e){ return false; } }
-let mPack=null, mGeo=null, mMiniMap=null, mInsetMap=null, mInsetMapL=null, mInsetCur=null;
+let mPack=null, mGeo=null, mMiniMap=null, mInsetMap=null, mInsetMapL=null, mInsetCur=null, mHomeMap=null, mHomeBB=null;
 function mPend(){ try{ return JSON.parse(localStorage.getItem("pmField")||"{}")||{}; }catch(e){ return {}; } }
 function mPendSave(o){ try{ localStorage.setItem("pmField",JSON.stringify(o)); }catch(e){} }
 function mCh(id){ const p=mPend(); return (p.changes||{})[id]||{}; }
@@ -3634,8 +3645,13 @@ function mDist(a){   // metres from the phone to the nearest of the action's pho
 }
 function mFmtD(m){ return m==null?"":(m>=1000?(m/1000).toFixed(1)+" km":Math.round(m)+" m"); }
 function mDone(a){ if(a._new){ const x=mNewActs()[a._ni]; return !!(x&&x.done); } const c=mCh(a.id); return c.done===true; }
+function mHold(a){ if(a._new){ const x=mNewActs()[a._ni]; return !!(x&&x.hold); } const c=mCh(a.id); return typeof c.hold==="boolean"?c.hold:!!a.hold; }
+function mToggleHold(a){ mMutate(()=>{ const p=mPend();
+  if(a._new){ const x=(p.newActs||[])[a._ni]; if(x) x.hold=!x.hold; }
+  else{ const c=(p.changes=p.changes||{})[a.id]||(p.changes[a.id]={}); c.hold=!mHold(a); }
+  mPendSave(p); }); }
 function mStepDone(a,i){ if(a._new){ const x=mNewActs()[a._ni]; return !!(x&&x.steps&&x.steps[i]&&x.steps[i].d); } const c=mCh(a.id); return (c.steps&&(String(i) in c.steps))?!!c.steps[String(i)]:!!(a.steps[i]&&a.steps[i].d); }
-function mScr(html){ [mMiniMap,mInsetMap,mInsetMapL].forEach(m=>{ if(m){ try{ m.remove(); }catch(e){} } }); mMiniMap=null; mInsetMap=null; mInsetMapL=null; mInsetCur=null; mSoftRefresh=null; document.getElementById("mroot").innerHTML='<div class="m-scr">'+html+'</div>'; }
+function mScr(html){ [mMiniMap,mInsetMap,mInsetMapL,mHomeMap].forEach(m=>{ if(m){ try{ m.remove(); }catch(e){} } }); mMiniMap=null; mInsetMap=null; mInsetMapL=null; mInsetCur=null; mHomeMap=null; mHomeBB=null; mSoftRefresh=null; document.getElementById("mroot").innerHTML='<div class="m-scr">'+html+'</div>'; }
 function mShowSetup(msg){
   const g=ghCfg();
   mScr('<div class="m-head"><div class="m-brand">Photo<span>Map</span> Field</div></div>'
@@ -3672,7 +3688,7 @@ function mStartGeo(){
   mGeoWatch=navigator.geolocation.watchPosition(pos=>{
     const first=!mGeo;
     mGeo={lat:pos.coords.latitude,lng:pos.coords.longitude};
-    if(document.getElementById("mList")){ if(first) mShowList(); }   // refresh distance sort once, only while the list is visible
+    if(document.getElementById("mList")){ if(first) mShowList(); else mGeoLive(false); }   // first fix re-sorts the list (and rebuilds its map); later ones just move the pins
     else mGeoLive(first);
   },()=>{},{enableHighAccuracy:true,maximumAge:10000,timeout:20000});
 }
@@ -3686,6 +3702,11 @@ function mGeoLive(refit){
     if(mMiniMap){
       if(mMiniMap._geoPin) mMiniMap._geoPin.setLatLng([mGeo.lat,mGeo.lng]);
       else mMiniMap._geoPin=L.marker([mGeo.lat,mGeo.lng],{icon:youAreHereIcon(40),interactive:false,zIndexOffset:900}).addTo(mMiniMap);
+    }
+    if(mHomeMap){
+      if(mHomeMap._geoPin) mHomeMap._geoPin.setLatLng([mGeo.lat,mGeo.lng]);
+      else{ mHomeMap._geoPin=L.marker([mGeo.lat,mGeo.lng],{icon:youAreHereIcon(30),interactive:false,zIndexOffset:900}).addTo(mHomeMap);
+        if(refit){ if(mHomeBB){ mHomeBB.extend([mGeo.lat,mGeo.lng]); mHomeMap.fitBounds(mHomeBB,{padding:[26,26],maxZoom:18}); } else mHomeMap.setView([mGeo.lat,mGeo.lng],16); } }
     }
   }catch(e){}
 }
@@ -3711,7 +3732,9 @@ function mShowList(){
     +(acts.length?acts.map(a=>{
       const done=mDone(a), rows=mSteps(a), sd=rows.filter(s=>s.d).length, st=rows.length, d=mDist(a);
       const k=a._new?a.id:String((mPack.actions||[]).indexOf(a));
-      return '<div class="m-card'+(done?' done':'')+'" data-k="'+k+'"><div class="m-chk'+(done?' on':'')+'">'+(done?'✓':'')+'</div>'
+      const hold=mHold(a);
+      return '<div class="m-card'+(done?' done':'')+(hold?' hold':'')+'" data-k="'+k+'"><div class="m-chk'+(done?' on':'')+'">'+(done?'✓':'')+'</div>'
+        +'<div class="m-hold'+(hold?' on':'')+'" data-hold="1" title="On hold">'+(hold?'❙❙':'')+'</div>'
         +'<div class="m-cbody"><div class="m-ct"'+(done?' style="text-decoration:line-through;color:var(--muted)"':'')+'>'+esc(mTitle(a))+'</div>'
         +'<div class="m-cm">'+(a._new?'<span style="color:var(--accent2);font-weight:600;">NEW · on phone</span>':'<b>'+(a.photos||[]).length+' photo'+((a.photos||[]).length===1?'':'s')+'</b>')
         +(st?'<span>steps '+sd+'/'+st+'</span>':'')+(d!=null?'<span>'+mFmtD(d)+' away</span>':'')+'</div></div>'
@@ -3719,7 +3742,8 @@ function mShowList(){
     }).join(''):'<div class="m-note" style="padding-top:40px">No open actions in the pack.</div>')
     +'</div>'
     +'<div class="m-foot"><button class="m-btn" id="mSend"'+(n?'':' disabled')+'>Send changes back ('+n+')</button>'
-    +'<div class="m-note" id="mSendNote">'+(n?'edits waiting to sync':'no unsent changes')+'</div></div>');
+    +'<div class="m-note" id="mSendNote">'+(n?'edits waiting to sync':'no unsent changes')+'</div></div>'
+    +'<div class="m-homemap" id="mHomeMap"></div>');
   document.getElementById("mRefresh").addEventListener("click",mLoadPack);
   document.getElementById("mSend").addEventListener("click",mSendChanges);
   mWireUndo();
@@ -3728,7 +3752,31 @@ function mShowList(){
     mMutate(()=>{ const p=mPend(); p.newActs=(p.newActs||[]).concat([{text:v,steps:[],done:false}]); mPendSave(p); });
     mShowList();
   });
-  document.querySelectorAll("#mList .m-card").forEach(el=>el.addEventListener("click",()=>{ const k=el.dataset.k; mShowDetail(mIsNew(k)?k:Number(k)); }));
+  document.querySelectorAll("#mList .m-card").forEach(el=>{
+    el.querySelector(".m-hold").addEventListener("click",e=>{ e.stopPropagation(); const k=el.dataset.k; const a=mActAt(mIsNew(k)?k:Number(k)); if(a){ mToggleHold(a); mShowList(); } });
+    el.addEventListener("click",()=>{ const k=el.dataset.k; mShowDetail(mIsNew(k)?k:Number(k)); });
+  });
+  mBuildHomeMap(acts);
+}
+/* Home-screen map: the bottom half of the actions list. Dots = photos of ACTIVE actions
+   (not done, not on hold); the view fits those dots plus your live location. */
+function mBuildHomeMap(acts){
+  const hm=document.getElementById("mHomeMap"); if(!hm||typeof L==="undefined") return;
+  try{
+    const m2=L.map(hm,{zoomControl:false,attributionControl:false});
+    L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",{subdomains:["mt0","mt1","mt2","mt3"],maxZoom:22,maxNativeZoom:21}).addTo(m2);
+    const seen=new Set(), pts=[];
+    for(const a of acts){ if(mDone(a)||mHold(a)) continue;
+      for(const ph of (a.photos||[])){ if(ph.lat!=null&&!seen.has(ph.id)){ seen.add(ph.id); pts.push(ph);
+        L.circleMarker([ph.lat,ph.lng],{radius:5,color:"#ffffff",weight:2,fillColor:"#5865F2",fillOpacity:.9,interactive:false}).addTo(m2); } } }
+    const bb=pts.length?L.latLngBounds(pts.map(p=>[p.lat,p.lng])):null;
+    if(mGeo){ m2._geoPin=L.marker([mGeo.lat,mGeo.lng],{icon:youAreHereIcon(30),interactive:false,zIndexOffset:900}).addTo(m2); if(bb) bb.extend([mGeo.lat,mGeo.lng]); }
+    mHomeMap=m2; mHomeBB=bb;
+    const fit=()=>{ try{ m2.invalidateSize();
+      if(bb){ if(pts.length>1||mGeo) m2.fitBounds(bb,{padding:[26,26],maxZoom:18}); else m2.setView(bb.getCenter(),17); }
+      else if(mGeo) m2.setView([mGeo.lat,mGeo.lng],16); else m2.setView([0,0],2); }catch(e){} };
+    requestAnimationFrame(fit); setTimeout(fit,180);
+  }catch(e){}
 }
 async function mSendChanges(){
   const cfg=ghCfg(), note=document.getElementById("mSendNote"), btn=document.getElementById("mSend");
@@ -3736,7 +3784,7 @@ async function mSendChanges(){
   btn.disabled=true; note.textContent="Sending…";
   try{
     await ghPutFile(cfg,"changes.json",JSON.stringify({v:2,updatedAt:new Date().toISOString(),changes:p.changes||{},photoNotes:p.pnotes||{},
-      newActs:(p.newActs||[]).map(x=>({text:x.text,steps:(x.steps||[]).map(s=>({t:s.t,d:!!s.d})),done:!!x.done,doneAt:x.doneAt||null}))}),"Field changes from phone");
+      newActs:(p.newActs||[]).map(x=>({text:x.text,steps:(x.steps||[]).map(s=>({t:s.t,d:!!s.d})),done:!!x.done,doneAt:x.doneAt||null,hold:!!x.hold}))}),"Field changes from phone");
     p.sentAt=Date.now(); mPendSave(p);
     note.textContent="✓ Sent — merge on desktop when you're back"; btn.disabled=false;
   }catch(err){ note.textContent="Failed: "+(err&&err.message||err); btn.disabled=false; }
@@ -4130,6 +4178,7 @@ async function checkFieldChanges(){
             if(delObjs.size) a.steps=a.steps.filter(s=>!delObjs.has(s));
           }
         }
+        if(typeof c.hold==="boolean") a.hold=c.hold;
         if(c.done===true&&!a.done){ a.done=true; a.doneAt=c.doneAt||Date.now(); }
         if(c.done===false&&a.done){ a.done=false; a.doneAt=null; }
         recordActEdit(a,before);
@@ -4138,6 +4187,7 @@ async function checkFieldChanges(){
         const a2=createAction(String(na&&na.text||"").trim(),null); if(!a2) continue;
         const b2=actState(a2);
         a2.steps=(na.steps||[]).map(s=>({t:String(s&&s.t||"").trim(),d:!!(s&&s.d)})).filter(s=>s.t);
+        if(na.hold) a2.hold=true;
         if(na.done){ a2.done=true; a2.doneAt=na.doneAt||Date.now(); }
         recordActEdit(a2,b2);
       }
