@@ -584,7 +584,9 @@
   .m-nin:focus{border-color:var(--accent);}
   .m-nin::placeholder{color:#9A9DA5;}
   .m-cue{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:10px;color:#fff;text-shadow:0 1px 4px #000;pointer-events:none;z-index:500;}
-  .m-inset{position:absolute;top:8px;left:8px;right:8px;height:calc(19% - 12px);z-index:4;border-radius:12px;overflow:hidden;border:2px solid rgba(255,255,255,.7);box-shadow:0 2px 12px rgba(0,0,0,.55);background:#141413;transition:opacity .2s;}
+  .m-inset{position:absolute;top:8px;left:8px;right:8px;height:calc(19% - 12px);z-index:4;display:flex;border-radius:12px;overflow:hidden;border:2px solid rgba(255,255,255,.7);box-shadow:0 2px 12px rgba(0,0,0,.55);background:#141413;transition:opacity .2s;}
+  .m-inset .mi-half{flex:1 1 50%;min-width:0;height:100%;}
+  .m-inset .mi-half+.mi-half{border-left:2px solid rgba(255,255,255,.7);}
   .m-sub2{position:absolute;left:8px;right:8px;bottom:8px;top:calc(89% + 4px);z-index:4;box-sizing:border-box;overflow-y:auto;background:#141413cc;border:1px solid #4a4a48;border-radius:10px;padding:6px 9px;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
   .m-sub2 .s2row{display:flex;gap:7px;align-items:flex-start;font-size:16px;color:#E3E5E8;line-height:1.35;padding:3px 0;}
   .m-sub2 .s2row .n{color:#fff;font-family:var(--mono);font-size:15px;font-weight:700;flex-shrink:0;margin-top:1px;}
@@ -3478,7 +3480,7 @@ function parseShareHash(){
    Phone-sized touch screens get an actions-first UI at the SAME link. It reads the latest
    pack.json from the private data repo (token pasted once) and pushes ticks/notes back. */
 function isMobile(){ try{ return matchMedia("(pointer:coarse)").matches && Math.min(screen.width,screen.height)<600 && !localStorage.getItem("pmForceDesktop"); }catch(e){ return false; } }
-let mPack=null, mGeo=null, mMiniMap=null, mInsetMap=null, mInsetCur=null;
+let mPack=null, mGeo=null, mMiniMap=null, mInsetMap=null, mInsetMapL=null, mInsetCur=null;
 function mPend(){ try{ return JSON.parse(localStorage.getItem("pmField")||"{}")||{}; }catch(e){ return {}; } }
 function mPendSave(o){ try{ localStorage.setItem("pmField",JSON.stringify(o)); }catch(e){} }
 function mCh(id){ const p=mPend(); return (p.changes||{})[id]||{}; }
@@ -3569,7 +3571,7 @@ function mDist(a){   // metres from the phone to the nearest of the action's pho
 function mFmtD(m){ return m==null?"":(m>=1000?(m/1000).toFixed(1)+" km":Math.round(m)+" m"); }
 function mDone(a){ if(a._new){ const x=mNewActs()[a._ni]; return !!(x&&x.done); } const c=mCh(a.id); return c.done===true; }
 function mStepDone(a,i){ if(a._new){ const x=mNewActs()[a._ni]; return !!(x&&x.steps&&x.steps[i]&&x.steps[i].d); } const c=mCh(a.id); return (c.steps&&(String(i) in c.steps))?!!c.steps[String(i)]:!!(a.steps[i]&&a.steps[i].d); }
-function mScr(html){ [mMiniMap,mInsetMap].forEach(m=>{ if(m){ try{ m.remove(); }catch(e){} } }); mMiniMap=null; mInsetMap=null; mInsetCur=null; document.getElementById("mroot").innerHTML='<div class="m-scr">'+html+'</div>'; }
+function mScr(html){ [mMiniMap,mInsetMap,mInsetMapL].forEach(m=>{ if(m){ try{ m.remove(); }catch(e){} } }); mMiniMap=null; mInsetMap=null; mInsetMapL=null; mInsetCur=null; document.getElementById("mroot").innerHTML='<div class="m-scr">'+html+'</div>'; }
 function mShowSetup(msg){
   const g=ghCfg();
   mScr('<div class="m-head"><div class="m-brand">Photo<span>Map</span> Field</div></div>'
@@ -3739,13 +3741,27 @@ function mShowDetail(ai,keepScroll){
   if(hsEl){ hsEl.querySelectorAll("img").forEach(im=>im.addEventListener("load",posOverlays));
     requestAnimationFrame(posOverlays); setTimeout(posOverlays,120); setTimeout(posOverlays,450); }   // data-URL images can be complete before the load listeners attach
   if(insEl){
+    /* split view: LEFT = whole site (this action's dots + your location), RIGHT = snug fit of
+       just the action's photos. Two fingers zoom either half; one finger still pages. */
+    insEl.innerHTML='<div class="mi-half" id="miL"></div><div class="mi-half" id="miR"></div>';
     const pts=photos.filter(p=>p.lat!=null);
-    mInsetMap=L.map(insEl,{zoomControl:false,attributionControl:false,dragging:false,touchZoom:true,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false,tap:false});   // two fingers zoom the strip map; one finger still pages
-    L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",{subdomains:["mt0","mt1","mt2","mt3"],maxZoom:22,maxNativeZoom:21}).addTo(mInsetMap);
-    for(const p of pts) L.circleMarker([p.lat,p.lng],{radius:4,color:"#ffffff",weight:2,fillColor:"#5865F2",fillOpacity:.9,interactive:false}).addTo(mInsetMap);
+    const mkMini=el=>{ const m2=L.map(el,{zoomControl:false,attributionControl:false,dragging:false,touchZoom:true,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false,tap:false});
+      L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",{subdomains:["mt0","mt1","mt2","mt3"],maxZoom:22,maxNativeZoom:21}).addTo(m2); return m2; };
+    mInsetMapL=mkMini(document.getElementById("miL"));
+    mInsetMap=mkMini(document.getElementById("miR"));
+    for(const p of pts){
+      L.circleMarker([p.lat,p.lng],{radius:4,color:"#ffffff",weight:2,fillColor:"#5865F2",fillOpacity:.9,interactive:false}).addTo(mInsetMapL);
+      L.circleMarker([p.lat,p.lng],{radius:4,color:"#ffffff",weight:2,fillColor:"#5865F2",fillOpacity:.9,interactive:false}).addTo(mInsetMap);
+    }
+    if(mGeo) L.marker([mGeo.lat,mGeo.lng],{icon:youAreHereIcon(26),interactive:false,zIndexOffset:900}).addTo(mInsetMapL);
     mInsetCur=L.circleMarker([pts[0].lat,pts[0].lng],{radius:7,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:1,className:"hl-dot",interactive:false}).addTo(mInsetMap);
-    const ibb=L.latLngBounds(pts.map(p=>[p.lat,p.lng]));
-    const ifit=()=>{ try{ mInsetMap.invalidateSize(); if(pts.length>1) mInsetMap.fitBounds(ibb,{padding:[18,18],maxZoom:19}); else mInsetMap.setView([pts[0].lat,pts[0].lng],18); }catch(e){} };
+    const bbR=L.latLngBounds(pts.map(p=>[p.lat,p.lng]));
+    const bbL=L.latLngBounds(pts.map(p=>[p.lat,p.lng])); if(mGeo) bbL.extend([mGeo.lat,mGeo.lng]);
+    const ifit=()=>{ try{
+      mInsetMapL.invalidateSize(); mInsetMap.invalidateSize();
+      if(pts.length>1) mInsetMap.fitBounds(bbR,{padding:[12,12],maxZoom:19}); else mInsetMap.setView([pts[0].lat,pts[0].lng],18);
+      if(mGeo||pts.length>1) mInsetMapL.fitBounds(bbL,{padding:[14,14],maxZoom:17}); else mInsetMapL.setView([pts[0].lat,pts[0].lng],15);
+    }catch(e){} };
     insEl._refit=ifit;
     setTimeout(ifit,150);
     const setCur=i=>{ const p=photos[i]; if(!p) return;
