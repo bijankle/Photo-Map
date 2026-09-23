@@ -1231,8 +1231,7 @@ function clickAction(a,ev){
   const ps=actPhotos(a);
   const geo=ps.filter(p=>p.lat!=null);
   if(geo.length) zoomToPhotos(geo);
-  if(ps.length===1) openViewer(ps[0]);            // single photo: straight to the Photo tab
-  else if(ps.length>1) setTab("gallery");         // several: gallery shows just these thumbnails
+  if(ps.length) setTab("gallery");   // always the gallery, even for one photo — its thumbnail carries the unassign X
 }
 /* Zoom to a set of photos, at MINIMUM deep enough that none of them is hidden inside a cluster. */
 function zoomToPhotos(list){
