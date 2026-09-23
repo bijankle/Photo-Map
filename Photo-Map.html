@@ -3756,22 +3756,23 @@ function mShowDetail(ai,keepScroll){
      the Image note input on its bottom edge and the caption just underneath. */
   if(!insEl&&hsEl) hsEl.style.top="0";   // no map in the pack: the image band starts at the top
   const posOverlays=()=>{ if(!hsEl) return;
-    const W=hsEl.clientWidth,H=hsEl.clientHeight;
-    const geom=img=>{ if(img&&img.naturalWidth&&img.naturalHeight){ const sc=Math.min(W/img.naturalWidth,H/img.naturalHeight);
-      return {w:img.naturalWidth*sc,h:img.naturalHeight*sc}; } return {w:W,h:H}; };
+    const W=hsEl.clientWidth,H=hsEl.clientHeight,ROW=44;   // reserved row under the image: Image note + undo/redo
+    const ur=document.getElementById("mUR");
+    const urW=(ur&&ur.offsetWidth)||90;
+    const geom=img=>{ if(img&&img.naturalWidth&&img.naturalHeight){ const sc=Math.min(W/img.naturalWidth,Math.max(60,H-ROW)/img.naturalHeight);
+      return {w:img.naturalWidth*sc,h:img.naturalHeight*sc}; } return {w:W,h:Math.max(60,H-ROW)}; };
     Array.from(hsEl.children).forEach(pg=>{
       const img=pg.querySelector("img"); const gm=geom(img); const lbX=(W-gm.w)/2;
       if(img){ img.style.position="absolute"; img.style.top="0"; img.style.left=Math.round(lbX)+"px";
         img.style.width=Math.round(gm.w)+"px"; img.style.height=Math.round(gm.h)+"px"; img.style.objectFit="fill"; }
-      const nb=pg.querySelector(".m-nin");
-      if(nb){ nb.style.left=Math.round(lbX+8)+"px"; nb.style.right="auto"; nb.style.width=Math.round(Math.max(140,gm.w-16))+"px";
-        nb.style.top=Math.round(Math.max(36,gm.h-50))+"px"; nb.style.bottom="auto"; }
-      const cap=pg.querySelector(".m-pcap"); if(cap){ cap.style.top=Math.round(Math.min(gm.h+3,H-15))+"px"; cap.style.bottom="auto"; }
+      const nb=pg.querySelector(".m-nin");   // note input: under the image, sharing the row with undo/redo
+      if(nb){ nb.style.left="8px"; nb.style.right="auto"; nb.style.width=Math.round(W-8-urW-16)+"px";
+        nb.style.top=Math.round(gm.h+5)+"px"; nb.style.bottom="auto"; }
+      const cap=pg.querySelector(".m-pcap"); if(cap){ cap.style.top=Math.round(Math.max(4,gm.h-20))+"px"; cap.style.bottom="auto"; }   // caption overlays the image's bottom edge
     });
-    const ur=document.getElementById("mUR");   // undo/redo chips: right under the current image
     if(ur){ const i=Math.round(hsEl.scrollLeft/Math.max(1,hsEl.clientWidth));
       const gc=geom(hsEl.children[i]&&hsEl.children[i].querySelector("img"));
-      ur.style.top=Math.round(hsEl.offsetTop+Math.min(gc.h+2,H-34))+"px"; } };
+      ur.style.top=Math.round(hsEl.offsetTop+gc.h+7)+"px"; } };
   if(hsEl){ hsEl.querySelectorAll("img").forEach(im=>im.addEventListener("load",posOverlays));
     requestAnimationFrame(posOverlays); setTimeout(posOverlays,120); setTimeout(posOverlays,450); }   // data-URL images can be complete before the load listeners attach
   if(insEl){
