@@ -419,6 +419,15 @@
 
   .card.sel{outline:3px solid var(--accent);outline-offset:-3px;border-radius:8px;}
 
+  /* photo-picking banner (Add photos to an action) */
+  #pickbar{position:absolute;top:64px;left:50%;transform:translateX(-50%);z-index:1300;display:none;align-items:center;gap:10px;
+    background:var(--panel);border:1px solid var(--accent);border-radius:999px;padding:8px 10px 8px 16px;box-shadow:0 8px 24px #1e1f2233;max-width:80%;}
+  #pickbar .pb-t{font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #pickbar .pb-ok{border:none;border-radius:999px;background:var(--accent);color:#fff;font:inherit;font-size:12px;font-weight:600;padding:6px 14px;cursor:pointer;}
+  #pickbar .pb-ok[disabled]{background:var(--line2);cursor:default;}
+  #pickbar .pb-x{border:none;background:none;color:var(--dim);font:inherit;font-size:12px;cursor:pointer;padding:6px 8px;}
+  #pickbar .pb-x:hover{color:var(--ink);}
+
   /* gallery banner while an action filters the thumbnails */
   .act-note{display:flex;align-items:center;gap:8px;background:var(--accent-tint);border:1px solid var(--accent);border-radius:9px;padding:7px 10px;margin:0 0 10px;font-size:12px;color:var(--accent2);}
   .act-note button{margin-left:auto;border:none;background:var(--accent);color:#fff;font:inherit;font-size:11px;border-radius:999px;padding:3px 10px;cursor:pointer;}
@@ -878,6 +887,7 @@ function addSingleDot(p,lat,lng,isSel){
     if(oe&&oe.button===0&&(selSet.has(p.id)||dotSelected(p))){ L.DomEvent.stop(oe); startDotDrag(p,hit,dot); } });
   hit.on("click",e=>{ uiClickT=Date.now(); if(Date.now()-dotDropT<450) return;
     const oe=e.originalEvent;
+    if(pickMode){ togglePick(p); return; }   // picking photos for an action: click selects, never opens
     if(oe&&(oe.ctrlKey||oe.metaKey)){
       if(!selSet.size&&lb.classList.contains("open")&&curPhoto()&&curPhoto()!==p) selSet.add(curPhoto().id);   // the open photo counts as the first selected item
       if(selSet.has(p.id)) selSet.delete(p.id); else selSet.add(p.id); setAreaBtn(); buildCluster(); renderClusters(); return; }   // ctrl+click toggles the dot in the selection
@@ -954,6 +964,12 @@ function openDotMenu(p,ev){
       ()=>assignActs([...selActs],targets),
       !ok,"One action to many photos, or many actions to one photo — not many to many");
   }
+  const openActs=actions.filter(x=>!x.done);
+  if(openActs.length){   // assign straight to an action, right from the dot
+    for(const x of openActs.slice(0,8))
+      mkCtxItem("→ "+(x.text.length>36?x.text.slice(0,36)+"…":x.text),()=>assignActs([x.id],targets));
+    if(openActs.length>8) mkCtxItem("("+(openActs.length-8)+" more — use the Actions panel)",null,true);
+  }
   mkCtxItem("New action for "+(many?targets.length+" photos":"this photo")+"…",
     ()=>armNewAction(targets.map(x=>x.id)));   // arms the Actions panel input — type there and Enter assigns to these photos
   const moved=targets.filter(t=>t.glat!=null);
@@ -969,11 +985,41 @@ function restoreGps(list){
   pushTagAction(items); afterFolderChange();
 }
 function clearSel(){ selSet.clear(); setAreaBtn(); buildCluster(); renderClusters(); }
+
+/* Photo-picking mode: started from an action's "Add photos" — plain clicks on dots/thumbnails
+   select photos (no viewer), a banner shows the count, Assign links them to the action. */
+let pickMode=null, pickBarEl=null;
+function startPickMode(actIds){
+  pickMode={actIds:actIds.slice()};
+  selSet.clear(); setAreaBtn(); buildCluster(); renderClusters(); updateGallery(true);
+  if(!pickBarEl){
+    pickBarEl=document.createElement("div"); pickBarEl.id="pickbar"; map.getContainer().appendChild(pickBarEl);
+    ["mousedown","pointerdown","dblclick","contextmenu","wheel"].forEach(ev=>pickBarEl.addEventListener(ev,e=>e.stopPropagation()));
+  }
+  updatePickBar();
+}
+function updatePickBar(){
+  if(!pickMode||!pickBarEl) return;
+  const a=actById(pickMode.actIds[0]);
+  pickBarEl.style.display="flex";
+  pickBarEl.innerHTML='<span class="pb-t">Adding photos to “'+esc(a?a.text:"action")+'”'+(pickMode.actIds.length>1?' +'+(pickMode.actIds.length-1)+' more':'')+'</span>'
+    +'<button class="pb-ok" type="button"'+(selSet.size?'':' disabled')+'>Assign ('+selSet.size+')</button>'
+    +'<button class="pb-x" type="button">Cancel</button>';
+  pickBarEl.querySelector(".pb-ok").addEventListener("click",()=>endPickMode(true));
+  pickBarEl.querySelector(".pb-x").addEventListener("click",()=>endPickMode(false));
+}
+function endPickMode(assign){
+  const pm=pickMode; pickMode=null;
+  if(pickBarEl) pickBarEl.style.display="none";
+  if(assign&&pm&&selSet.size) assignActs(pm.actIds,[...selSet].map(photoById).filter(Boolean));
+  clearSel(); updateGallery(true);
+}
+function togglePick(p){ if(selSet.has(p.id)) selSet.delete(p.id); else selSet.add(p.id); setAreaBtn(); buildCluster(); renderClusters(); }
 /* A quick left click on empty map clears photo + action selections. Leaflet never fires "click"
    after a pan, so dragging the map is safe; clicks on dots, clusters, or menu dismissals are
    excluded via uiClickT. */
 map.on("click",e=>{
-  if(drawing||measuring||dotDrag) return;
+  if(drawing||measuring||dotDrag||pickMode) return;
   if(e.originalEvent&&(e.originalEvent.ctrlKey||e.originalEvent.metaKey)) return;   // ctrl+click is a selection gesture — a miss must not wipe the selection
   if(Date.now()-uiClickT<400||Date.now()-dotDropT<450) return;
   if(selSet.size) clearSel();
@@ -1109,6 +1155,7 @@ function unassignAct(a,p){
    deselects it), Ctrl/Cmd+click toggles it in the selection, Shift+click selects the range. */
 let lastActClick=null;
 function clickAction(a,ev){
+  if(pickMode) return;   // while picking photos, the panel stays put
   const ctrl=!!(ev&&(ev.ctrlKey||ev.metaKey)), shift=!!(ev&&ev.shiftKey);
   if(shift&&lastActClick!=null){
     const shown=(actShowOpenOnly?actions.filter(x=>!x.done):actions).map(x=>x.id);
@@ -1264,16 +1311,13 @@ function openActMenu(a,ev){
   ctxMenu.innerHTML="";
   const actIds=(selActs.has(a.id)&&selActs.size>1)?[...selActs]:[a.id];
   const many=actIds.length>1;
+  mkCtxItem("Add photos…",()=>startPickMode(actIds));   // pick mode: click dots/thumbnails, then Assign
   if(selSet.size){
     const ok=!many||selSet.size===1;
     mkCtxItem("Assign "+(many?actIds.length+" selected actions":"action")+" → "+selSet.size+" selected photo"+(selSet.size===1?"":"s"),
       ()=>assignActs(actIds,[...selSet].map(photoById).filter(Boolean)),
       !ok,"One action to many photos, or many actions to one photo — not many to many");
   }
-  if(lb.classList.contains("open")&&curPhoto())
-    mkCtxItem("Assign "+(many?actIds.length+" selected actions":"action")+" → open photo",()=>assignActs(actIds,[curPhoto()]));
-  if(!selSet.size&&!(lb.classList.contains("open")&&curPhoto()))
-    mkCtxItem("Assign → select photos first (Select area, or open a photo)",null,true);
   mkCtxItem(a.done?"Reopen action":"Mark completed",()=>setActionDone(a,!a.done));
   mkCtxItem("Rename…",()=>renameAction(a));
   mkCtxItem("Edit description…",()=>editActionDesc(a));
@@ -1770,6 +1814,7 @@ function dUp(e){
 }
 function clearArea(){ if(boxRect){map.removeLayer(boxRect);boxRect=null;} boxBounds=null; setAreaBtn(); buildCluster(); renderClusters(); updateGallery(); persistState(); }
 function setAreaBtn(){
+  if(pickMode) updatePickBar();
   if(boxBounds){ areaBtn.textContent="Clear area [f]"; areaBtn.classList.add("active"); }
   else if(drawing&&drawMode==="filter"){ areaBtn.textContent="Cancel [f]"; areaBtn.classList.add("active"); }
   else { areaBtn.textContent="Filter area [f]"; areaBtn.classList.remove("active"); }
@@ -1864,6 +1909,7 @@ function updateGallery(keepLimit){
   body.innerHTML=html;
   body.querySelectorAll(".card").forEach(el=>{ const p=photoById(Number(el.dataset.id));
     el.addEventListener("click",e=>{
+      if(pickMode){ e.preventDefault(); togglePick(p); el.classList.toggle("sel",selSet.has(p.id)); return; }   // picking photos for an action
       if(e.ctrlKey||e.metaKey){ e.preventDefault();   // ctrl+click toggles the photo in the selection, same as on the map
         if(!selSet.size&&lb.classList.contains("open")&&curPhoto()&&curPhoto()!==p) selSet.add(curPhoto().id);   // the open photo counts as the first selected item
         if(selSet.has(p.id)) selSet.delete(p.id); else selSet.add(p.id);
@@ -2460,7 +2506,7 @@ document.addEventListener("keydown",e=>{
   const tag=((e.target&&e.target.tagName)||"").toLowerCase();
   if(tag==="input"||tag==="select"||tag==="textarea") return;
   if(document.activeElement===tbText) return;
-  if(e.key==="Escape"){ if(drawing) stopDraw(); else if(measuring) stopMeasure(); else if(selSet.size) clearSel(); else if(selActs.size) clearActSel(); return; }
+  if(e.key==="Escape"){ if(drawing) stopDraw(); else if(measuring) stopMeasure(); else if(pickMode) endPickMode(false); else if(selSet.size) clearSel(); else if(selActs.size) clearActSel(); return; }
   if(e.key==="z"||e.key==="Z"){ toggleZoom(); }
   else if(e.key==="f"||e.key==="F"){ toggleFilter(); }
   else if(e.key==="m"||e.key==="M"){ toggleMeasure(); }
