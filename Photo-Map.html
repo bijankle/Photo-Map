@@ -418,6 +418,9 @@
   #ipaNew:focus{border-color:var(--accent);}
 
   .card.sel{outline:3px solid var(--accent);outline-offset:-3px;border-radius:8px;}
+  .gal-x{position:absolute;top:5px;right:5px;z-index:3;width:26px;height:26px;border:1px solid var(--line2);border-radius:50%;
+    background:#ffffffee;color:var(--muted);font-size:17px;line-height:1;cursor:pointer;padding:0;}
+  .gal-x:hover{background:var(--bad);border-color:var(--bad);color:#fff;}
 
   /* photo-picking banner (Add photos to an action) */
   #pickbar{position:absolute;top:64px;left:50%;transform:translateX(-50%);z-index:1300;display:none;align-items:center;gap:10px;
@@ -1188,6 +1191,15 @@ function buildAssign(actIds,phList){
 function assignActs(actIds,phList){
   const items=buildAssign(actIds,phList);
   if(items.length) pushTagAction(items);
+  afterFolderChange();
+}
+function unassignFromSelActs(p){   // the X on an action-filtered gallery card: drop this photo from the selected action(s)
+  if(!selActs.size||!Array.isArray(p.acts)) return;
+  const before=snapshotTags(p);
+  const next=p.acts.filter(id=>!selActs.has(id));
+  if(next.length===p.acts.length) return;
+  p.acts=next;
+  pushTagAction([{id:p.id,before,after:snapshotTags(p)}]);
   afterFolderChange();
 }
 function unassignAct(a,p){
@@ -1962,6 +1974,8 @@ function updateGallery(keepLimit){
         setAreaBtn(); buildCluster(); renderClusters(); return; }
       if(selSet.size){ selSet=new Set([p.id]); body.querySelectorAll(".card").forEach(c=>c.classList.toggle("sel",Number(c.dataset.id)===p.id)); setAreaBtn(); buildCluster(); renderClusters(); }   // plain click collapses the selection to just this photo
       openViewer(p); });
+    const gx=el.querySelector(".gal-x");
+    if(gx) gx.addEventListener("click",e=>{ e.stopPropagation(); e.preventDefault(); unassignFromSelActs(p); });
     el.addEventListener("mouseenter",()=>highlightDot(p)); el.addEventListener("mouseleave",highlightCurrent); });
   const more=body.querySelector("#galMore"); if(more) more.addEventListener("click",()=>{ galleryLimit+=GALLERY_CHUNK*2; updateGallery(true); });
   const anx=body.querySelector("#actNoteX"); if(anx) anx.addEventListener("click",clearActSel);
@@ -1981,8 +1995,9 @@ function cardHtml(p,isNoGeo){
   const src=p.thumb;
   const img=src?'<img class="thumb" src="'+src+'" loading="lazy" decoding="async" alt="">':'<div class="ph">no image</div>';
   const paths=pathsOf(p); const title=esc(paths.length?paths.join("\n"):p.name);   // all folders this photo was found in
-  const dupe=paths.length>1?'<div class="hq" style="left:auto;right:5px;background:#4752C4;color:#fff;border-color:#4752C4" title="In '+paths.length+' folders">\u00D7'+paths.length+'</div>':"";
-  return '<div class="card'+(selSet.has(p.id)?' sel':'')+'" data-id="'+p.id+'" title="'+title+'">'+flag+dupe+img+'<div class="meta"><div class="fn">'+esc(p.name)+'</div><div class="sub">'+esc(sub)+'</div></div></div>';
+  const dupe=(paths.length>1&&!actionFilter)?'<div class="hq" style="left:auto;right:5px;background:#4752C4;color:#fff;border-color:#4752C4" title="In '+paths.length+' folders">\u00D7'+paths.length+'</div>':"";
+  const ax=actionFilter?'<button class="gal-x" type="button" title="Remove this photo from the selected action'+(selActs.size>1?'s':'')+'">&times;</button>':"";
+  return '<div class="card'+(selSet.has(p.id)?' sel':'')+'" data-id="'+p.id+'" title="'+title+'">'+flag+dupe+ax+img+'<div class="meta"><div class="fn">'+esc(p.name)+'</div><div class="sub">'+esc(sub)+'</div></div></div>';
 }
 function sortPhotos(arr,center){ const a=arr.slice();
   if(currentSort==="name") a.sort((x,y)=>x.name.localeCompare(y.name));
