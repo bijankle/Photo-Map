@@ -1267,6 +1267,13 @@ function stepsHtml(a){
 function wireSteps(el,a){
   const box=el.querySelector(".act-steps"); if(!box) return;
   ["click","dblclick","mousedown"].forEach(ev=>box.addEventListener(ev,e=>{ e.stopPropagation(); clearTimeout(el._ct); }));
+  /* a single click on any INACTIVE part of the steps area (text, number, whitespace) selects the
+     parent action, just like the row body — double-click still edits, ticks/× keep their jobs */
+  if(!el.classList.contains("ipa-row")) box.addEventListener("click",e=>{
+    if(e.target.closest(".st-chk,.st-x,.st-new,.act-edit,input,textarea")) return;
+    clickAction(a,e,true);
+    if(!e.ctrlKey&&!e.metaKey&&!e.shiftKey) el._ct=setTimeout(()=>actNavigate(a),260);
+  });
   box.querySelectorAll(".st-row").forEach(row=>{
     const i=Number(row.dataset.si), s=(a.steps||[])[i]; if(!s) return;
     /* priority drag & drop: the number badge is the handle, within this action's list */
