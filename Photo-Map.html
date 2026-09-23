@@ -219,9 +219,11 @@
   .empty-msg b{color:var(--text);}
   .hint{font-family:var(--mono);font-size:10px;color:var(--muted);}
 
-  .leftstack,.toolstack{display:none;}   /* hidden until mounted onto the map as Leaflet controls */
-  .leftstack.onmap{display:flex;flex-direction:column;gap:5px;align-items:flex-start;}
-  .toolstack.onmap{display:flex;flex-direction:column;gap:5px;align-items:stretch;}
+  .leftstack,.toolstack{display:none;}   /* hidden until mounted into the map container */
+  .leftstack.onmap{display:flex;flex-direction:column;gap:5px;align-items:flex-start;
+    position:absolute !important;top:10px !important;left:10px !important;right:auto !important;bottom:auto !important;z-index:1200;}
+  .toolstack.onmap{display:flex;flex-direction:column;gap:5px;align-items:stretch;
+    position:absolute !important;right:10px !important;bottom:76px !important;left:auto !important;top:auto !important;z-index:1200;}
   .areabtn{font-family:var(--mono);font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:var(--text);background:#ffffffe8;backdrop-filter:blur(8px);border:1px solid var(--line2);border-radius:8px;padding:6px 9px;cursor:pointer;box-shadow:0 4px 14px #1e1f221f;white-space:nowrap;}
   .areabtn:hover{border-color:var(--accent);color:var(--accent);}
   .areabtn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
@@ -901,11 +903,13 @@ L.control.layers({ "Google":google, "Esri":esri, "None":none },null,{position:"t
    the map's real edges and adapt as the side panels resize. */
 (function(){
   const cont=map.getContainer();
-  const mount=(id,css)=>{ const el=document.getElementById(id); if(!el) return;
-    el.classList.add("onmap"); Object.assign(el.style,css); cont.appendChild(el);
+  const mount=id=>{ const el=document.getElementById(id); if(!el) return;
+    el.classList.add("onmap"); cont.appendChild(el);   // position comes from the .onmap CSS (!important)
     L.DomEvent.disableClickPropagation(el); L.DomEvent.disableScrollPropagation(el); };
-  mount("leftstack",{position:"absolute",top:"10px",left:"10px",zIndex:1200});
-  mount("toolstack",{position:"absolute",right:"10px",bottom:"76px",zIndex:1200});
+  mount("leftstack");
+  mount("toolstack");
+  setTimeout(()=>{ for(const id of ["leftstack","toolstack"]){ const el=document.getElementById(id);
+    if(el&&el.parentElement!==cont) mount(id); } },1200);   // safety: whatever else happens, they end up inside the map
 })();
 const markerLayer=L.layerGroup().addTo(map);
 const highlightLayer=L.layerGroup().addTo(map);
