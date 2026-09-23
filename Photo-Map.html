@@ -493,6 +493,49 @@
   #ctxmenu .ci[disabled]{color:var(--faint);cursor:default;}
   #ctxmenu .ci[disabled]:hover{background:none;color:var(--faint);}
 
+  /* ---- mobile field UI (phone-sized touch screens get this instead of the desktop app) ---- */
+  #mroot{display:none;position:fixed;inset:0;z-index:9000;background:#F2F3F5;overflow:hidden;font-family:var(--font);}
+  body.mobile #mroot{display:block;}
+  body.mobile>*:not(#mroot){display:none!important;}
+  .m-scr{position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden;}
+  .m-head{background:var(--panel);border-bottom:1px solid var(--line);padding:14px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;}
+  .m-brand{font-size:18px;font-weight:700;color:var(--ink);}
+  .m-brand span{color:var(--accent);}
+  .m-sub{font-family:var(--mono);font-size:10px;color:var(--dim);}
+  .m-chip{font-family:var(--mono);font-size:10px;border-radius:999px;padding:4px 10px;border:1px solid var(--line2);color:var(--muted);background:var(--panel);}
+  .m-chip.ok{color:var(--good);border-color:var(--good);background:#EAF7EE;}
+  .m-back{width:44px;height:44px;margin-left:-10px;border:none;background:none;font-size:26px;color:var(--muted);flex-shrink:0;}
+  .m-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 14px;display:flex;flex-direction:column;gap:10px;}
+  .m-card{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:14px;padding:13px;display:flex;gap:12px;align-items:flex-start;}
+  .m-card.done{border-left-color:var(--good);opacity:.65;}
+  .m-chk{width:26px;height:26px;flex-shrink:0;margin-top:2px;box-sizing:border-box;border:2px solid var(--line2);border-radius:8px;background:var(--panel);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;}
+  .m-chk.on{background:var(--good);border-color:var(--good);}
+  .m-cbody{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;}
+  .m-ct{font-size:15px;font-weight:600;color:var(--ink);line-height:1.35;}
+  .m-cd{font-size:12px;color:var(--muted);line-height:1.4;}
+  .m-cm{font-family:var(--mono);font-size:10.5px;color:var(--dim);display:flex;gap:12px;}
+  .m-cm b{color:var(--accent);font-weight:600;}
+  .m-foot{background:var(--panel);border-top:1px solid var(--line);padding:12px 14px 18px;display:flex;flex-direction:column;gap:7px;flex-shrink:0;}
+  .m-btn{box-sizing:border-box;width:100%;min-height:50px;border:none;border-radius:14px;background:var(--accent);color:#fff;font:inherit;font-size:15px;font-weight:700;}
+  .m-btn.green{background:var(--good);}
+  .m-btn.ghost{background:var(--panel);border:1px solid var(--line2);color:var(--text);font-weight:600;}
+  .m-btn[disabled]{background:var(--line2);}
+  .m-note{text-align:center;font-family:var(--mono);font-size:10px;color:var(--faint);}
+  .m-map{height:230px;border-radius:14px;border:1px solid var(--line);overflow:hidden;flex-shrink:0;background:#ECEEF1;}
+  .m-sec{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;}
+  .m-lab{font-family:var(--mono);font-size:10px;letter-spacing:.6px;color:var(--dim);}
+  .m-strow{display:flex;align-items:center;gap:12px;}
+  .m-strow .t{font-size:14px;color:var(--ink);}
+  .m-strow.done .t{text-decoration:line-through;color:var(--dim);}
+  .m-ph{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;}
+  .m-ph img{height:104px;border-radius:12px;border:1px solid var(--line);flex-shrink:0;}
+  .m-ta{box-sizing:border-box;width:100%;min-height:64px;font:inherit;font-size:14px;color:var(--ink);background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:10px 12px;outline:none;resize:vertical;}
+  .m-ta:focus{border-color:var(--accent);}
+  .m-in{box-sizing:border-box;width:100%;font:inherit;font-size:14px;color:var(--ink);background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:12px;outline:none;}
+  .m-photo{position:absolute;inset:0;background:#141413;display:flex;flex-direction:column;}
+  .m-photo img{flex:1;min-height:0;object-fit:contain;width:100%;}
+  .m-err{color:var(--bad);font-size:13px;line-height:1.5;}
+
   /* new-version pill (only appears when the app is served from the web, e.g. GitHub Pages) */
   #updpill{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:6000;display:flex;align-items:center;gap:10px;
     background:var(--panel);border:1px solid var(--accent);border-radius:999px;padding:8px 10px 8px 16px;
@@ -713,6 +756,8 @@
 <div class="hoverview" id="hoverview"><img id="hvImg" src="" alt="" /><div class="cap" id="hvCap"></div></div>
 
 <div class="dropzone" id="dropzone">Drop photos or a folder to add</div>
+
+<div id="mroot"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/supercluster@8.0.1/dist/supercluster.min.js"></script>
@@ -3064,7 +3109,173 @@ function parseShareHash(){
 }
 
 /* startup */
+/* ================= MOBILE FIELD UI =================
+   Phone-sized touch screens get an actions-first UI at the SAME link. It reads the latest
+   pack.json from the private data repo (token pasted once) and pushes ticks/notes back. */
+function isMobile(){ try{ return matchMedia("(pointer:coarse)").matches && Math.min(screen.width,screen.height)<600 && !localStorage.getItem("pmForceDesktop"); }catch(e){ return false; } }
+let mPack=null, mGeo=null, mMiniMap=null;
+function mPend(){ try{ return JSON.parse(localStorage.getItem("pmField")||"{}")||{}; }catch(e){ return {}; } }
+function mPendSave(o){ try{ localStorage.setItem("pmField",JSON.stringify(o)); }catch(e){} }
+function mCh(id){ const p=mPend(); return (p.changes||{})[id]||{}; }
+function mSetCh(id,patch){ const p=mPend(); p.changes=p.changes||{}; p.changes[id]=Object.assign({},p.changes[id]||{},patch); mPendSave(p); }
+function mChCount(){ const p=mPend(); return Object.keys(p.changes||{}).length; }
+async function ghGetRaw(cfg,path){
+  const r=await fetch("https://api.github.com/repos/"+cfg.repo+"/contents/"+path+"?t="+Date.now(),{headers:Object.assign(ghHeaders(cfg.token),{Accept:"application/vnd.github.raw+json"})});
+  if(r.status===404) return null;
+  if(!r.ok) throw new Error("GitHub says "+r.status+(r.status===401?" — token rejected":""));
+  return await r.text();
+}
+function mDist(a){   // metres from the phone to the nearest of the action's photos
+  if(!mGeo) return null; let best=null;
+  for(const ph of (a.photos||[])){ if(ph.lat==null) continue;
+    const d=map?map.distance([mGeo.lat,mGeo.lng],[ph.lat,ph.lng]):null;
+    if(d!=null&&(best==null||d<best)) best=d; }
+  return best;
+}
+function mFmtD(m){ return m==null?"":(m>=1000?(m/1000).toFixed(1)+" km":Math.round(m)+" m"); }
+function mDone(a){ const c=mCh(a.id); return c.done===true; }
+function mStepDone(a,i){ const c=mCh(a.id); return (c.steps&&(String(i) in c.steps))?!!c.steps[String(i)]:!!(a.steps[i]&&a.steps[i].d); }
+function mScr(html){ if(mMiniMap){ try{ mMiniMap.remove(); }catch(e){} mMiniMap=null; } document.getElementById("mroot").innerHTML='<div class="m-scr">'+html+'</div>'; }
+function mShowSetup(msg){
+  const g=ghCfg();
+  mScr('<div class="m-head"><div class="m-brand">Photo<span>Map</span> Field</div></div>'
+    +'<div class="m-body"><div class="m-sec"><div class="m-lab">DATA REPOSITORY</div><input class="m-in" id="mRepo" value="'+esc(g.repo)+'" autocomplete="off" />'
+    +'<div class="m-lab">ACCESS TOKEN</div><input class="m-in" id="mTok" type="password" placeholder="github_pat_…" value="'+esc(g.token)+'" />'
+    +(msg?'<div class="m-err">'+esc(msg)+'</div>':'')
+    +'</div></div>'
+    +'<div class="m-foot"><button class="m-btn" id="mGo">Load actions</button><div class="m-note">One-time setup — remembered on this phone</div></div>');
+  document.getElementById("mGo").addEventListener("click",()=>{
+    try{ localStorage.setItem("pmGhRepo",document.getElementById("mRepo").value.trim()); localStorage.setItem("pmGhToken",document.getElementById("mTok").value.trim()); }catch(e){}
+    mLoadPack();
+  });
+}
+async function mLoadPack(){
+  const cfg=ghCfg();
+  if(!cfg.token){ mShowSetup(); return; }
+  mScr('<div class="m-head"><div class="m-brand">Photo<span>Map</span> Field</div></div><div class="m-body"><div class="m-note" style="padding-top:40px">Loading the latest pack…</div></div>');
+  try{
+    const text=await ghGetRaw(cfg,"pack.json");
+    if(!text){ mShowSetup("No pack.json in "+cfg.repo+" yet — click Export to mobile on the desktop first."); return; }
+    mPack=JSON.parse(text);
+    const p=mPend();
+    if(p.sentAt&&mPack.exportedAt&&Date.parse(mPack.exportedAt)>p.sentAt){ mPendSave({}); }   // desktop has re-exported since we sent: its truth wins
+    navigator.geolocation&&navigator.geolocation.getCurrentPosition(pos=>{ mGeo={lat:pos.coords.latitude,lng:pos.coords.longitude}; mShowList(); },()=>{},{enableHighAccuracy:true,timeout:8000});
+    mShowList();
+  }catch(err){ mShowSetup("Could not load: "+(err&&err.message||err)); }
+}
+function mShowList(){
+  if(!mPack){ mLoadPack(); return; }
+  const acts=(mPack.actions||[]).slice().sort((a,b)=>{ const da=mDist(a),db=mDist(b); if(da==null&&db==null)return 0; if(da==null)return 1; if(db==null)return -1; return da-db; });
+  const n=mChCount();
+  mScr('<div class="m-head"><div style="flex:1;display:flex;flex-direction:column;gap:2px;"><div class="m-brand">Photo<span>Map</span> Field</div>'
+    +'<div class="m-sub">'+esc(mPack.project||"")+' · exported '+(mPack.exportedAt?new Date(mPack.exportedAt).toLocaleString(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"")+'</div></div>'
+    +'<button class="m-chip" id="mRefresh" type="button">REFRESH</button></div>'
+    +'<div class="m-body" id="mList">'
+    +(acts.length?acts.map((a,i)=>{
+      const done=mDone(a), sd=(a.steps||[]).filter((s,j)=>mStepDone(a,j)).length, st=(a.steps||[]).length, d=mDist(a);
+      return '<div class="m-card'+(done?' done':'')+'" data-i="'+i+'"><div class="m-chk'+(done?' on':'')+'">'+(done?'✓':'')+'</div>'
+        +'<div class="m-cbody"><div class="m-ct"'+(done?' style="text-decoration:line-through;color:var(--muted)"':'')+'>'+esc(a.text)+'</div>'
+        +(a.desc?'<div class="m-cd">'+esc(a.desc.length>90?a.desc.slice(0,90)+"…":a.desc)+'</div>':'')
+        +'<div class="m-cm"><b>'+(a.photos||[]).length+' photo'+((a.photos||[]).length===1?'':'s')+'</b>'+(st?'<span>steps '+sd+'/'+st+'</span>':'')+(d!=null?'<span>'+mFmtD(d)+' away</span>':'')+'</div></div>'
+        +'<div style="align-self:center;color:var(--line2);font-size:22px;">›</div></div>';
+    }).join(''):'<div class="m-note" style="padding-top:40px">No open actions in the pack.</div>')
+    +'</div>'
+    +'<div class="m-foot"><button class="m-btn" id="mSend"'+(n?'':' disabled')+'>Send changes back ('+n+')</button>'
+    +'<div class="m-note" id="mSendNote">'+(n?'ticks + notes waiting to sync':'no unsent changes')+'</div></div>');
+  document.getElementById("mRefresh").addEventListener("click",mLoadPack);
+  document.getElementById("mSend").addEventListener("click",mSendChanges);
+  document.querySelectorAll("#mList .m-card").forEach(el=>el.addEventListener("click",()=>{ const a=acts[Number(el.dataset.i)]; mShowDetail((mPack.actions||[]).indexOf(a)); }));
+}
+async function mSendChanges(){
+  const cfg=ghCfg(), note=document.getElementById("mSendNote"), btn=document.getElementById("mSend");
+  const p=mPend(); if(!p.changes||!Object.keys(p.changes).length) return;
+  btn.disabled=true; note.textContent="Sending…";
+  try{
+    await ghPutFile(cfg,"changes.json",JSON.stringify({v:1,updatedAt:new Date().toISOString(),changes:p.changes}),"Field changes from phone");
+    p.sentAt=Date.now(); mPendSave(p);
+    note.textContent="✓ Sent — merge on desktop when you're back"; btn.disabled=false;
+  }catch(err){ note.textContent="Failed: "+(err&&err.message||err); btn.disabled=false; }
+}
+function mShowDetail(ai){
+  const a=(mPack.actions||[])[ai]; if(!a){ mShowList(); return; }
+  const done=mDone(a), c=mCh(a.id);
+  mScr('<div class="m-head"><button class="m-back" id="mBack" aria-label="Back">‹</button>'
+    +'<div style="flex:1;display:flex;flex-direction:column;gap:2px;"><div style="font-size:16px;font-weight:700;color:var(--ink);line-height:1.3;">'+esc(a.text)+'</div>'
+    +'<div class="m-sub">'+(done?'DONE (unsent)':'OPEN')+' · '+(a.photos||[]).length+' PHOTOS</div></div></div>'
+    +'<div class="m-body">'
+    +((a.photos||[]).some(p=>p.lat!=null)?'<div class="m-map" id="mMap"></div>':'')
+    +(a.desc?'<div class="m-sec"><div class="m-lab">DESCRIPTION</div><div style="font-size:14px;color:var(--ink);line-height:1.5;white-space:pre-wrap;">'+esc(a.desc)+'</div></div>':'')
+    +((a.steps||[]).length?'<div class="m-sec"><div class="m-lab">STEPS</div>'+(a.steps||[]).map((s,i)=>{
+        const sd=mStepDone(a,i);
+        return '<div class="m-strow'+(sd?' done':'')+'" data-si="'+i+'"><div class="m-chk'+(sd?' on':'')+'">'+(sd?'✓':'')+'</div><div class="t">'+esc(s.t)+'</div></div>';
+      }).join('')+'</div>':'')
+    +((a.photos||[]).length?'<div class="m-sec" style="padding:12px 10px;"><div class="m-lab" style="padding:0 4px;">PHOTOS — TAP TO VIEW</div><div class="m-ph">'
+      +(a.photos||[]).map((p,i)=>p.img?'<img src="'+p.img+'" data-pi="'+i+'" alt="'+esc(p.name||"photo")+'" />':'').join('')+'</div></div>':'')
+    +'<div class="m-sec"><div class="m-lab">FIELD NOTE</div><textarea class="m-ta" id="mNote" placeholder="Add a note for the desktop…">'+esc(c.note||"")+'</textarea></div>'
+    +'</div>'
+    +'<div class="m-foot"><button class="m-btn '+(done?'ghost':'green')+'" id="mDoneBtn">'+(done?'Reopen action':'Mark action complete')+'</button></div>');
+  document.getElementById("mBack").addEventListener("click",mShowList);
+  document.getElementById("mDoneBtn").addEventListener("click",()=>{ mSetCh(a.id,{done:!done,doneAt:Date.now()}); mShowDetail(ai); });
+  document.getElementById("mNote").addEventListener("change",e=>{ const v=e.target.value.trim(); mSetCh(a.id,{note:v||undefined}); });
+  document.querySelectorAll(".m-strow").forEach(el=>el.addEventListener("click",()=>{ const i=Number(el.dataset.si); mSetCh(a.id,{steps:Object.assign({},mCh(a.id).steps||{},{[String(i)]:!mStepDone(a,i)})}); mShowDetail(ai); }));
+  document.querySelectorAll(".m-ph img").forEach(el=>el.addEventListener("click",()=>mShowPhoto(ai,Number(el.dataset.pi))));
+  const mapEl=document.getElementById("mMap");
+  if(mapEl){
+    const pts=(a.photos||[]).filter(p=>p.lat!=null);
+    mMiniMap=L.map(mapEl,{zoomControl:false,attributionControl:false});
+    L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",{subdomains:["mt0","mt1","mt2","mt3"],maxZoom:22,maxNativeZoom:21}).addTo(mMiniMap);
+    for(const p of pts) L.circleMarker([p.lat,p.lng],{radius:9,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.85,className:"hl-dot",interactive:false}).addTo(mMiniMap);
+    if(mGeo) L.circleMarker([mGeo.lat,mGeo.lng],{radius:7,color:"#ffffff",weight:3,fillColor:"#2D7DFF",fillOpacity:1,interactive:false}).addTo(mMiniMap);
+    const bb=L.latLngBounds(pts.map(p=>[p.lat,p.lng])); if(mGeo) bb.extend([mGeo.lat,mGeo.lng]);
+    mMiniMap.fitBounds(bb,{padding:[36,36],maxZoom:19});
+  }
+}
+function mShowPhoto(ai,pi){
+  const a=(mPack.actions||[])[ai]; const p=a&&(a.photos||[])[pi]; if(!p){ mShowDetail(ai); return; }
+  mScr('<div class="m-photo"><div class="m-head" style="background:#141413;border-bottom:1px solid #2a2a28;"><button class="m-back" id="mBack" style="color:#E3E5E8;" aria-label="Back">‹</button>'
+    +'<div style="flex:1;display:flex;flex-direction:column;gap:2px;"><div style="font-size:14px;font-weight:600;color:#fff;">'+esc(p.name||"photo")+'</div>'
+    +'<div class="m-sub" style="color:#9A9DA5;">PHOTO '+(pi+1)+' OF '+(a.photos||[]).length+' · PREVIEW QUALITY</div></div></div>'
+    +'<img src="'+(p.img||"")+'" alt="'+esc(p.name||"photo")+'" />'
+    +'<div style="display:flex;gap:8px;padding:10px 12px 16px;background:#141413;">'
+    +(pi>0?'<button class="m-btn ghost" id="mPrev" style="background:#232322;border-color:#4a4a48;color:#E3E5E8;">‹ Prev</button>':'')
+    +(pi<(a.photos||[]).length-1?'<button class="m-btn ghost" id="mNext" style="background:#232322;border-color:#4a4a48;color:#E3E5E8;">Next ›</button>':'')
+    +'</div></div>');
+  document.getElementById("mBack").addEventListener("click",()=>mShowDetail(ai));
+  const pv=document.getElementById("mPrev"); if(pv) pv.addEventListener("click",()=>mShowPhoto(ai,pi-1));
+  const nx=document.getElementById("mNext"); if(nx) nx.addEventListener("click",()=>mShowPhoto(ai,pi+1));
+}
+function mobileBoot(){ document.body.classList.add("mobile"); mLoadPack(); }
+
+/* Desktop side of the loop: offer to merge field changes pushed by the phone. */
+async function checkFieldChanges(){
+  const cfg=ghCfg(); if(!cfg.token) return;
+  try{
+    const text=await ghGetRaw(cfg,"changes.json"); if(!text) return;
+    const data=JSON.parse(text); const ch=data&&data.changes||{};
+    const ids=Object.keys(ch); if(!ids.length) return;
+    let merged=""; try{ merged=localStorage.getItem("pmMergedChanges")||""; }catch(e){}
+    if(data.updatedAt&&data.updatedAt===merged) return;   // already merged this batch
+    showBanner("Field changes from the phone — <b>"+ids.length+" action"+(ids.length===1?"":"s")+"</b>. Click to merge them into this project.",async()=>{
+      hideBanner();
+      for(const id of ids){
+        const a=actById(+id); if(!a) continue;
+        const before=actState(a); const c=ch[id];
+        if(c.steps) for(const k of Object.keys(c.steps)){ const i=+k; if(a.steps&&a.steps[i]) a.steps[i].d=!!c.steps[k]; }
+        if(c.done===true&&!a.done){ a.done=true; a.doneAt=c.doneAt||Date.now(); }
+        if(c.done===false&&a.done){ a.done=false; a.doneAt=null; }
+        if(c.note) a.desc=(a.desc?a.desc+"\n":"")+"[Field "+new Date(data.updatedAt||Date.now()).toLocaleDateString(undefined,{day:"numeric",month:"short"})+"] "+c.note;
+        recordActEdit(a,before);
+      }
+      afterFolderChange();
+      try{ localStorage.setItem("pmMergedChanges",data.updatedAt||String(Date.now())); }catch(e){}
+      ghPutFile(cfg,"changes.json",JSON.stringify({v:1,changes:{},clearedAt:new Date().toISOString()}),"Field changes merged on desktop").catch(()=>{});
+      loadNote("Merged "+ids.length+" field change"+(ids.length===1?"":"s")+" ✓"); setTimeout(()=>loadNote(""),3000);
+    });
+  }catch(e){ console.warn("field-changes check failed",e); }
+}
+
 (async function init(){
+  if(isMobile()){ mobileBoot(); return; }   // phones get the field UI — the desktop app never boots
   // Build stamp: the file's publish/modified time — the quickest way to spot a stale copy.
   try{ const d=new Date(document.lastModified); if(!isNaN(d)) document.getElementById("buildStamp").textContent="build "+d.toLocaleDateString(undefined,{day:"numeric",month:"short"})+" "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}); }catch(e){}
   // Ask the browser to protect this site's stored data (remembered .json/folder, image cache)
@@ -3098,6 +3309,7 @@ function parseShareHash(){
   if(jsonHandle){ if(!loadedJsonName) loadedJsonName=jsonHandle.name||null; armFileSync(); }   // on first interaction, pull the latest from the file and enable auto-save
   if(dirHandle){ try{ if((await dirHandle.queryPermission({mode:"read"}))!=="granted") armFolderPermission(); }catch(e){} }
   renderProjHead();
+  setTimeout(checkFieldChanges,1500);   // offer to merge any field changes the phone has pushed
 })();
 
 /* ---- app self-update check (active only when served from the web, e.g. GitHub Pages) ----
