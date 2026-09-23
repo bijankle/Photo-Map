@@ -341,11 +341,10 @@
   .asec{display:flex;flex-direction:column;gap:4px;margin-top:7px;}
   .asec .al{font-family:var(--mono);font-size:9px;letter-spacing:.8px;color:var(--faint);}
   .asec .d{margin:0;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:4px 8px;font-size:12px;cursor:text;white-space:pre-wrap;}
-  /* current-location marker: blue core, white ring, sonar ripple */
-  .geo-dot{position:relative;width:18px;height:18px;}
-  .geo-dot .c{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:#2D7DFF;border:3px solid #fff;box-sizing:content-box;box-shadow:0 1px 6px rgba(0,0,0,.5);}
-  .geo-dot .r{position:absolute;left:50%;top:50%;width:14px;height:14px;border-radius:50%;background:rgba(45,125,255,.35);transform:translate(-50%,-50%);animation:geoRipple 2.2s ease-out infinite;}
-  @keyframes geoRipple{0%{transform:translate(-50%,-50%) scale(1);opacity:.7;}70%{transform:translate(-50%,-50%) scale(3.6);opacity:0;}100%{transform:translate(-50%,-50%) scale(3.6);opacity:0;}}
+  /* current-location marker: pin with person on a water ellipse; the puddle breathes gently */
+  .geo-pin{filter:drop-shadow(0 2px 4px rgba(0,0,0,.35));}
+  .geo-pin .pud{transform-box:fill-box;transform-origin:center;animation:geoPud 2.4s ease-in-out infinite;}
+  @keyframes geoPud{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(1.18);opacity:.7;}}
   .st-num{flex-shrink:0;min-width:16px;text-align:center;font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--accent2);cursor:grab;}
   .st-num:active{cursor:grabbing;}
   .st-row.drop-b{box-shadow:0 -2px 0 var(--accent);}
@@ -1377,6 +1376,7 @@ function actNavigate(a){
       for(const p of actPhotos(x)){ if(p.lat!=null&&!seen.has(p.id)){ seen.add(p.id); ctx.push(p); } } }
     const all=ctx.length?ctx:geo;
     const bb=L.latLngBounds(all.map(p=>[p.lat,p.lng]));
+    if(geoMarker) bb.extend(geoMarker.getLatLng());   // keep yourself in the picture
     /* already showing this view? flying to it anyway makes the map do a zoom-out-in "shake" */
     let skip=false;
     try{ const tgt=map._getBoundsCenterZoom(bb,{padding:[70,70],maxZoom:19});
@@ -1395,7 +1395,15 @@ function startGeoWatch(){
   geoWatchId=navigator.geolocation.watchPosition(pos=>{
     try{ localStorage.setItem("pmGeoOn","1"); }catch(e){}
     const ll=[pos.coords.latitude,pos.coords.longitude];
-    if(!geoMarker) geoMarker=L.marker(ll,{icon:L.divIcon({className:"",html:'<div class="geo-dot"><div class="r"></div><div class="c"></div></div>',iconSize:[18,18],iconAnchor:[9,9]}),interactive:false,zIndexOffset:900}).addTo(map);
+    if(!geoMarker) geoMarker=L.marker(ll,{icon:L.divIcon({className:"",html:'<div class="geo-pin">'
+      +'<svg viewBox="0 0 64 78" width="42" height="51">'
+      +'<ellipse class="pud" cx="32" cy="68" rx="21" ry="7.5" fill="#C9E8F7" stroke="#332A26" stroke-width="4"/>'
+      +'<path d="M32 62C19 45 12 38.5 12 26a20 20 0 1 1 40 0c0 12.5-7 19-20 36z" fill="#F47B5D" stroke="#332A26" stroke-width="5" stroke-linejoin="round"/>'
+      +'<circle cx="32" cy="26" r="13.5" fill="#E8472B" opacity=".55"/>'
+      +'<circle cx="32" cy="26" r="12" fill="#fff" stroke="#332A26" stroke-width="4"/>'
+      +'<circle cx="32" cy="21.5" r="4.4" fill="#F4795B" stroke="#332A26" stroke-width="3"/>'
+      +'<path d="M24.8 33.5a7.2 7.2 0 0 1 14.4 0z" fill="#F6C453" stroke="#332A26" stroke-width="3" stroke-linejoin="round"/>'
+      +'</svg></div>',iconSize:[42,51],iconAnchor:[21,44]}),interactive:false,zIndexOffset:900}).addTo(map);
     else geoMarker.setLatLng(ll);
   },err=>{ if(err&&err.code===1){ try{ localStorage.setItem("pmGeoOn","0"); }catch(e){} } geoWatchId=null; },
   {enableHighAccuracy:true,maximumAge:15000,timeout:20000});
