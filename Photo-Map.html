@@ -1413,6 +1413,7 @@ function showAreaPreviews(a){
     const x=Math.max(6,Math.min(Math.round(g.cx-w/2),cont.clientWidth-w-6));
     const y=Math.max(6,Math.min(Math.round(topY-h-16),cont.clientHeight-h-6));
     el.style.left=x+"px"; el.style.top=y+"px";
+    el.querySelector(".ap-tail").style.left=Math.max(14,Math.min(w-14,Math.round(g.cx-x)))+"px";   // tail points at the dot even if the card was clamped at an edge
     const mm=L.map(el.querySelector(".ap-map"),{zoomControl:false,attributionControl:false,dragging:false,touchZoom:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false});
     L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",{subdomains:["mt0","mt1","mt2","mt3"],maxZoom:22,maxNativeZoom:21}).addTo(mm);
     for(const p of g.ps) L.circleMarker([p.lat,p.lng],{radius:8,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.95,className:"hl-dot",interactive:false}).addTo(mm);
@@ -1438,13 +1439,15 @@ function actNavigate(a){
     const all=ctx.length?ctx:geo;
     const bb=L.latLngBounds(all.map(p=>[p.lat,p.lng]));
     if(geoMarker) bb.extend(geoMarker.getLatLng());   // keep yourself in the picture
+    /* asymmetric padding: enough headroom above the dots for the area previews to sit centred */
+    const fitOpts={paddingTopLeft:[150,310],paddingBottomRight:[150,80],maxZoom:19};
     /* already showing this view? flying to it anyway makes the map do a zoom-out-in "shake" */
     let skip=false;
-    try{ const tgt=map._getBoundsCenterZoom(bb,{padding:[70,70],maxZoom:19});
+    try{ const tgt=map._getBoundsCenterZoom(bb,fitOpts);
       skip=Math.abs(map.getZoom()-tgt.zoom)<0.5 && map.latLngToContainerPoint(tgt.center).distanceTo(map.latLngToContainerPoint(map.getCenter()))<40;
     }catch(e){}
     clearAreaPreviews();
-    if(!skip){ map.once("moveend",()=>setTimeout(()=>showAreaPreviews(a),40)); map.flyToBounds(bb,{padding:[70,70],maxZoom:19,duration:.45}); }
+    if(!skip){ map.once("moveend",()=>setTimeout(()=>showAreaPreviews(a),40)); map.flyToBounds(bb,Object.assign({duration:.45},fitOpts)); }
     else setTimeout(()=>showAreaPreviews(a),40);
   }
   if(ps.length) setTab("gallery");   // always the gallery, even for one photo — its thumbnail carries the unassign X
