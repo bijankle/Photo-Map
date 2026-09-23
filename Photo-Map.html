@@ -367,6 +367,9 @@
   .st-new{box-sizing:border-box;font:inherit;font-size:12px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:4px 8px;outline:none;margin-top:2px;}
   .st-new:focus{border-color:var(--accent);}
   .act-row .act-del{align-self:flex-start;}
+  .act-body .bh{display:flex;align-items:flex-start;gap:4px;}   /* chevron and × hug the title; the cover starts right after */
+  .act-body .bh .t{flex:1;min-width:0;}
+  .act-body .bh .act-edit{flex:1;min-width:0;}
   .ipa-body{flex:1;min-width:0;display:flex;flex-direction:column;}
   .ipa-row{align-items:flex-start;}
   .ipa-row .act-chk,.ipa-row .ipa-x,.ipa-row .act-exp{margin-top:1px;}
@@ -1552,13 +1555,13 @@ function renderActions(){
     const exp=!collActs.has(a.id);
     return '<div class="act-row'+(a.done?' done':'')+(selActs.has(a.id)?' sel':'')+(isCur?' cur':'')+'" data-aid="'+a.id+'" draggable="true">'
       +'<label class="act-chk" title="'+(a.done?'Reopen this action':'Mark completed')+'"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
-      +'<div class="act-body"><div class="t">'+esc(a.text)+'</div>'
+      +'<div class="act-body"><div class="bh"><div class="t">'+esc(a.text)+'</div>'
+        +expBtnHtml(a)+'<button class="ipa-x act-del" type="button" title="'+(isCur?'Remove this action from the open photo':'Delete this action')+'">&times;</button></div>'
       +(exp?('<div class="asec">'+stepsHtml(a)+'</div>'
         +(((a.steps&&a.steps.length)||(a.done&&a.doneAt))?('<div class="m">'
         +((a.steps&&a.steps.length)?'steps '+a.steps.filter(s=>s.d).length+'/'+a.steps.length:'')
         +(a.done&&a.doneAt?((a.steps&&a.steps.length)?' · ':'')+'done '+fmtDate(a.doneAt):'')+'</div>'):'')):'')
-      +'</div>'
-      +expBtnHtml(a)+'<button class="ipa-x act-del" type="button" title="'+(isCur?'Remove this action from the open photo':'Delete this action')+'">&times;</button>'+cov+'</div>'; }).join("");
+      +'</div>'+cov+'</div>'; }).join("");
   list.querySelectorAll(".act-row").forEach(el=>{
     const a=actById(Number(el.dataset.aid)); if(!a) return;
     el.querySelector("input").addEventListener("click",e=>{ e.stopPropagation(); setActionDone(a,e.target.checked); });
