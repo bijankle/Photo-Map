@@ -1023,7 +1023,7 @@ window.addEventListener("mouseup",()=>{
   const items=[];
   for(const p of targets){
     const before=snapshotTags(p);
-    if(p.glat==null){ p.glat=p.lat; p.glng=p.lng; }   // first correction: keep the photo's true GPS so it's never lost
+    if(p.glat==null&&!p.noGps){ p.glat=p.lat; p.glng=p.lng; }   // first correction: keep the photo's true GPS so it's never lost (pasted no-GPS photos have none to keep)
     p.lat+=dLat; p.lng+=dLng;
     items.push({id:p.id,before,after:snapshotTags(p)});
   }
@@ -1717,6 +1717,23 @@ async function ingest(items, append){
   finishLoad(!append || wasEmpty); setTimeout(()=>progress.style.width="0%",600);
   loadNote("");
 }
+/* Pasted images and loose-file drops go through the same pipeline as a folder load, plus:
+   GPS-less images land at the current map centre (flagged noGps — a placed dot, not a real fix),
+   the view flies to the new dot so it's easy to find, and the add is Ctrl+Z-able. */
+async function ingestAdhoc(items){
+  if(!items||!items.length) return;
+  const startId=nextId;
+  await ingest(items,true);
+  const added=photos.filter(p=>p.id>=startId);
+  if(!added.length){ loadNote("Already in this project — nothing new added"); setTimeout(()=>loadNote(""),2500); return; }
+  const c=map.getCenter();
+  for(const p of added){ if(p.lat==null){ p.noGps=true; p.lat=c.lat; p.lng=c.lng; } }
+  pushUndo({addPhotos:added.map(p=>p.id)});
+  buildDateFilter(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); cacheFullSession();
+  const geo=added.filter(p=>p.lat!=null);
+  if(geo.length>1) map.fitBounds(L.latLngBounds(geo.map(p=>[p.lat,p.lng])),{padding:[60,60],maxZoom:18});
+  else if(geo.length===1) map.flyTo([geo[0].lat,geo[0].lng],Math.max(map.getZoom(),17));
+}
 // Generate the cached renditions for a photo we already track (metadata-only .json opened on a
 // machine with no image cache): heals grey images on the next Open Folder / Refresh.
 async function healRenditions(owner,file){
@@ -1810,10 +1827,30 @@ window.addEventListener("drop",async e=>{
     const out=[];
     for(const h of fileHandles) out.push({name:h.name,path:h.name,getFile:()=>h.getFile()});
     for(const d of dirs){ for await (const f of walkDir(d,d.name)) if(IMG_RE.test(f.name)) out.push({name:f.name,path:f.path,getFile:()=>f.handle.getFile()}); }
-    ingest(out.filter(o=>IMG_RE.test(o.name)),true); return;
+    const flt=out.filter(o=>IMG_RE.test(o.name));
+    if(dirs.length) ingest(flt,true); else ingestAdhoc(flt);   // folder drops = bulk load; loose files = place, focus, undoable
+    return;
   }
-  if(entries&&entries.some(Boolean)){ ingest(await entriesToItems(entries),true); return; }
-  const fl=files.filter(f=>IMG_RE.test(f.name)).map(f=>({name:f.name,path:f.name,getFile:async()=>f})); ingest(fl,true);
+  if(entries&&entries.some(Boolean)){ const its=await entriesToItems(entries); if(entries.some(en=>en&&en.isDirectory)) ingest(its,true); else ingestAdhoc(its); return; }
+  const fl=files.filter(f=>IMG_RE.test(f.name)).map(f=>({name:f.name,path:f.name,getFile:async()=>f})); ingestAdhoc(fl);
+});
+/* Paste an image (Ctrl+V) anywhere on the desktop app: it becomes a photo like any other. */
+document.addEventListener("paste",e=>{
+  if(document.body.classList.contains("mobile")) return;
+  const t=e.target;
+  if(t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.isContentEditable)) return;
+  const pf=Array.from((e.clipboardData&&e.clipboardData.files)||[]).filter(f=>/^image\//i.test(f.type||"")||IMG_RE.test(f.name||""));
+  if(!pf.length) return;
+  e.preventDefault();
+  const d=new Date(), pad=n=>String(n).padStart(2,"0");
+  const base="Pasted "+d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+" "+pad(d.getHours())+"."+pad(d.getMinutes())+"."+pad(d.getSeconds());
+  const items=pf.map((f,i)=>{
+    const generic=!f.name||/^image\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name);   // clipboard bitmaps all arrive as "image.png" — give them a real name
+    const ext=(f.name&&f.name.lastIndexOf(".")>0)?f.name.slice(f.name.lastIndexOf(".")):(((f.type||"").includes("png"))?".png":".jpg");
+    const name=generic?base+(pf.length>1?" ("+(i+1)+")":"")+ext:f.name;
+    return {name,path:name,getFile:async()=>(name===f.name?f:new File([f],name,{type:f.type||"image/png"}))};
+  });
+  ingestAdhoc(items);
 });
 function entriesToItems(roots){
   roots=(roots||[]).filter(Boolean);
@@ -2767,6 +2804,16 @@ function applyUndoEntry(a,dir){   // dir: "before" (undo) or "after" (redo)
     else { const d=a.actCreate.data; if(!actById(d.id)){ actions.splice(Math.min(a.actCreate.index,actions.length),0,Object.assign({},d)); if(nextActId<=d.id) nextActId=d.id+1; } }
   }
   if(a.actEdit){ const x=actById(a.actEdit.id); if(x){ const src=undo?a.actEdit.before:a.actEdit.after; x.text=src.text; x.done=src.done; x.doneAt=src.doneAt; if(src.steps) x.steps=src.steps.map(s=>({t:s.t,d:!!s.d})); } }
+  if(a.addPhotos){   // pasted/dropped photos: undo removes them (kept aside), redo puts them back
+    if(undo){
+      const ids=new Set(a.addPhotos);
+      a._stash=photos.filter(p=>ids.has(p.id));
+      if(lb.classList.contains("open")&&curPhoto()&&ids.has(curPhoto().id)) closeViewer();
+      photos=photos.filter(p=>!ids.has(p.id));
+      for(const id of ids) selSet.delete(id);
+    } else { for(const p of (a._stash||[])){ if(!photoById(p.id)) photos.push(p); } }
+    rebuildSizeIndex(); buildDateFilter(); updateStats();
+  }
   if(a.order){ const want=undo?a.order.before:a.order.after; actions.sort((x,y)=>{ let ix=want.indexOf(x.id), iy=want.indexOf(y.id); if(ix<0)ix=1e9; if(iy<0)iy=1e9; return ix-iy; }); }
   if(a.marksSnap){ const p=photoById(a.marksSnap.id); if(p){ p.marks=cpMarks(undo?a.marksSnap.before:a.marksSnap.after); if(selObj&&!p.marks.includes(selObj)) selObj=null; if(curPhoto()===p&&lb.classList.contains("open")) redrawMarks(); } }
   if(a.sizeSnap){ const p=photoById(a.sizeSnap.id); if(p){ const s=undo?a.sizeSnap.before:a.sizeSnap.after; p.mkw=(s.mkw==null?null:s.mkw); p.mth=(s.mth==null?null:s.mth); if(curPhoto()===p&&lb.classList.contains("open")){ redrawMarks(); syncSizeBars(); if(selMark) positionEditor(); } } }
@@ -3056,6 +3103,7 @@ function serializeState(includeImages){
       if(p.alt!=null)o.alt=p.alt;
       if(p.mkw!=null)o.mkw=p.mkw; if(p.mth!=null)o.mth=p.mth;
       if(p.note)o.note=p.note;
+      if(p.noGps)o.noGps=1;   // pasted/dropped without GPS: the dot is a placed position, not a real fix
       if(p.marks&&p.marks.length)o.marks=p.marks;
       if(includeImages){ if(p.thumb){ o.thumb=p.thumb; if(p.tv)o.tv=p.tv; } if(p.preview)o.preview=p.preview; }   // thumb + screenshot-quality preview; full quality always comes from disk
       return o; })
@@ -3080,7 +3128,7 @@ function applyState(st){
     if(vp===null){   // legacy file (mixed paths): keep the anchor path as physical, treat extras as virtual so tags can never be wrongly pruned
       vp=phys.filter(pa=>pa!==m.path); phys=m.path?[m.path]:phys.slice(0,1);
     }
-    photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,rot:m.rot||0,lat:m.lat,lng:m.lng,glat:(m.glat!=null?m.glat:null),glng:(m.glng!=null?m.glng:null),time:m.time,dir:m.dir,alt:(m.alt!=null?m.alt:null),mkw:(m.mkw!=null?m.mkw:null),mth:(m.mth!=null?m.mth:null),acts:Array.isArray(m.acts)?m.acts.slice():[],note:(typeof m.note==="string"?m.note:""),marks:Array.isArray(m.marks)?m.marks:[]});
+    photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,rot:m.rot||0,lat:m.lat,lng:m.lng,glat:(m.glat!=null?m.glat:null),glng:(m.glng!=null?m.glng:null),time:m.time,dir:m.dir,alt:(m.alt!=null?m.alt:null),mkw:(m.mkw!=null?m.mkw:null),mth:(m.mth!=null?m.mth:null),acts:Array.isArray(m.acts)?m.acts.slice():[],note:(typeof m.note==="string"?m.note:""),noGps:!!m.noGps,marks:Array.isArray(m.marks)?m.marks:[]});
   });   // baked full-quality renditions from old files are intentionally dropped
   migrateActNotes();
   if(lastFullCache) overlayImagesFromCache(lastFullCache);   // the .json is metadata-only — fill thumbs/previews back in from the browser image cache
@@ -3110,7 +3158,8 @@ function applyState(st){
 /* Folder membership + markup are lightweight and are autosaved (lastState) on every change,
    even when the heavy image Save fails or goes stale. These helpers let us re-apply that fresh
    metadata onto a reloaded session so folder additions are never lost. Matched by a stable key. */
-function metaKey(p){ const la=(p.glat!=null?p.glat:p.lat), ln=(p.glng!=null?p.glng:p.lng);   // identity uses the ORIGINAL GPS so in-app dot corrections never orphan a photo's cache/metadata
+function metaKey(p){ if(p.noGps) return (p.name||"")+"|"+(p.size!=null?p.size:"")+"|noGps";   // pasted photos have no real GPS: identity by name+size so moving their placed dot never orphans them
+  const la=(p.glat!=null?p.glat:p.lat), ln=(p.glng!=null?p.glng:p.lng);   // identity uses the ORIGINAL GPS so in-app dot corrections never orphan a photo's cache/metadata
   return (p.name||"")+"|"+(p.size!=null?p.size:"")+"|"+(la!=null?Number(la).toFixed(5):"")+"|"+(ln!=null?Number(ln).toFixed(5):""); }
 function snapshotMeta(list){ const m=new Map(); for(const p of (list||[])){ const k=metaKey(p); if(!m.has(k)) m.set(k,{paths:Array.isArray(p.paths)?p.paths.slice():null, vpaths:Array.isArray(p.vpaths)?p.vpaths.slice():null, acts:(Array.isArray(p.acts)&&p.acts.length)?p.acts.slice():null, note:(p.note||null), alt:(p.alt!=null?p.alt:null), rot:p.rot||0, marks:Array.isArray(p.marks)&&p.marks.length?p.marks:null, lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null)}); } return m; }
 function applyMetaMap(m){ if(!m||!m.size) return; for(const p of photos){ const meta=m.get(metaKey(p)); if(!meta) continue; if(meta.paths&&meta.paths.length) p.paths=meta.paths.slice(); if(meta.vpaths&&meta.vpaths.length) p.vpaths=meta.vpaths.slice(); if(meta.acts) p.acts=meta.acts.slice(); if(meta.note) p.note=meta.note; if(meta.alt!=null&&p.alt==null) p.alt=meta.alt; if(meta.marks) p.marks=meta.marks;
