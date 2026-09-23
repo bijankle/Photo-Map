@@ -1384,19 +1384,22 @@ function actNavigate(a){
    The browser remembers the Allow per site (the app is served over https), so after the first
    grant we start silently on every load; an explicit Block is respected and never re-nagged. */
 let geoMarker=null, geoWatchId=null;
+function youAreHereIcon(w){   // the red YOU ARE HERE pin, tip anchored on the position (desktop map + phone)
+  const h=Math.round(w*80/64);
+  return L.divIcon({className:"",html:'<div class="geo-pin"><svg viewBox="0 0 64 80" width="'+w+'" height="'+h+'">'
+    +'<path d="M32 78C17 57 3 46.5 3 30a29 29 0 1 1 58 0c0 16.5-14 27-29 48z" fill="#E8281E"/>'
+    +'<circle cx="32" cy="30" r="21.5" fill="#fff"/>'
+    +'<text x="32" y="26" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="10.5" font-weight="800" fill="#111">YOU</text>'
+    +'<text x="32" y="34.5" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="8" font-style="italic" font-weight="700" fill="#111">ARE</text>'
+    +'<text x="32" y="45" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="10.5" font-weight="800" fill="#111">HERE</text>'
+    +'</svg></div>',iconSize:[w,h],iconAnchor:[Math.round(w/2),h-1]});
+}
 function startGeoWatch(){
   if(geoWatchId!=null||!navigator.geolocation) return;
   geoWatchId=navigator.geolocation.watchPosition(pos=>{
     try{ localStorage.setItem("pmGeoOn","1"); }catch(e){}
     const ll=[pos.coords.latitude,pos.coords.longitude];
-    if(!geoMarker) geoMarker=L.marker(ll,{icon:L.divIcon({className:"",html:'<div class="geo-pin">'
-      +'<svg viewBox="0 0 64 80" width="46" height="58">'
-      +'<path d="M32 78C17 57 3 46.5 3 30a29 29 0 1 1 58 0c0 16.5-14 27-29 48z" fill="#E8281E"/>'
-      +'<circle cx="32" cy="30" r="21.5" fill="#fff"/>'
-      +'<text x="32" y="26" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="10.5" font-weight="800" fill="#111">YOU</text>'
-      +'<text x="32" y="34.5" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="8" font-style="italic" font-weight="700" fill="#111">ARE</text>'
-      +'<text x="32" y="45" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="10.5" font-weight="800" fill="#111">HERE</text>'
-      +'</svg></div>',iconSize:[46,58],iconAnchor:[23,57]}),interactive:false,zIndexOffset:900}).addTo(map);
+    if(!geoMarker) geoMarker=L.marker(ll,{icon:youAreHereIcon(46),interactive:false,zIndexOffset:900}).addTo(map);
     else geoMarker.setLatLng(ll);
   },err=>{ if(err&&err.code===1){ try{ localStorage.setItem("pmGeoOn","0"); }catch(e){} } geoWatchId=null; },
   {enableHighAccuracy:true,maximumAge:15000,timeout:20000});
@@ -3580,7 +3583,7 @@ function mShowDetail(ai,keepScroll){
         if(hs) setTimeout(()=>hs.scrollTo({left:i*hs.clientWidth,behavior:"smooth"}),80); });
       L.circleMarker([p.lat,p.lng],{radius:9,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.85,className:"hl-dot",interactive:false}).addTo(mMiniMap);
     });
-    if(mGeo) L.circleMarker([mGeo.lat,mGeo.lng],{radius:7,color:"#ffffff",weight:3,fillColor:"#2D7DFF",fillOpacity:1,interactive:false}).addTo(mMiniMap);
+    if(mGeo) L.marker([mGeo.lat,mGeo.lng],{icon:youAreHereIcon(40),interactive:false,zIndexOffset:900}).addTo(mMiniMap);
     const bb=L.latLngBounds(pts.map(p=>[p.lat,p.lng])); if(mGeo) bb.extend([mGeo.lat,mGeo.lng]);
     mMiniMap.fitBounds(bb,{padding:[36,36],maxZoom:19});
   }
