@@ -1706,14 +1706,30 @@ async function ghPutFile(cfg,path,text,msg){
   const r=await fetch("https://api.github.com/repos/"+cfg.repo+"/contents/"+path,{method:"PUT",headers:ghHeaders(cfg.token),body:JSON.stringify(body)});
   if(!r.ok){ let d=""; try{ d=(await r.json()).message||""; }catch(e){} throw new Error("GitHub says "+r.status+(d?" — "+d:"")); }
 }
-function buildMobilePack(){
+/* The pack carries the photo previews WITH their annotations baked in (marks are vector data,
+   invisible to the phone otherwise). Composited once per photo and cached until marks change. */
+async function annotatedPreview(p){
+  const src=p.preview||p.thumb; if(!src) return null;
+  const key=annotKey(p); if(!key) return src;
+  if(p._pa&&p._paKey===key) return p._pa;
+  try{
+    const im=await loadImg(src);
+    const c=document.createElement("canvas"); c.width=im.width; c.height=im.height;
+    const ctx=c.getContext("2d"); ctx.drawImage(im,0,0);
+    paintMarks(ctx,0,0,im.width,im.height,Math.min(im.width,im.height)*0.0012,p.marks,(p.mkw!=null?p.mkw:null),(p.mth!=null?p.mth:null));
+    p._pa=c.toDataURL("image/jpeg",0.8); p._paKey=key;
+    return p._pa;
+  }catch(e){ return src; }
+}
+async function buildMobilePack(){
   const open=actions.filter(a=>!a.done);
-  return {
-    v:2, exportedAt:new Date().toISOString(), project:loadedJsonName||folderName||"PhotoMap",
-    actions: open.map(a=>({ id:a.id, text:a.text, steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d})),
-      photos: actPhotos(a).map(p=>({ id:p.id, name:p.name, note:(p.note||""), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null),
-        img:(p.preview||p.thumb||null) })) }))
-  };
+  const pk={ v:2, exportedAt:new Date().toISOString(), project:loadedJsonName||folderName||"PhotoMap", actions:[] };
+  for(const a of open){
+    const ps=[];
+    for(const p of actPhotos(a)) ps.push({ id:p.id, name:p.name, note:(p.note||""), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), img:await annotatedPreview(p) });
+    pk.actions.push({ id:a.id, text:a.text, steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d})), photos:ps });
+  }
+  return pk;
 }
 async function exportMobile(){
   const st=document.getElementById("mobExpStatus"), btn=document.getElementById("btnMobileExport");
@@ -1723,7 +1739,7 @@ async function exportMobile(){
   if(!openN){ st.textContent="No open actions to export."; return; }
   btn.disabled=true; st.textContent="Building pack…";
   try{
-    const pack=buildMobilePack();
+    const pack=await buildMobilePack();
     const text=JSON.stringify(pack);
     st.textContent="Pushing "+(text.length/1048576).toFixed(1)+" MB to "+cfg.repo+"…";
     await ghPutFile(cfg,"pack.json",text,"PhotoMap mobile pack — "+openN+" open action"+(openN===1?"":"s"));
