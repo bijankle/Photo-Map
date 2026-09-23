@@ -570,8 +570,8 @@
   .m-pphoto{background:var(--accent);}
   .m-pphoto img{width:100%;height:100%;object-fit:contain;}
   .m-hsnap{position:absolute;top:19%;left:8px;right:8px;bottom:11%;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;background:#ECEEF1;border-radius:12px;}   /* the image window: 8px blue grout all around */
-  .m-thumbs{position:absolute;z-index:4;overflow-y:auto;background:var(--accent);border-radius:0 0 12px 12px;padding:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;align-content:start;}
-  .m-thumbs img{width:100%;height:72px;object-fit:cover;border-radius:6px;display:block;}
+  .m-thumbs{position:absolute;z-index:4;overflow:hidden;background:var(--accent);border-radius:0 0 12px 12px;padding:8px;display:grid;gap:8px;}
+  .m-thumbs img{width:100%;height:100%;object-fit:cover;border-radius:6px;display:block;min-height:0;min-width:0;}
   .m-thumbs img.cur{display:none;}   /* previews show the OTHER images of this action */
   .m-hsnap::-webkit-scrollbar{display:none;}
   .m-hpage{position:relative;flex:0 0 100%;height:100%;scroll-snap-align:start;}
@@ -3835,6 +3835,18 @@ function mShowDetail(ai,keepScroll){
         th.style.left=hsEl.offsetLeft+"px"; th.style.right=(hsEl.offsetLeft)+"px";
         th.style.top=Math.round(hsEl.offsetTop+gc.h)+"px";
         th.style.bottom=Math.max(0,secH-(hsEl.offsetTop+hsEl.offsetHeight))+"px";
+        /* tiles SCALE to consume the whole spare area: pick the col/row split with the biggest balanced cells */
+        const n=Math.max(1,th.querySelectorAll("img:not(.cur)").length);
+        const W2=W-16, H2=spare-16;
+        let best={cols:1,rows:n,score:-1};
+        for(let cols=1;cols<=n;cols++){ const rows=Math.ceil(n/cols);
+          const cw=(W2-(cols-1)*8)/cols, chh=(H2-(rows-1)*8)/rows;
+          if(cw<=0||chh<=0) continue;
+          const score=Math.min(cw,chh);
+          if(score>best.score) best={cols,rows,score};
+        }
+        th.style.gridTemplateColumns="repeat("+best.cols+",1fr)";
+        th.style.gridTemplateRows="repeat("+best.rows+",1fr)";
       } else th.style.display="none";
     } };
   if(hsEl){ hsEl.querySelectorAll("img").forEach(im=>im.addEventListener("load",posOverlays));
