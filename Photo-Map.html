@@ -404,9 +404,13 @@
   @keyframes rowpulsecur{0%,100%{box-shadow:0 0 0 2px rgba(88,101,242,.65),inset 3px 0 0 var(--accent);}50%{box-shadow:0 0 0 2px rgba(88,101,242,.15),inset 3px 0 0 var(--accent);}}
   .act-row.done .t{text-decoration:line-through;color:var(--dim);}
   .act-chk{display:flex;align-items:center;padding-top:1px;cursor:pointer;}
-  .act-chk input{width:15px;height:15px;accent-color:var(--good);cursor:pointer;}
+  .act-chk input,.act-hold input{appearance:none;-webkit-appearance:none;width:15px;height:15px;margin:0;border:1px solid var(--line2);border-radius:3px;cursor:pointer;position:relative;}
+  .act-chk input{background:#3BA55C33;}   /* faint green: this is the COMPLETE box */
   .act-hold{display:flex;align-items:center;padding-top:1px;cursor:pointer;margin-left:1px;}
-  .act-hold input{width:15px;height:15px;accent-color:#E8A33D;cursor:pointer;}
+  .act-hold input{background:#E8A33D33;}   /* faint amber: this is the ON-HOLD box */
+  .act-chk input:checked{background:var(--good);border-color:var(--good);}
+  .act-hold input:checked{background:#E8A33D;border-color:#E8A33D;}
+  .act-chk input:checked::after,.act-hold input:checked::after{content:"";position:absolute;left:4.5px;top:1.5px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);}
   .act-row.hold{opacity:.72;}   /* on hold: stays in the list, dots leave the map */
   .act-body{flex:1;min-width:0;}
   .act-body .t{font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.35;word-wrap:break-word;}
@@ -542,9 +546,9 @@
   .m-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 14px;display:flex;flex-direction:column;gap:10px;}
   .m-card{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:14px;padding:13px;display:flex;gap:12px;align-items:flex-start;}
   .m-card.done{border-left-color:var(--good);opacity:.65;}
-  .m-chk{width:26px;height:26px;flex-shrink:0;margin-top:2px;box-sizing:border-box;border:2px solid var(--line2);border-radius:8px;background:var(--panel);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;}
+  .m-chk{width:26px;height:26px;flex-shrink:0;margin-top:2px;box-sizing:border-box;border:2px solid var(--line2);border-radius:8px;background:#3BA55C33;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;}
   .m-chk.on{background:var(--good);border-color:var(--good);}
-  .m-hold{width:26px;height:26px;flex-shrink:0;margin-top:2px;box-sizing:border-box;border:2px solid var(--line2);border-radius:8px;background:var(--panel);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:11px;letter-spacing:1px;}
+  .m-hold{width:26px;height:26px;flex-shrink:0;margin-top:2px;box-sizing:border-box;border:2px solid var(--line2);border-radius:8px;background:#E8A33D33;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:11px;letter-spacing:1px;}
   .m-hold.on{background:#E8A33D;border-color:#E8A33D;}
   .m-card.hold{border-left-color:#E8A33D;opacity:.8;}
   .m-homemap{height:50vh;height:50dvh;flex-shrink:0;border-top:1px solid var(--line);background:#ECEEF1;}   /* the bottom half of the home screen is the map */
