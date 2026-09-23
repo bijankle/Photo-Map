@@ -345,6 +345,8 @@
   .st-num:active{cursor:grabbing;}
   .st-row.drop-b{box-shadow:0 -2px 0 var(--accent);}
   .st-row.drop-a{box-shadow:0 2px 0 var(--accent);}
+  .act-row.drop-b{box-shadow:0 -3px 0 var(--accent);}
+  .act-row.drop-a{box-shadow:0 3px 0 var(--accent);}
   .ipa-body .asec{margin-top:5px;}
   .act-notes{display:flex;flex-direction:column;gap:4px;}
   .nt-row{display:flex;align-items:flex-start;gap:6px;}
@@ -1192,7 +1194,20 @@ function startActEdit(a,row){
 }
 function renameAction(a){ const row=document.querySelector('.act-row[data-aid="'+a.id+'"]'); if(row) startActEdit(a,row); }
 let dragStep=null;   // {aid, si} — a sub-action's number badge is its drag handle
-document.addEventListener("dragend",()=>{ dragStep=null; document.querySelectorAll(".drop-b,.drop-a").forEach(x=>x.classList.remove("drop-b","drop-a")); });
+let dragActId=null;   // whole action rows drag to re-prioritise the left list
+document.addEventListener("dragend",()=>{ dragStep=null; dragActId=null; document.querySelectorAll(".drop-b,.drop-a").forEach(x=>x.classList.remove("drop-b","drop-a")); });
+function reorderAction(dragId,targetId,placeBefore){
+  const from=actions.findIndex(x=>x.id===dragId); if(from<0) return;
+  const beforeIds=actions.map(x=>x.id);
+  const mv=actions.splice(from,1)[0];
+  let to=actions.findIndex(x=>x.id===targetId);
+  if(to<0){ actions.splice(from,0,mv); return; }
+  if(!placeBefore) to++;
+  actions.splice(to,0,mv);
+  const afterIds=actions.map(x=>x.id);
+  if(JSON.stringify(beforeIds)!==JSON.stringify(afterIds)) pushUndo({order:{before:beforeIds,after:afterIds}});
+  afterFolderChange();
+}
 function reorderStep(a,from,to){
   if(!Array.isArray(a.steps)||from===to||from<0||to<0||from>=a.steps.length) return;
   const b=actState(a);
@@ -1364,7 +1379,7 @@ function renderActions(){
   list.innerHTML=shown.map(a=>{ const n=actPhotos(a).length;
     const isCur=!!(cp&&Array.isArray(cp.acts)&&cp.acts.includes(a.id));
     const exp=!collActs.has(a.id);
-    return '<div class="act-row'+(a.done?' done':'')+(selActs.has(a.id)?' sel':'')+(isCur?' cur':'')+'" data-aid="'+a.id+'">'
+    return '<div class="act-row'+(a.done?' done':'')+(selActs.has(a.id)?' sel':'')+(isCur?' cur':'')+'" data-aid="'+a.id+'" draggable="true">'
       +'<label class="act-chk" title="'+(a.done?'Reopen this action':'Mark completed')+'"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
       +'<div class="act-body"><div class="t">'+esc(a.text)+'</div>'
       +(exp?('<div class="asec"><div class="al">SUB-ACTIONS</div>'+stepsHtml(a)+'</div>'
@@ -1386,6 +1401,13 @@ function renderActions(){
     el.addEventListener("click",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); el._ct=setTimeout(()=>clickAction(a,e),260); });
     el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); startActEdit(a,el); });
     el.addEventListener("contextmenu",e=>{ e.preventDefault(); e.stopPropagation(); openActMenu(a,e); });
+    /* priority drag & drop: the whole row is the handle (a drag begun on a sub-action's number stays a sub-action drag) */
+    el.addEventListener("dragstart",e=>{ if(dragStep) return;   // a sub-action drag already owns this gesture
+      if(e.target.closest(".act-steps,.act-edit,input,textarea")){ e.preventDefault(); return; }
+      dragActId=a.id; e.dataTransfer.effectAllowed="move"; try{ e.dataTransfer.setData("text/plain","act:"+a.id); }catch(err){} });
+    el.addEventListener("dragover",e=>{ if(dragActId==null||dragActId===a.id) return; e.preventDefault(); const r=el.getBoundingClientRect(); const before=(e.clientY-r.top)<r.height/2; el.classList.toggle("drop-b",before); el.classList.toggle("drop-a",!before); });
+    el.addEventListener("dragleave",()=>el.classList.remove("drop-b","drop-a"));
+    el.addEventListener("drop",e=>{ e.preventDefault(); e.stopPropagation(); const before=el.classList.contains("drop-b"); el.classList.remove("drop-b","drop-a"); if(dragActId!=null&&dragActId!==a.id) reorderAction(dragActId,a.id,before); dragActId=null; });
   });
 }
 function renderIpActions(){
@@ -1831,7 +1853,7 @@ function fitToPhotos(){
 const dz=document.getElementById("dropzone"); let dragDepth=0;
 /* The upload overlay is only for drags that carry FILES from outside the app — internal drags
    (sub-action reorder) carry text and must never trigger it. */
-const dragHasFiles=e=>{ try{ return !dragStep && !!e.dataTransfer && Array.from(e.dataTransfer.types||[]).includes("Files"); }catch(err){ return false; } };
+const dragHasFiles=e=>{ try{ return !dragStep && dragActId==null && !!e.dataTransfer && Array.from(e.dataTransfer.types||[]).includes("Files"); }catch(err){ return false; } };
 window.addEventListener("dragenter",e=>{e.preventDefault();if(!dragHasFiles(e))return;dragDepth++;dz.classList.add("show");});
 window.addEventListener("dragover",e=>e.preventDefault());
 window.addEventListener("dragleave",e=>{e.preventDefault();if(--dragDepth<=0)dz.classList.remove("show");});
