@@ -587,7 +587,7 @@
   .m-inset{position:absolute;top:8px;left:8px;right:8px;height:calc(19% - 12px);z-index:4;display:flex;border-radius:12px;overflow:hidden;border:2px solid rgba(255,255,255,.7);box-shadow:0 2px 12px rgba(0,0,0,.55);background:#141413;transition:opacity .2s;}
   .m-inset .mi-half{flex:1 1 50%;min-width:0;height:100%;}
   .m-inset .mi-half+.mi-half{border-left:2px solid rgba(255,255,255,.7);}
-  .m-sub2{position:absolute;left:8px;right:8px;bottom:8px;top:calc(89% + 4px);z-index:4;box-sizing:border-box;overflow-y:auto;background:#141413cc;border:1px solid #4a4a48;border-radius:10px;padding:6px 9px;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
+  .m-sub2{position:absolute;left:8px;right:8px;bottom:8px;max-height:58%;z-index:4;box-sizing:border-box;overflow-y:auto;background:#141413cc;border:1px solid #4a4a48;border-radius:10px;padding:6px 9px;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}   /* content-sized: every sub-action visible, the image yields */
   .m-sub2 .s2row{display:flex;gap:7px;align-items:flex-start;font-size:16px;color:#E3E5E8;line-height:1.35;padding:3px 0;}
   .m-sub2 .s2row .n{color:#fff;font-family:var(--mono);font-size:15px;font-weight:700;flex-shrink:0;margin-top:1px;}
   .m-sub2 .k2{width:20px;height:20px;flex-shrink:0;box-sizing:border-box;border:2px solid #8b8b88;border-radius:6px;background:#232322;color:#fff;font-size:13px;line-height:16px;text-align:center;margin-top:1px;}
@@ -3806,8 +3806,10 @@ function mShowDetail(ai,keepScroll){
   } else if(hsEl&&sub2) hsEl.addEventListener("scroll",()=>requestAnimationFrame(posOverlays));
   if(sub2){
     /* the card is THE sub-action editor: tick via the box, tap text to edit, Enter in the input
-       to keep adding, drag the number badge to reorder. All refreshes stay local to the card. */
+       to keep adding, drag the number badge to reorder. All refreshes stay local to the card.
+       The card is content-sized — the image band shrinks to whatever the list leaves it. */
     let s2drag=null;
+    const syncBands=()=>{ if(!hsEl) return; hsEl.style.bottom=(sub2.offsetHeight+12)+"px"; posOverlays(); };
     const fill=(focusNew)=>{ const rows2=mSteps(a);
       sub2.innerHTML=rows2.map((s,i)=>'<div class="s2row'+(s.d?' done':'')+'" data-si="'+i+'"><span class="k2'+(s.d?' on':'')+'">'+(s.d?'✓':'')+'</span><span class="n" title="Drag to reorder">'+(i+1)+'.</span><span class="t">'+esc(s.t)+'</span></div>').join('')
         +'<input class="m-in s2new" placeholder="+ sub-action" autocomplete="off" />';
@@ -3824,6 +3826,7 @@ function mShowDetail(ai,keepScroll){
       ninp.addEventListener("keydown",e=>{ e.stopPropagation(); if(e.key!=="Enter") return; const v=ninp.value.trim(); if(!v) return;
         mAddStep(a,v); fill(true); });
       if(focusNew){ const n2=sub2.querySelector(".s2new"); if(n2) n2.focus(); }
+      requestAnimationFrame(syncBands);
     };
     fill();
     sub2.addEventListener("touchstart",e=>e.stopPropagation(),{passive:true});
