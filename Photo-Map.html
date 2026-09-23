@@ -3631,6 +3631,13 @@ function mGeoLive(refit){
     }
   }catch(e){}
 }
+/* Android back gesture: viewing an action pushes ONE history entry, so swiping back returns to
+   the actions list instead of leaving the app. Backing out of the list exits normally. */
+let mNavDepth=false;
+function mNavPush(){ if(!mNavDepth){ try{ history.pushState({m:"act"},""); mNavDepth=true; }catch(e){} } }
+function mExitDetail(){ if(mNavDepth){ try{ history.back(); return; }catch(e){} } mShowList(); }
+window.addEventListener("popstate",()=>{ if(!document.body.classList.contains("mobile")) return;
+  if(mNavDepth){ mNavDepth=false; mShowList(); } });
 function mShowList(){
   if(!mPack){ mLoadPack(); return; }
   mRerender=mShowList;
@@ -3679,6 +3686,7 @@ async function mSendChanges(){
 function mShowDetail(ai,keepScroll){
   const a=mActAt(ai); if(!a){ mShowList(); return; }
   mRerender=()=>{ const sc=document.getElementById("mSnap"); mShowDetail(ai,sc?sc.scrollTop:null); };
+  mNavPush();
   const done=mDone(a);
   const photos=(a.photos||[]), hasMap=photos.some(p=>p.lat!=null);
   /* Snapchat-style vertical pager: MAP on top, full-screen PHOTOS (landing), DETAILS below —
@@ -3703,8 +3711,8 @@ function mShowDetail(ai,keepScroll){
     +'<button class="m-btn ghost" id="mAllBtn">All actions</button>'
     +'</div></section>'
     +'</div>');
-  document.getElementById("mBack").addEventListener("click",mShowList);
-  document.getElementById("mAllBtn").addEventListener("click",mShowList);
+  document.getElementById("mBack").addEventListener("click",mExitDetail);
+  document.getElementById("mAllBtn").addEventListener("click",mExitDetail);
   mWireUndo();
   const snap=document.getElementById("mSnap");
   const rer=()=>mShowDetail(ai,snap.scrollTop);
