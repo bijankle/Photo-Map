@@ -768,10 +768,7 @@
       <label class="lb-fullchk" id="lbFullWrap"><input type="checkbox" id="lbFull" /><span>Full quality</span></label>
     </div>
     <div class="ip-actions" id="ipActions">
-      <div class="ipa-head"><span class="t">Actions</span><button class="ipa-tgl" id="ipaHide" title="Hide completed actions">Hide done</button></div>
-      <div class="ipa-list" id="ipaList"></div>
-      <input type="text" id="ipaNew" placeholder="+ Add action for this photo" autocomplete="off" />
-      <div class="ipa-head" style="margin-top:4px;"><span class="t">Photo notes</span></div>
+      <div class="ipa-head"><span class="t">Photo notes</span></div>
       <div class="asec" id="ipaPnote" style="margin-top:0;"></div>
     </div>
     <div class="folder-pop" id="folderPop"></div>
@@ -1138,7 +1135,7 @@ map.on("click",e=>{
    An action is a task with a tick box (tick = completed). Actions link to photos (one action to
    many photos, or many actions to one photo). Stored in the .json like tags; photos untouched. */
 let actions=[], nextActId=1, selActs=new Set(), actionFilter=null;
-let actShowOpenOnly=false, actOnlyMap=false, ipHideDone=false, rightTab="photo";
+let actShowOpenOnly=false, actOnlyMap=false, rightTab="photo";
 function actById(id){ return actions.find(a=>a.id===id)||null; }
 function actPhotos(a){ return a?photos.filter(p=>Array.isArray(p.acts)&&p.acts.includes(a.id)):[]; }
 function hasOpenAct(p){ return Array.isArray(p.acts)&&p.acts.some(id=>{ const a=actById(id); return a&&!a.done; }); }
@@ -1477,32 +1474,11 @@ function renderActions(){
     el.addEventListener("drop",e=>{ e.preventDefault(); e.stopPropagation(); const before=el.classList.contains("drop-b"); el.classList.remove("drop-b","drop-a"); if(dragActId!=null&&dragActId!==a.id) reorderAction(dragActId,a.id,before); dragActId=null; });
   });
 }
-function renderIpActions(){
+function renderIpActions(){   // the strip under the photo holds ONLY the photo notes — action detail lives in the left panel
   const box=document.getElementById("ipActions"); if(!box) return;
   const p=lb.classList.contains("open")?curPhoto():null;
   if(!p){ box.style.display="none"; return; }
   box.style.display="flex";
-  const all=(p.acts||[]).map(actById).filter(Boolean);
-  const shown=ipHideDone?all.filter(a=>!a.done):all;
-  const hideBtn=document.getElementById("ipaHide");
-  hideBtn.classList.toggle("on",ipHideDone);
-  hideBtn.style.display=all.some(a=>a.done)?"":"none";
-  const listEl=document.getElementById("ipaList");
-  listEl.innerHTML=shown.length?shown.map(a=>{
-    return '<div class="ipa-row'+(a.done?' done':'')+'" data-aid="'+a.id+'">'
-    +'<label class="act-chk"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
-    +'<div class="ipa-body"><span class="t" title="Double-click to edit">'+esc(a.text)+'</span>'
-    +((a.steps||[]).length?'<div class="asec"><div class="al">SUB-ACTIONS</div>'+stepsHtml(a)+'</div>':'<div class="asec">'+stepsHtml(a)+'</div>')
-    +'</div>'
-    +'<button class="ipa-x" title="Remove this action from this photo">&times;</button></div>'; }).join("")
-    :"";
-  listEl.querySelectorAll(".ipa-row").forEach(el=>{
-    const a=actById(Number(el.dataset.aid)); if(!a) return;
-    el.querySelector("input").addEventListener("click",e=>{ e.stopPropagation(); setActionDone(a,e.target.checked); });
-    el.querySelector(".ipa-x").addEventListener("click",e=>{ e.stopPropagation(); unassignAct(a,curPhoto()); });
-    wireSteps(el,a);
-    el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.ipa-x,.act-steps,.asec")||el.querySelector(".act-edit")) return; startActEdit(a,el); });
-  });
   const pnEl=document.getElementById("ipaPnote");
   pnEl.innerHTML=pNoteHtml(p);
   wirePNote(pnEl,p);
@@ -1530,11 +1506,6 @@ document.getElementById("actNewInput").addEventListener("keydown",e=>{
   armNewAction(null);
   createAction(v,pids);
   document.getElementById("actNewInput").focus();   // keep typing to add the next one
-});
-document.getElementById("ipaHide").addEventListener("click",()=>{ ipHideDone=!ipHideDone; renderIpActions(); });
-document.getElementById("ipaNew").addEventListener("keydown",e=>{
-  if(e.key!=="Enter") return; const p=curPhoto(); const v=e.target.value.trim(); if(!v||!p) return;
-  e.target.value=""; createAction(v,[p.id]);
 });
 ["mousedown","pointerdown","dblclick"].forEach(ev=>document.getElementById("ipActions").addEventListener(ev,e=>e.stopPropagation()));
 
