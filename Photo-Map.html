@@ -736,6 +736,13 @@
             <span id="mobExpStatus" style="font-family:var(--mono);font-size:10px;color:var(--dim);"></span>
           </div>
         </div>
+        <div class="set-row">
+          <div class="set-lbl">Download as Excel<span class="set-sub">Saves every action to an .xlsx spreadsheet — priority number, status, sub-actions, photo notes and the annotated photos side by side.</span></div>
+          <div class="set-ctl" style="flex-direction:column;align-items:flex-start;gap:6px;">
+            <button class="btn primary" id="btnXlsxExport" style="font-size:13px;">Download .xlsx</button>
+            <span id="xlsxStatus" style="font-family:var(--mono);font-size:10px;color:var(--dim);"></span>
+          </div>
+        </div>
       </div>
       <div class="set-sec" data-sec="actions">
         <h3>Actions</h3>
@@ -1804,6 +1811,78 @@ async function exportMobile(){
   btn.disabled=false;
 }
 document.getElementById("btnMobileExport").addEventListener("click",exportMobile);
+/* ---- Excel export: every action as a row, annotated photos embedded alongside ---- */
+let _exceljsP=null;
+function loadExcelJS(){ if(window.ExcelJS) return Promise.resolve();
+  if(!_exceljsP) _exceljsP=new Promise((res,rej)=>{ const sc=document.createElement("script");
+    sc.src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js";
+    sc.onload=res; sc.onerror=()=>{ _exceljsP=null; rej(new Error("could not load the Excel library — are you online?")); };
+    document.head.appendChild(sc); });
+  return _exceljsP; }
+async function xlsImage(p){   // annotated preview scaled into a 180x110 box for the sheet
+  try{
+    const src=await annotatedPreview(p); if(!src) return null;
+    const im=await loadImg(src);
+    const sc=Math.min(1,180/im.width,110/im.height);
+    const w=Math.max(1,Math.round(im.width*sc)), h=Math.max(1,Math.round(im.height*sc));
+    const c=document.createElement("canvas"); c.width=w; c.height=h;
+    c.getContext("2d").drawImage(im,0,0,w,h);
+    return {b64:c.toDataURL("image/jpeg",0.78),w,h};
+  }catch(e){ return null; }
+}
+async function exportActionsXlsx(){
+  const st=document.getElementById("xlsxStatus"), btn=document.getElementById("btnXlsxExport");
+  if(!actions.length){ st.textContent="No actions to export."; return; }
+  btn.disabled=true; st.textContent="Loading Excel library\u2026";
+  try{
+    await loadExcelJS();
+    const wb=new ExcelJS.Workbook(); wb.created=new Date();
+    const ws=wb.addWorksheet("Actions",{views:[{state:"frozen",ySplit:1}]});
+    ws.columns=[
+      {header:"#",key:"n",width:5},
+      {header:"Action",key:"t",width:34},
+      {header:"Status",key:"s",width:16},
+      {header:"Sub-actions",key:"st",width:42},
+      {header:"Photos",key:"pc",width:8},
+      {header:"Photo notes",key:"pn",width:42},
+    ];
+    const nums=actNumMap();
+    const order=actions.slice().sort((x,y)=>(x.done?1:0)-(y.done?1:0));   // same order + numbers as the list
+    let maxImgs=0, ri=2;
+    for(const a of order){
+      st.textContent="Compiling "+(ri-1)+" / "+order.length+"\u2026";
+      const ps=actPhotos(a);
+      const subs=(a.steps||[]).map((s2,i)=>stepLetter(i)+". "+(s2.d?"\u2611":"\u2610")+" "+s2.t).join("\n");
+      const notes=ps.filter(x=>x.note).map(x=>x.name+" \u2014 "+x.note).join("\n");
+      const status=a.done?("Done"+(a.doneAt?" "+fmtDate(a.doneAt):"")):(a.hold?"On hold":"Open");
+      const row=ws.addRow({n:nums.get(a.id),t:a.text,s:status,st:subs,pc:ps.length,pn:notes});
+      row.alignment={vertical:"top",wrapText:true};
+      let ci=0,rowH=0;
+      for(const ph of ps){
+        const img=await xlsImage(ph); if(!img) continue;
+        const id=wb.addImage({base64:img.b64,extension:"jpeg"});
+        ws.addImage(id,{tl:{col:6+ci,row:ri-1},ext:{width:img.w,height:img.h}});
+        ci++; rowH=Math.max(rowH,img.h);
+      }
+      maxImgs=Math.max(maxImgs,ci);
+      row.height=Math.max(Math.round(rowH*0.78),46);   // px -> pt
+      ri++;
+    }
+    for(let i=0;i<maxImgs;i++) ws.getColumn(7+i).width=26;   // 180px image + breathing room
+    if(maxImgs) ws.getCell(1,7).value="Photos \u2192";
+    const hr=ws.getRow(1); hr.font={bold:true}; hr.alignment={vertical:"middle"}; hr.height=18;
+    st.textContent="Writing file\u2026";
+    const buf=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const aEl=document.createElement("a"); aEl.href=URL.createObjectURL(blob);
+    aEl.download=String(loadedJsonName||folderName||"PhotoMap").replace(/\.[^.]+$/,"")+"-actions-"+new Date().toISOString().slice(0,10)+".xlsx";
+    document.body.appendChild(aEl); aEl.click(); aEl.remove();
+    setTimeout(()=>{ try{ URL.revokeObjectURL(aEl.href); }catch(e){} },4000);
+    st.textContent="\u2713 Saved "+order.length+" action"+(order.length===1?"":"s")+" to Excel.";
+  }catch(err){ st.textContent="Failed: "+(err&&err.message||err); }
+  btn.disabled=false;
+}
+document.getElementById("btnXlsxExport").addEventListener("click",exportActionsXlsx);
 document.getElementById("setGhRepo").addEventListener("change",e=>{ try{ localStorage.setItem("pmGhRepo",e.target.value.trim()); }catch(err){} });
 document.getElementById("setGhToken").addEventListener("change",e=>{ try{ localStorage.setItem("pmGhToken",e.target.value.trim()); }catch(err){} });
 document.getElementById("setActMap").addEventListener("change",e=>{ actOnlyMap=e.target.checked; buildCluster(); renderClusters(); updateGallery(); renderMapTags(); persistState(); });
