@@ -1159,7 +1159,8 @@ function renameAction(a){ const row=document.querySelector('.act-row[data-aid="'
 function editActionDesc(a){ expActs.add(a.id); refreshActUI(); const row=document.querySelector('.act-row[data-aid="'+a.id+'"]'); if(row) startActDescEdit(a,row); }
 function descHtml(a,set){
   if(!set.has(a.id)) return "";
-  return '<div class="d'+(a.desc?'':' empty')+'" title="Click to edit the description">'+(a.desc?esc(a.desc):'+ description')+'</div>';
+  if(!a.desc) return '<input class="st-new d-new" type="text" placeholder="+ description" autocomplete="off" />';
+  return '<div class="d" title="Click to edit the description">'+esc(a.desc)+'</div>';
 }
 function expBtnHtml(a,set){ return '<button class="act-exp'+(set.has(a.id)?' on':'')+'" type="button" title="'+(set.has(a.id)?'Hide':'Show')+' details">▾</button>'; }
 function notesHtml(a){
@@ -1220,6 +1221,12 @@ function wireActRowCommon(el,a,set){
   const d=el.querySelector(".d");
   if(d){ const edit=e=>{ e.stopPropagation(); clearTimeout(el._ct); startActDescEdit(a,el); };   // cancel the row's pending single-click select, or it re-renders and closes the editor
     d.addEventListener("click",edit); d.addEventListener("dblclick",edit); }
+  const dn=el.querySelector(".d-new");   // empty description: a real input, same as + step / + note
+  if(dn){
+    ["click","dblclick","mousedown"].forEach(ev=>dn.addEventListener(ev,e=>{ e.stopPropagation(); clearTimeout(el._ct); }));
+    dn.addEventListener("keydown",e=>{ e.stopPropagation(); if(e.key!=="Enter") return; const v=dn.value.trim(); if(!v) return;
+      const b=actState(a); a.desc=v; recordActEdit(a,b); afterFolderChange(); });
+  }
 }
 function deleteAction(a){   // no confirm needed: Ctrl+Z restores the action and all its photo links
   const items=[];
