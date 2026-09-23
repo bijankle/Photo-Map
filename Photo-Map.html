@@ -3706,9 +3706,7 @@ function mShowDetail(ai,keepScroll){
   const photos=(a.photos||[]), hasMap=photos.some(p=>p.lat!=null);
   /* Snapchat-style vertical pager: MAP on top, full-screen PHOTOS (landing), DETAILS below —
      one continuous scroll with gentle (proximity) locking. */
-  mScr('<div class="m-fhead"><button class="m-back" id="mBack" aria-label="Back">‹</button>'
-    +'<div class="m-fht" id="mFht" title="Tap to rename">'+esc(mTitle(a))+'</div></div>'
-    +'<div class="m-snap" id="mSnap">'
+  mScr('<div class="m-snap" id="mSnap">'
     +(hasMap?'<section class="m-page"><div id="mMap" style="position:absolute;inset:0;"></div><div class="m-cue">▾ swipe up for photos · tap a dot to jump to its photo</div></section>':'')
     +(photos.length?'<section class="m-page m-pphoto"><div class="m-hsnap" id="mHsnap">'
       +photos.map((p,i)=>'<div class="m-hpage">'+(p.img?'<img src="'+p.img+'" alt="'+esc(p.name||"photo")+'" />':'')
@@ -3726,7 +3724,6 @@ function mShowDetail(ai,keepScroll){
     +'<button class="m-btn ghost" id="mAllBtn">All actions</button>'
     +'</div></section>'
     +'</div>');
-  document.getElementById("mBack").addEventListener("click",mExitDetail);
   document.getElementById("mAllBtn").addEventListener("click",mExitDetail);
   mWireUndo();
   const snap=document.getElementById("mSnap");
@@ -3735,9 +3732,6 @@ function mShowDetail(ai,keepScroll){
     if(a._new) mEditNewAct(a._ni,x=>{ x.done=!done; x.doneAt=Date.now(); });
     else mMutate(()=>mSetCh(a.id,{done:!done,doneAt:Date.now()}));
     rer(); });
-  const fht=document.getElementById("mFht");
-  fht.addEventListener("click",e=>{ e.stopPropagation();
-    mInline(fht,mTitle(a),v=>{ if(v!=null&&v.trim()&&v.trim()!==mTitle(a)) mSetTitle(a,v.trim()); rer(); }); });
   /* image note: a single-row inline input ON the photo — desktop-style edit-in-place, dark theme */
   mNoteWire(document,photos);
   const rows=mSteps(a);
