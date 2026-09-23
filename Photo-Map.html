@@ -1375,7 +1375,13 @@ function actNavigate(a){
     for(const x of actions){ if(x.done&&!selActs.has(x.id)) continue;
       for(const p of actPhotos(x)){ if(p.lat!=null&&!seen.has(p.id)){ seen.add(p.id); ctx.push(p); } } }
     const all=ctx.length?ctx:geo;
-    map.flyToBounds(L.latLngBounds(all.map(p=>[p.lat,p.lng])),{padding:[70,70],maxZoom:19,duration:.45});
+    const bb=L.latLngBounds(all.map(p=>[p.lat,p.lng]));
+    /* already showing this view? flying to it anyway makes the map do a zoom-out-in "shake" */
+    let skip=false;
+    try{ const tgt=map._getBoundsCenterZoom(bb,{padding:[70,70],maxZoom:19});
+      skip=Math.abs(map.getZoom()-tgt.zoom)<0.5 && map.latLngToContainerPoint(tgt.center).distanceTo(map.latLngToContainerPoint(map.getCenter()))<40;
+    }catch(e){}
+    if(!skip) map.flyToBounds(bb,{padding:[70,70],maxZoom:19,duration:.45});
   }
   if(ps.length) setTab("gallery");   // always the gallery, even for one photo — its thumbnail carries the unassign X
 }
@@ -1534,12 +1540,14 @@ document.getElementById("ipaNew").addEventListener("keydown",e=>{
 
 /* right sidebar tabs */
 function setTab(t){
-  rightTab=(t==="gallery")?"gallery":"photo";
+  const nt=(t==="gallery")?"gallery":"photo";
+  const changed=nt!==rightTab;
+  rightTab=nt;
   const m=document.getElementById("main");
   m.classList.toggle("tab-photo",rightTab==="photo"); m.classList.toggle("tab-gallery",rightTab==="gallery");
   document.getElementById("tabPhoto").classList.toggle("active",rightTab==="photo");
   document.getElementById("tabGallery").classList.toggle("active",rightTab==="gallery");
-  setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); if(rightTab==="photo"&&lb.classList.contains("open")) refit(); },30);
+  if(changed) setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); if(rightTab==="photo"&&lb.classList.contains("open")) refit(); },30);   // no relayout jolt when the tab is already active
 }
 document.getElementById("tabPhoto").addEventListener("click",()=>{ setTab("photo"); persistState(); });
 document.getElementById("tabGallery").addEventListener("click",()=>{ setTab("gallery"); persistState(); });
