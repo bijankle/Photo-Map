@@ -388,9 +388,11 @@
   .act-lcol{display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0;}
   .act-pic{display:flex;align-items:center;color:var(--muted);line-height:1;}
   .act-pic svg{display:block;border-radius:3.5px;}
-  /* cover photo column: fixed width, flush to the tile's right edge, black fills the letterbox */
-  .act-cover{flex:0 0 84px;width:84px;align-self:stretch;margin:-8px -9px -8px 2px;border-radius:0 9px 9px 0;overflow:hidden;background:#000;display:flex;align-items:center;justify-content:center;min-height:34px;}
-  .act-cover img{width:100%;height:100%;object-fit:contain;display:block;}
+  /* cover photo column: shared width (drag any cover's left edge to resize them all), flush to
+     the tile's right edge; the letterbox is the tile's own background so it blends in */
+  .act-cover{flex:0 0 var(--cov-w,84px);width:var(--cov-w,84px);align-self:stretch;margin:-8px -9px -8px 2px;border-radius:0 9px 9px 0;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;min-height:34px;}
+  .act-cover img{width:100%;height:100%;object-fit:contain;display:block;-webkit-user-drag:none;}
+  .cov-rs{position:absolute;left:0;top:0;bottom:0;width:7px;cursor:col-resize;z-index:2;}
   .card.drop-l{box-shadow:-3px 0 0 var(--accent);}
   .card.drop-r{box-shadow:3px 0 0 var(--accent);}
   .act-row:hover{border-color:var(--accent);}
@@ -1253,6 +1255,14 @@ function startActEdit(a,row){
   });
 }
 function renameAction(a){ const row=document.querySelector('.act-row[data-aid="'+a.id+'"]'); if(row) startActEdit(a,row); }
+/* shared cover width: dragging any cover's left edge resizes them ALL */
+let covResizing=false;
+window.addEventListener("mousemove",e=>{ if(!covResizing) return;
+  const list=document.getElementById("actList"); if(!list) return;
+  const w=Math.max(40,Math.min(280,Math.round(list.getBoundingClientRect().right-e.clientX-4)));
+  document.documentElement.style.setProperty("--cov-w",w+"px");
+});
+window.addEventListener("mouseup",()=>{ if(covResizing){ covResizing=false; document.body.style.userSelect=""; persistState(); } });
 let dragStep=null;   // {aid, si} — a sub-action's number badge is its drag handle
 let dragActId=null;   // whole action rows drag to re-prioritise the left list
 let galDragPid=null;   // gallery cards drag to reorder a selected action's photos
@@ -1536,7 +1546,7 @@ function renderActions(){
   const cp=lb.classList.contains("open")?curPhoto():null;   // the open photo's actions get a marker in this list
   list.innerHTML=shown.map(a=>{ const ap=actPhotos(a), n=ap.length;
     if(n) ensureAnnotThumb(ap[0]);
-    const cov=n&&ap[0].thumb?('<div class="act-cover"><img data-cov="'+ap[0].id+'" src="'+thumbSrc(ap[0])+'" alt=""/></div>'):'';
+    const cov=n&&ap[0].thumb?('<div class="act-cover"><div class="cov-rs" title="Drag to resize all covers"></div><img data-cov="'+ap[0].id+'" src="'+thumbSrc(ap[0])+'" alt="" draggable="false"/></div>'):'';
     const isCur=!!(cp&&Array.isArray(cp.acts)&&cp.acts.includes(a.id));
     const exp=!collActs.has(a.id);
     return '<div class="act-row'+(a.done?' done':'')+(selActs.has(a.id)?' sel':'')+(isCur?' cur':'')+'" data-aid="'+a.id+'" draggable="true">'
@@ -1566,9 +1576,11 @@ function renderActions(){
       if(!e.ctrlKey&&!e.metaKey&&!e.shiftKey) el._ct=setTimeout(()=>actNavigate(a),260); });
     el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes,.act-cover")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); startActEdit(a,el); });
     el.addEventListener("contextmenu",e=>{ e.preventDefault(); e.stopPropagation(); openActMenu(a,e); });
+    const rs=el.querySelector(".cov-rs");
+    if(rs) rs.addEventListener("mousedown",e=>{ e.preventDefault(); e.stopPropagation(); covResizing=true; document.body.style.userSelect="none"; });
     /* priority drag & drop: the whole row is the handle (a drag begun on a sub-action's number stays a sub-action drag) */
     el.addEventListener("dragstart",e=>{ if(dragStep) return;   // a sub-action drag already owns this gesture
-      if(e.target.closest(".act-steps,.act-edit,input,textarea")){ e.preventDefault(); return; }
+      if(covResizing||e.target.closest(".act-steps,.act-edit,.cov-rs,input,textarea")){ e.preventDefault(); return; }
       dragActId=a.id; e.dataTransfer.effectAllowed="move"; try{ e.dataTransfer.setData("text/plain","act:"+a.id); }catch(err){} });
     el.addEventListener("dragover",e=>{ if(dragActId==null||dragActId===a.id) return; e.preventDefault(); const r=el.getBoundingClientRect(); const before=(e.clientY-r.top)<r.height/2; el.classList.toggle("drop-b",before); el.classList.toggle("drop-a",!before); });
     el.addEventListener("dragleave",()=>el.classList.remove("drop-b","drop-a"));
@@ -3344,7 +3356,8 @@ function serializeState(includeImages){
     settings:{ baseLayer: map.hasLayer(google)?"google":map.hasLayer(esri)?"esri":"none", showNoGeo, sortBy:currentSort,
       thumb:getComputedStyle(document.documentElement).getPropertyValue("--thumb").trim(),
       sideW:getComputedStyle(document.documentElement).getPropertyValue("--side-w").trim(),
-      actW:getComputedStyle(document.documentElement).getPropertyValue("--act-w").trim()||null, dateLo, dateHi,
+      actW:getComputedStyle(document.documentElement).getPropertyValue("--act-w").trim()||null,
+      covW:getComputedStyle(document.documentElement).getPropertyValue("--cov-w").trim()||null, dateLo, dateHi,
       box: boxBounds?[boxBounds.getSouth(),boxBounds.getWest(),boxBounds.getNorth(),boxBounds.getEast()]:null,
       recentTags: recentTags.slice(0,10), rightTab, actShowOpenOnly, actOnlyMap, altLo, altHi, altBlank, dateBlank, clusterSens,
       view:{ center:[map.getCenter().lat, map.getCenter().lng], zoom:map.getZoom() } },
@@ -3391,6 +3404,7 @@ function applyState(st){
   if(s.sideW) document.documentElement.style.setProperty("--side-w",s.sideW);
   else if(s.galleryW) document.documentElement.style.setProperty("--side-w",s.galleryW);   // older files: adopt the gallery width as the sidebar width
   if(s.actW) document.documentElement.style.setProperty("--act-w",s.actW);
+  if(s.covW) document.documentElement.style.setProperty("--cov-w",s.covW);
   if(s.baseLayer==="esri"){ map.removeLayer(google); esri.addTo(map); } else if(s.baseLayer==="none"){ map.removeLayer(google); }
   showNoGeo=!!s.showNoGeo; document.getElementById("showNoGeo").checked=showNoGeo;
   if(Array.isArray(s.recentTags)) recentTags=s.recentTags.slice(0,10);
