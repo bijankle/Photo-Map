@@ -3575,7 +3575,9 @@ async function mLoadPack(){
     mPack=JSON.parse(text);
     const p=mPend();
     if(p.sentAt&&mPack.exportedAt&&Date.parse(mPack.exportedAt)>p.sentAt){ mPendSave({}); }   // desktop has re-exported since we sent: its truth wins
-    navigator.geolocation&&navigator.geolocation.getCurrentPosition(pos=>{ mGeo={lat:pos.coords.latitude,lng:pos.coords.longitude}; mShowList(); },()=>{},{enableHighAccuracy:true,timeout:8000});
+    navigator.geolocation&&navigator.geolocation.getCurrentPosition(pos=>{ mGeo={lat:pos.coords.latitude,lng:pos.coords.longitude};
+      if(document.getElementById("mList")) mShowList();   // late GPS fix refreshes distances ONLY if the list is still on screen — never yanks you out of a detail
+    },()=>{},{enableHighAccuracy:true,timeout:8000});
     mShowList();
   }catch(err){ mShowSetup("Could not load: "+(err&&err.message||err)); }
 }
