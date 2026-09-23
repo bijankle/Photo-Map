@@ -567,11 +567,11 @@
   .m-in{box-sizing:border-box;width:100%;font:inherit;font-size:14px;color:var(--ink);background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:12px;outline:none;}
   .m-err{color:var(--bad);font-size:13px;line-height:1.5;}
   /* snap detail: map / full-screen photos / details, continuous scroll with gentle locking */
-  .m-snap{flex:1;min-height:0;overflow-y:hidden;background:#F2F3F5;}   /* JS pager: TikTok-style one-page-per-swipe; desktop-light chrome */
+  .m-snap{flex:1;min-height:0;overflow-y:hidden;background:var(--accent);}   /* the theme blue IS the grout between windows */
   .m-page{position:relative;height:100%;scroll-snap-align:start;overflow:hidden;}
-  .m-pphoto{background:#ECEEF1;}   /* photo band letterbox matches the desktop's image surface */
+  .m-pphoto{background:var(--accent);}
   .m-pphoto img{width:100%;height:100%;object-fit:contain;}
-  .m-hsnap{position:absolute;top:19%;left:0;right:0;bottom:11%;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;}   /* image band: map above, sub-actions below */
+  .m-hsnap{position:absolute;top:calc(19% + 4px);left:8px;right:8px;bottom:11%;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;background:#ECEEF1;border-radius:12px;}   /* the image window: blue grout all around */
   .m-hsnap::-webkit-scrollbar{display:none;}
   .m-hpage{position:relative;flex:0 0 100%;height:100%;scroll-snap-align:start;}
   .m-hpage img{position:absolute;top:0;left:0;width:100%;height:62%;object-fit:contain;object-position:top center;}   /* photo rides the TOP; JS sizes it exactly */
@@ -581,9 +581,9 @@
   .m-nin:focus{border-color:var(--accent);}
   .m-nin::placeholder{color:var(--muted);}
   .m-cue{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:10px;color:#fff;text-shadow:0 1px 4px #000;pointer-events:none;z-index:500;}
-  .m-inset{position:absolute;top:8px;left:8px;right:8px;height:calc(19% - 12px);z-index:4;display:flex;border-radius:12px;overflow:hidden;border:1px solid var(--line2);box-shadow:0 4px 14px #1e1f2226;background:#ECEEF1;transition:opacity .2s;}
+  .m-inset{position:absolute;top:8px;left:8px;right:8px;height:calc(19% - 12px);z-index:4;display:flex;border-radius:12px;overflow:hidden;background:#ECEEF1;transition:opacity .2s;}
   .m-inset .mi-half{flex:1 1 50%;min-width:0;height:100%;}
-  .m-inset .mi-half+.mi-half{border-left:2px solid #ffffffcc;}
+  .m-inset .mi-half+.mi-half{border-left:8px solid var(--accent);}
   .m-sub2{position:absolute;left:8px;right:8px;bottom:8px;max-height:58%;z-index:4;box-sizing:border-box;overflow-y:auto;background:#ffffffe8;border:1px solid var(--line2);border-radius:12px;padding:6px 9px;box-shadow:0 4px 14px #1e1f221f;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}   /* content-sized: every sub-action visible, the image yields */
   .m-sub2 .s2row{display:flex;gap:7px;align-items:flex-start;font-size:16px;color:var(--ink);line-height:1.35;padding:3px 0;}
   .m-sub2 .s2row .n{color:var(--accent2);font-family:var(--mono);font-size:15px;font-weight:700;flex-shrink:0;margin-top:1px;}
@@ -597,15 +597,15 @@
   .m-sub2 .s2new{margin-top:5px;background:var(--panel);border-color:var(--line2);color:var(--ink);font-size:15px;}
   .s2x{border:none;background:none;color:var(--faint);font-size:19px;line-height:1;padding:0 6px;margin-left:auto;flex-shrink:0;cursor:pointer;}
   .s2x:active{color:var(--bad);}
-  /* accent demarcation: every segregated app window carries the theme blue */
-  .m-inset,.m-nin,.m-sub2,.m-sec,.m-ur .m-chip,.m-in,.m-card{border-color:var(--accent);}
-  .m-hpage img{box-shadow:0 0 0 1.5px var(--accent);}
-  .m-head{border-bottom:1px solid var(--accent);}
+  /* accent demarcation: the blue background is the grout; windows sit clean on it */
+  .m-nin,.m-sub2,.m-sec,.m-ur .m-chip,.m-in,.m-card{border-color:var(--accent);}
+  .m-body{background:var(--accent);}
+  .m-head{border-bottom:4px solid var(--accent);}
   /* the desktop's segregated windows carry the same accent demarcation */
-  header{border-bottom:1.5px solid var(--accent);}
-  .actpanel{border-right:1.5px solid var(--accent);}
-  .rtabs{border-left:1.5px solid var(--accent);border-bottom:1.5px solid var(--accent);}
-  .gallery,.imgpanel{border-left:1.5px solid var(--accent);}
+  header{border-bottom:4px solid var(--accent);}
+  .actpanel{border-right:4px solid var(--accent);}
+  .rtabs{border-left:4px solid var(--accent);border-bottom:4px solid var(--accent);}
+  .gallery,.imgpanel{border-left:4px solid var(--accent);}
   .datebar{border-color:var(--accent);}
   .m-ub{min-width:38px;padding:7px 8px;font-size:14px;line-height:1;flex-shrink:0;}
   .m-ub.off{opacity:.3;pointer-events:none;}
@@ -3804,7 +3804,7 @@ function mShowDetail(ai,keepScroll){
   /* Page bands: mini-map full-width on top (28%), the image band below it down to the bottom
      third, sub-actions filling the bottom third. Inside the band the image sits top-aligned with
      the Image note input on its bottom edge and the caption just underneath. */
-  if(!insEl&&hsEl) hsEl.style.top="0";   // no map in the pack: the image band starts at the top
+  if(!insEl&&hsEl) hsEl.style.top="8px";   // no map in the pack: the image window starts at the top
   const posOverlays=()=>{ if(!hsEl) return;
     const W=hsEl.clientWidth,H=hsEl.clientHeight;
     const geom=img=>{ if(img&&img.naturalWidth&&img.naturalHeight){ const sc=Math.min(W/img.naturalWidth,H/img.naturalHeight);
