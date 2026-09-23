@@ -575,7 +575,12 @@
   .m-nbtns button{box-sizing:border-box;min-height:40px;border-radius:10px;font:inherit;font-weight:600;cursor:pointer;}
   .m-nok{flex:1;border:none;background:var(--accent);color:#fff;}
   .m-ncl{width:48px;border:1px solid #4a4a48;background:#232322;color:#E3E5E8;}
+  .m-ub{min-width:38px;padding:7px 8px;font-size:14px;line-height:1;flex-shrink:0;}
+  .m-ub.off{opacity:.3;pointer-events:none;}
+  .m-sted{border:none;background:none;color:#9A9DA5;font-size:14px;padding:4px 6px;flex-shrink:0;cursor:pointer;}
   .m-fhead{position:absolute;top:0;left:0;right:0;z-index:600;display:flex;align-items:center;gap:8px;padding:8px 14px 18px;background:linear-gradient(rgba(20,20,19,.75),rgba(20,20,19,0));pointer-events:none;}
+  .m-fhead .m-chip{pointer-events:auto;background:#141413cc;border-color:#4a4a48;color:#E3E5E8;}
+  .m-fhead input.m-in{pointer-events:auto;flex:1;min-width:0;}
   .m-fhead .m-back{pointer-events:auto;color:#fff;width:44px;height:44px;margin-left:-10px;border:none;background:none;font-size:26px;}
   .m-fht{color:#fff;font-weight:600;font-size:15px;text-shadow:0 1px 4px #000;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .m-pdet{background:#F2F3F5;overflow-y:auto;-webkit-overflow-scrolling:touch;}
@@ -3287,7 +3292,60 @@ function mCh(id){ const p=mPend(); return (p.changes||{})[id]||{}; }
 function mSetCh(id,patch){ const p=mPend(); p.changes=p.changes||{}; p.changes[id]=Object.assign({},p.changes[id]||{},patch); mPendSave(p); }
 function mPn(pid){ const p=mPend(); const e=(p.pnotes||{})[String(pid)]; return e?e.t:null; }   // pending photo (field) note on this phone
 function mSetPn(pid,name,v){ const p=mPend(); p.pnotes=p.pnotes||{}; if(v) p.pnotes[String(pid)]={n:name||"",t:v}; else delete p.pnotes[String(pid)]; mPendSave(p); }
-function mChCount(){ const p=mPend(); return Object.keys(p.changes||{}).length+Object.keys(p.pnotes||{}).length; }
+function mChCount(){ const p=mPend(); return Object.keys(p.changes||{}).length+Object.keys(p.pnotes||{}).length+(p.newActs||[]).length; }
+/* Field editing: the phone can add actions, add sub-actions, and edit titles/sub-action text
+   (no deleting). Everything lands in pmField and syncs back via changes.json:
+   changes[id] gains title / stepEdits {idx:text} / newSteps [{t,d}]; newActs holds actions
+   created on the phone. Every mutation is undo/redo-able via whole-state snapshots. */
+let mUndoStack=[],mRedoStack=[],mRerender=null;
+function mMutate(fn){ const before=localStorage.getItem("pmField")||"{}"; fn(); mUndoStack.push(before); if(mUndoStack.length>100) mUndoStack.shift(); mRedoStack.length=0; }
+function mUndo(){ if(!mUndoStack.length) return; mRedoStack.push(localStorage.getItem("pmField")||"{}"); try{ localStorage.setItem("pmField",mUndoStack.pop()); }catch(e){} if(mRerender) mRerender(); }
+function mRedo(){ if(!mRedoStack.length) return; mUndoStack.push(localStorage.getItem("pmField")||"{}"); try{ localStorage.setItem("pmField",mRedoStack.pop()); }catch(e){} if(mRerender) mRerender(); }
+function mUndoHtml(){ return '<button class="m-chip m-ub'+(mUndoStack.length?'':' off')+'" id="mUndoB" type="button" aria-label="Undo">↺</button><button class="m-chip m-ub'+(mRedoStack.length?'':' off')+'" id="mRedoB" type="button" aria-label="Redo">↻</button>'; }
+function mWireUndo(){ const u=document.getElementById("mUndoB"),r=document.getElementById("mRedoB");
+  if(u) u.addEventListener("click",e=>{ e.stopPropagation(); mUndo(); });
+  if(r) r.addEventListener("click",e=>{ e.stopPropagation(); mRedo(); }); }
+function mNewActs(){ return mPend().newActs||[]; }
+function mIsNew(k){ return typeof k==="string"&&k.charAt(0)==="n"; }
+function mActAt(ai){ if(mIsNew(ai)){ const x=mNewActs()[+ai.slice(1)]; return x?{id:ai,_new:true,_ni:+ai.slice(1),text:x.text,steps:x.steps||[],photos:[],done:!!x.done}:null; } return (mPack.actions||[])[ai]; }
+function mTitle(a){ if(a._new) return a.text; const c=mCh(a.id); return (c.title&&c.title.trim())?c.title:a.text; }
+function mSteps(a){   // pack sub-actions (with pending text edits) + phone-added ones
+  if(a._new) return (a.steps||[]).map((s,i)=>({t:s.t,d:!!s.d,kind:"new",i}));
+  const c=mCh(a.id);
+  const base=(a.steps||[]).map((s,i)=>({t:(c.stepEdits&&c.stepEdits[String(i)]!=null)?c.stepEdits[String(i)]:s.t,d:mStepDone(a,i),kind:"pack",i}));
+  return base.concat((c.newSteps||[]).map((s,i)=>({t:s.t,d:!!s.d,kind:"new",i})));
+}
+function mEditNewAct(ni,fn){ mMutate(()=>{ const p=mPend(); const x=(p.newActs||[])[ni]; if(!x) return; fn(x); mPendSave(p); }); }
+function mToggleStep(a,s){
+  if(a._new){ mEditNewAct(a._ni,x=>{ if(x.steps&&x.steps[s.i]) x.steps[s.i].d=!x.steps[s.i].d; }); return; }
+  if(s.kind==="pack") mMutate(()=>mSetCh(a.id,{steps:Object.assign({},mCh(a.id).steps||{},{[String(s.i)]:!s.d})}));
+  else mMutate(()=>{ const ns=(mCh(a.id).newSteps||[]).slice(); if(ns[s.i]) ns[s.i]=Object.assign({},ns[s.i],{d:!s.d}); mSetCh(a.id,{newSteps:ns}); });
+}
+function mEditStep(a,s,t){
+  if(a._new){ mEditNewAct(a._ni,x=>{ if(x.steps&&x.steps[s.i]) x.steps[s.i].t=t; }); return; }
+  if(s.kind==="pack") mMutate(()=>mSetCh(a.id,{stepEdits:Object.assign({},mCh(a.id).stepEdits||{},{[String(s.i)]:t})}));
+  else mMutate(()=>{ const ns=(mCh(a.id).newSteps||[]).slice(); if(ns[s.i]) ns[s.i]=Object.assign({},ns[s.i],{t:t}); mSetCh(a.id,{newSteps:ns}); });
+}
+function mAddStep(a,t){
+  if(a._new){ mEditNewAct(a._ni,x=>{ x.steps=x.steps||[]; x.steps.push({t:t,d:false}); }); return; }
+  mMutate(()=>mSetCh(a.id,{newSteps:(mCh(a.id).newSteps||[]).concat([{t:t,d:false}])}));
+}
+function mSetTitle(a,t){
+  if(a._new){ mEditNewAct(a._ni,x=>{ x.text=t; }); return; }
+  mMutate(()=>mSetCh(a.id,{title:(t===a.text?undefined:t)}));
+}
+/* generic in-place text edit: swaps an element for an input, keyboard opens in the current view */
+function mInline(el,val,onCommit){
+  if(!el) return;
+  el.style.display="none";
+  const inp=document.createElement("input"); inp.type="text"; inp.className="m-in"; inp.value=val;
+  el.parentElement.insertBefore(inp,el);
+  let fin=false; const end=c=>{ if(fin) return; fin=true; onCommit(c?inp.value:null); };
+  inp.addEventListener("keydown",e=>{ e.stopPropagation(); if(e.key==="Enter") end(true); else if(e.key==="Escape") end(false); });
+  inp.addEventListener("blur",()=>end(true));
+  ["click","touchstart","pointerdown"].forEach(ev=>inp.addEventListener(ev,e=>e.stopPropagation()));
+  inp.focus(); inp.select();
+}
 async function ghGetRaw(cfg,path){
   const r=await fetch("https://api.github.com/repos/"+cfg.repo+"/contents/"+path+"?t="+Date.now(),{headers:Object.assign(ghHeaders(cfg.token),{Accept:"application/vnd.github.raw+json"})});
   if(r.status===404) return null;
@@ -3302,8 +3360,8 @@ function mDist(a){   // metres from the phone to the nearest of the action's pho
   return best;
 }
 function mFmtD(m){ return m==null?"":(m>=1000?(m/1000).toFixed(1)+" km":Math.round(m)+" m"); }
-function mDone(a){ const c=mCh(a.id); return c.done===true; }
-function mStepDone(a,i){ const c=mCh(a.id); return (c.steps&&(String(i) in c.steps))?!!c.steps[String(i)]:!!(a.steps[i]&&a.steps[i].d); }
+function mDone(a){ if(a._new){ const x=mNewActs()[a._ni]; return !!(x&&x.done); } const c=mCh(a.id); return c.done===true; }
+function mStepDone(a,i){ if(a._new){ const x=mNewActs()[a._ni]; return !!(x&&x.steps&&x.steps[i]&&x.steps[i].d); } const c=mCh(a.id); return (c.steps&&(String(i) in c.steps))?!!c.steps[String(i)]:!!(a.steps[i]&&a.steps[i].d); }
 function mScr(html){ [mMiniMap,mInsetMap].forEach(m=>{ if(m){ try{ m.remove(); }catch(e){} } }); mMiniMap=null; mInsetMap=null; mInsetCur=null; document.getElementById("mroot").innerHTML='<div class="m-scr">'+html+'</div>'; }
 function mShowSetup(msg){
   const g=ghCfg();
@@ -3334,45 +3392,60 @@ async function mLoadPack(){
 }
 function mShowList(){
   if(!mPack){ mLoadPack(); return; }
-  const acts=(mPack.actions||[]).slice().sort((a,b)=>{ const da=mDist(a),db=mDist(b); if(da==null&&db==null)return 0; if(da==null)return 1; if(db==null)return -1; return da-db; });
+  mRerender=mShowList;
+  const packActs=(mPack.actions||[]).slice().sort((a,b)=>{ const da=mDist(a),db=mDist(b); if(da==null&&db==null)return 0; if(da==null)return 1; if(db==null)return -1; return da-db; });
+  const news=mNewActs().map((x,i)=>({id:"n"+i,_new:true,_ni:i,text:x.text,steps:x.steps||[],photos:[],done:!!x.done}));
+  const acts=news.concat(packActs);   // phone-created actions sit on top until they're merged on desktop
   const n=mChCount();
-  mScr('<div class="m-head"><div style="flex:1;display:flex;flex-direction:column;gap:2px;"><div class="m-brand">Photo<span>Map</span> Field</div>'
+  mScr('<div class="m-head"><div style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0;"><div class="m-brand">Photo<span>Map</span> Field</div>'
     +'<div class="m-sub">'+esc(mPack.project||"")+' · exported '+(mPack.exportedAt?new Date(mPack.exportedAt).toLocaleString(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"")+'</div></div>'
-    +'<button class="m-chip" id="mRefresh" type="button">REFRESH</button></div>'
+    +mUndoHtml()+'<button class="m-chip" id="mRefresh" type="button">REFRESH</button></div>'
     +'<div class="m-body" id="mList">'
-    +(acts.length?acts.map((a,i)=>{
-      const done=mDone(a), sd=(a.steps||[]).filter((s,j)=>mStepDone(a,j)).length, st=(a.steps||[]).length, d=mDist(a);
-      return '<div class="m-card'+(done?' done':'')+'" data-i="'+i+'"><div class="m-chk'+(done?' on':'')+'">'+(done?'✓':'')+'</div>'
-        +'<div class="m-cbody"><div class="m-ct"'+(done?' style="text-decoration:line-through;color:var(--muted)"':'')+'>'+esc(a.text)+'</div>'
-        +'<div class="m-cm"><b>'+(a.photos||[]).length+' photo'+((a.photos||[]).length===1?'':'s')+'</b>'+(st?'<span>steps '+sd+'/'+st+'</span>':'')+(d!=null?'<span>'+mFmtD(d)+' away</span>':'')+'</div></div>'
+    +'<input class="m-in" id="mNewAct" placeholder="+ New action" autocomplete="off" style="margin-bottom:2px;" />'
+    +(acts.length?acts.map(a=>{
+      const done=mDone(a), rows=mSteps(a), sd=rows.filter(s=>s.d).length, st=rows.length, d=mDist(a);
+      const k=a._new?a.id:String((mPack.actions||[]).indexOf(a));
+      return '<div class="m-card'+(done?' done':'')+'" data-k="'+k+'"><div class="m-chk'+(done?' on':'')+'">'+(done?'✓':'')+'</div>'
+        +'<div class="m-cbody"><div class="m-ct"'+(done?' style="text-decoration:line-through;color:var(--muted)"':'')+'>'+esc(mTitle(a))+'</div>'
+        +'<div class="m-cm">'+(a._new?'<span style="color:var(--accent2);font-weight:600;">NEW · on phone</span>':'<b>'+(a.photos||[]).length+' photo'+((a.photos||[]).length===1?'':'s')+'</b>')
+        +(st?'<span>steps '+sd+'/'+st+'</span>':'')+(d!=null?'<span>'+mFmtD(d)+' away</span>':'')+'</div></div>'
         +'<div style="align-self:center;color:var(--line2);font-size:22px;">›</div></div>';
     }).join(''):'<div class="m-note" style="padding-top:40px">No open actions in the pack.</div>')
     +'</div>'
     +'<div class="m-foot"><button class="m-btn" id="mSend"'+(n?'':' disabled')+'>Send changes back ('+n+')</button>'
-    +'<div class="m-note" id="mSendNote">'+(n?'ticks + notes waiting to sync':'no unsent changes')+'</div></div>');
+    +'<div class="m-note" id="mSendNote">'+(n?'edits waiting to sync':'no unsent changes')+'</div></div>');
   document.getElementById("mRefresh").addEventListener("click",mLoadPack);
   document.getElementById("mSend").addEventListener("click",mSendChanges);
-  document.querySelectorAll("#mList .m-card").forEach(el=>el.addEventListener("click",()=>{ const a=acts[Number(el.dataset.i)]; mShowDetail((mPack.actions||[]).indexOf(a)); }));
+  mWireUndo();
+  document.getElementById("mNewAct").addEventListener("keydown",e=>{
+    e.stopPropagation(); if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return;
+    mMutate(()=>{ const p=mPend(); p.newActs=(p.newActs||[]).concat([{text:v,steps:[],done:false}]); mPendSave(p); });
+    mShowList();
+  });
+  document.querySelectorAll("#mList .m-card").forEach(el=>el.addEventListener("click",()=>{ const k=el.dataset.k; mShowDetail(mIsNew(k)?k:Number(k)); }));
 }
 async function mSendChanges(){
   const cfg=ghCfg(), note=document.getElementById("mSendNote"), btn=document.getElementById("mSend");
   const p=mPend(); if(!mChCount()) return;
   btn.disabled=true; note.textContent="Sending…";
   try{
-    await ghPutFile(cfg,"changes.json",JSON.stringify({v:2,updatedAt:new Date().toISOString(),changes:p.changes||{},photoNotes:p.pnotes||{}}),"Field changes from phone");
+    await ghPutFile(cfg,"changes.json",JSON.stringify({v:2,updatedAt:new Date().toISOString(),changes:p.changes||{},photoNotes:p.pnotes||{},
+      newActs:(p.newActs||[]).map(x=>({text:x.text,steps:(x.steps||[]).map(s=>({t:s.t,d:!!s.d})),done:!!x.done,doneAt:x.doneAt||null}))}),"Field changes from phone");
     p.sentAt=Date.now(); mPendSave(p);
     note.textContent="✓ Sent — merge on desktop when you're back"; btn.disabled=false;
   }catch(err){ note.textContent="Failed: "+(err&&err.message||err); btn.disabled=false; }
 }
 function mShowDetail(ai,keepScroll){
-  const a=(mPack.actions||[])[ai]; if(!a){ mShowList(); return; }
+  const a=mActAt(ai); if(!a){ mShowList(); return; }
+  mRerender=()=>{ const sc=document.getElementById("mSnap"); mShowDetail(ai,sc?sc.scrollTop:null); };
   const done=mDone(a);
   const photos=(a.photos||[]), hasMap=photos.some(p=>p.lat!=null);
   /* Snapchat-style vertical pager: MAP on top, full-screen PHOTOS (landing), DETAILS below —
      one continuous scroll with gentle (proximity) locking. */
   mScr('<div class="m-fhead"><button class="m-back" id="mBack" aria-label="Back">‹</button>'
-    +'<div class="m-fht">'+esc(a.text)+'</div>'
-    +'<span class="m-chip" style="pointer-events:none;background:#141413cc;border-color:#4a4a48;color:'+(done?'#3BA55C':'#E3E5E8')+';">'+(done?'DONE':'OPEN')+'</span></div>'
+    +'<div class="m-fht" id="mFht">'+esc(mTitle(a))+'</div>'
+    +'<button class="m-chip m-ub" id="mTedit" type="button" aria-label="Edit title">✎</button>'+mUndoHtml()
+    +'<span class="m-chip" style="pointer-events:none;background:#141413cc;border-color:#4a4a48;color:'+(done?'#3BA55C':(a._new?'var(--accent2)':'#E3E5E8'))+';">'+(done?'DONE':(a._new?'NEW':'OPEN'))+'</span></div>'
     +'<div class="m-snap" id="mSnap">'
     +(hasMap?'<section class="m-page"><div id="mMap" style="position:absolute;inset:0;"></div><div class="m-cue">▾ swipe up for photos · tap a dot to jump to its photo</div></section>':'')
     +(photos.length?'<section class="m-page m-pphoto"><div class="m-hsnap" id="mHsnap">'
@@ -3381,20 +3454,37 @@ function mShowDetail(ai,keepScroll){
         +'<div class="m-pcap">'+esc(p.name||"")+' · '+(i+1)+'/'+photos.length+' ▸ · details ▴</div></div>').join('')
       +'</div>'+(hasMap?'<div class="m-inset" id="mInset"></div>':'')+'</section>':'')
     +'<section class="m-page m-pdet"><div class="m-body" style="height:100%;box-sizing:border-box;padding-top:70px;">'
-    +((a.steps||[]).length?'<div class="m-sec"><div class="m-lab">SUB-ACTIONS</div>'+(a.steps||[]).map((s,i)=>{
-        const sd=mStepDone(a,i);
-        return '<div class="m-strow'+(sd?' done':'')+'" data-si="'+i+'"><div class="m-chk'+(sd?' on':'')+'">'+(sd?'✓':'')+'</div><div class="t"><span style="color:var(--accent2);font-family:var(--mono);font-size:11px;">'+(i+1)+'.</span> '+esc(s.t)+'</div></div>';
-      }).join('')+'</div>':'')
+    +'<div class="m-sec"><div class="m-lab">SUB-ACTIONS</div>'+mSteps(a).map((s,i)=>
+        '<div class="m-strow'+(s.d?' done':'')+'" data-si="'+i+'"><div class="m-chk'+(s.d?' on':'')+'">'+(s.d?'✓':'')+'</div><div class="t"><span style="color:var(--accent2);font-family:var(--mono);font-size:11px;">'+(i+1)+'.</span> <span class="m-stt">'+esc(s.t)+'</span></div><button class="m-sted" type="button" aria-label="Edit sub-action">✎</button></div>'
+      ).join('')
+    +'<input class="m-in" id="mStNew" placeholder="+ sub-action" autocomplete="off" style="margin-top:4px;" /></div>'
     +'<button class="m-btn '+(done?'ghost':'green')+'" id="mDoneBtn">'+(done?'Reopen action':'Mark action complete')+'</button>'
     +'<button class="m-btn ghost" id="mAllBtn">All actions</button>'
     +'</div></section>'
     +'</div>');
   document.getElementById("mBack").addEventListener("click",mShowList);
   document.getElementById("mAllBtn").addEventListener("click",mShowList);
+  mWireUndo();
   const snap=document.getElementById("mSnap");
-  document.getElementById("mDoneBtn").addEventListener("click",()=>{ mSetCh(a.id,{done:!done,doneAt:Date.now()}); mShowDetail(ai,snap.scrollTop); });
+  const rer=()=>mShowDetail(ai,snap.scrollTop);
+  document.getElementById("mDoneBtn").addEventListener("click",()=>{
+    if(a._new) mEditNewAct(a._ni,x=>{ x.done=!done; x.doneAt=Date.now(); });
+    else mMutate(()=>mSetCh(a.id,{done:!done,doneAt:Date.now()}));
+    rer(); });
+  document.getElementById("mTedit").addEventListener("click",e=>{ e.stopPropagation();
+    mInline(document.getElementById("mFht"),mTitle(a),v=>{ if(v!=null&&v.trim()&&v.trim()!==mTitle(a)) mSetTitle(a,v.trim()); rer(); }); });
   document.querySelectorAll(".m-nbar").forEach(el=>el.addEventListener("click",e=>{ e.stopPropagation(); mInlineNote(photos[Number(el.dataset.pi)],el); }));
-  document.querySelectorAll(".m-strow").forEach(el=>el.addEventListener("click",()=>{ const i=Number(el.dataset.si); mSetCh(a.id,{steps:Object.assign({},mCh(a.id).steps||{},{[String(i)]:!mStepDone(a,i)})}); mShowDetail(ai,snap.scrollTop); }));
+  const rows=mSteps(a);
+  document.querySelectorAll(".m-strow").forEach(el=>{
+    const s=rows[Number(el.dataset.si)]; if(!s) return;
+    el.addEventListener("click",()=>{ mToggleStep(a,s); rer(); });
+    el.querySelector(".m-sted").addEventListener("click",e=>{ e.stopPropagation();
+      mInline(el.querySelector(".m-stt"),s.t,v=>{ if(v!=null&&v.trim()&&v.trim()!==s.t) mEditStep(a,s,v.trim()); rer(); }); });
+  });
+  document.getElementById("mStNew").addEventListener("keydown",e=>{
+    e.stopPropagation(); if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return;
+    mAddStep(a,v); rer(); });
+  ["click","touchstart","pointerdown"].forEach(ev=>document.getElementById("mStNew").addEventListener(ev,e=>e.stopPropagation()));
   const mapEl=document.getElementById("mMap");
   if(mapEl){
     const pts=photos.filter(p=>p.lat!=null);
@@ -3451,7 +3541,7 @@ function mInlineNote(p,bar){
   ["click","touchstart","pointerdown"].forEach(ev=>box.addEventListener(ev,e=>e.stopPropagation()));
   const ta=box.querySelector(".m-nta"); ta.value=mPn(p.id)||"";
   const close=()=>{ box.remove(); bar.style.display=""; };
-  box.querySelector(".m-nok").addEventListener("click",()=>{ mSetPn(p.id,p.name||"",ta.value.trim()); bar.innerHTML=mNbarHtml(p); close(); });
+  box.querySelector(".m-nok").addEventListener("click",()=>{ mMutate(()=>mSetPn(p.id,p.name||"",ta.value.trim())); bar.innerHTML=mNbarHtml(p); close(); });
   box.querySelector(".m-ncl").addEventListener("click",close);
   ta.focus();
 }
@@ -3477,20 +3567,31 @@ async function checkFieldChanges(){
   try{
     const text=await ghGetRaw(cfg,"changes.json"); if(!text) return;
     const data=JSON.parse(text); const ch=data&&data.changes||{}; const pnCh=data&&data.photoNotes||{};
+    const nActs=Array.isArray(data.newActs)?data.newActs:[];
     const ids=Object.keys(ch), pids=Object.keys(pnCh);
-    if(!ids.length&&!pids.length) return;
+    if(!ids.length&&!pids.length&&!nActs.length) return;
     let merged=""; try{ merged=localStorage.getItem("pmMergedChanges")||""; }catch(e){}
     if(data.updatedAt&&data.updatedAt===merged) return;   // already merged this batch
-    const bits=[]; if(ids.length) bits.push(ids.length+" action"+(ids.length===1?"":"s")); if(pids.length) bits.push(pids.length+" photo note"+(pids.length===1?"":"s"));
+    const bits=[]; if(ids.length) bits.push(ids.length+" action"+(ids.length===1?"":"s")); if(pids.length) bits.push(pids.length+" photo note"+(pids.length===1?"":"s")); if(nActs.length) bits.push(nActs.length+" new action"+(nActs.length===1?"":"s"));
     showBanner("Field changes from the phone — <b>"+bits.join(" + ")+"</b>. Click to merge them into this project.",async()=>{
       hideBanner();
       for(const id of ids){
         const a=actById(+id); if(!a) continue;
         const before=actState(a); const c=ch[id];
+        if(typeof c.title==="string"&&c.title.trim()) a.text=c.title.trim();
+        if(c.stepEdits) for(const k of Object.keys(c.stepEdits)){ const i=+k, t=String(c.stepEdits[k]||"").trim(); if(t&&a.steps&&a.steps[i]) a.steps[i].t=t; }
         if(c.steps) for(const k of Object.keys(c.steps)){ const i=+k; if(a.steps&&a.steps[i]) a.steps[i].d=!!c.steps[k]; }
+        if(Array.isArray(c.newSteps)) for(const s of c.newSteps){ const t=String(s&&s.t||"").trim(); if(t){ if(!Array.isArray(a.steps)) a.steps=[]; a.steps.push({t,d:!!s.d}); } }
         if(c.done===true&&!a.done){ a.done=true; a.doneAt=c.doneAt||Date.now(); }
         if(c.done===false&&a.done){ a.done=false; a.doneAt=null; }
         recordActEdit(a,before);
+      }
+      for(const na of nActs){   // actions created on the phone: real actions here, each its own undo step
+        const a2=createAction(String(na&&na.text||"").trim(),null); if(!a2) continue;
+        const b2=actState(a2);
+        a2.steps=(na.steps||[]).map(s=>({t:String(s&&s.t||"").trim(),d:!!(s&&s.d)})).filter(s=>s.t);
+        if(na.done){ a2.done=true; a2.doneAt=na.doneAt||Date.now(); }
+        recordActEdit(a2,b2);
       }
       const day=new Date(Date.parse(data.updatedAt||"")||Date.now()).toLocaleDateString(undefined,{day:"numeric",month:"short"});
       const items=[];
@@ -3504,8 +3605,8 @@ async function checkFieldChanges(){
       if(items.length) pushUndo({items});
       afterFolderChange();
       try{ localStorage.setItem("pmMergedChanges",data.updatedAt||String(Date.now())); }catch(e){}
-      ghPutFile(cfg,"changes.json",JSON.stringify({v:2,changes:{},photoNotes:{},clearedAt:new Date().toISOString()}),"Field changes merged on desktop").catch(()=>{});
-      const n=ids.length+pids.length;
+      ghPutFile(cfg,"changes.json",JSON.stringify({v:2,changes:{},photoNotes:{},newActs:[],clearedAt:new Date().toISOString()}),"Field changes merged on desktop").catch(()=>{});
+      const n=ids.length+pids.length+nActs.length;
       loadNote("Merged "+n+" field change"+(n===1?"":"s")+" ✓"); setTimeout(()=>loadNote(""),3000);
     });
   }catch(e){ console.warn("field-changes check failed",e); }
