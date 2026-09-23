@@ -625,9 +625,11 @@
   .act-list{gap:0;padding:0;background:var(--panel);}
   .act-row{border:4px solid var(--accent);border-radius:0;margin-top:-4px;}   /* shares its top line with the input / previous tile */
   .act-cover{border-radius:0;border-left:4px solid var(--accent);margin:-8px -9px -8px 4px;}
-  /* gallery: cards on an accent grid (the grid only spans its rows, no dead field) */
-  .grid{gap:4px;background:var(--accent);padding:4px;border:0;}
-  .card{border:none;border-radius:0;}
+  /* gallery: each card carries its own 4px ring — rings overlap in the gaps into single rules,
+     and empty grid cells stay white (no dead blue field) */
+  .grid{gap:4px;background:transparent;padding:4px;border:0;}
+  .card{border:none;border-radius:0;box-shadow:0 0 0 4px var(--accent);}
+  .card:hover{box-shadow:0 0 0 4px var(--accent),0 6px 16px #1e1f2214;}
   .card .thumb,.card img{border-radius:0;}
   .rtab{border-radius:0 !important;border:4px solid var(--accent);background:var(--panel);color:var(--ink);}
   .rtab+.rtab{margin-left:-4px;}
