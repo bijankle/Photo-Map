@@ -555,6 +555,10 @@
   .m-page{position:relative;height:100%;scroll-snap-align:start;overflow:hidden;}
   .m-pphoto{background:#141413;display:flex;align-items:center;justify-content:center;}
   .m-pphoto img{width:100%;height:100%;object-fit:contain;}
+  .m-hsnap{position:absolute;inset:0;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  .m-hsnap::-webkit-scrollbar{display:none;}
+  .m-hpage{position:relative;flex:0 0 100%;height:100%;scroll-snap-align:start;display:flex;align-items:center;justify-content:center;}
+  .m-hpage img{width:100%;height:100%;object-fit:contain;}
   .m-pcap{position:absolute;bottom:12px;left:0;right:0;text-align:center;color:#fff;font-family:var(--mono);font-size:10px;text-shadow:0 1px 4px #000;pointer-events:none;}
   .m-cue{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:10px;color:#fff;text-shadow:0 1px 4px #000;pointer-events:none;z-index:500;}
   .m-fhead{position:absolute;top:0;left:0;right:0;z-index:600;display:flex;align-items:center;gap:8px;padding:8px 14px 18px;background:linear-gradient(rgba(20,20,19,.75),rgba(20,20,19,0));pointer-events:none;}
@@ -3284,9 +3288,11 @@ function mShowDetail(ai,keepScroll){
     +'<div class="m-fht">'+esc(a.text)+'</div>'
     +'<span class="m-chip" style="pointer-events:none;background:#141413cc;border-color:#4a4a48;color:'+(done?'#3BA55C':'#E3E5E8')+';">'+(done?'DONE':'OPEN')+'</span></div>'
     +'<div class="m-snap" id="mSnap">'
-    +(hasMap?'<section class="m-page"><div id="mMap" style="position:absolute;inset:0;"></div><div class="m-cue">▾ swipe up for photos</div></section>':'')
-    +photos.map((p,i)=>'<section class="m-page m-pphoto">'+(p.img?'<img src="'+p.img+'" alt="'+esc(p.name||"photo")+'" />':'')
-      +'<div class="m-pcap">'+esc(p.name||"")+' · '+(i+1)+'/'+photos.length+(i===photos.length-1?' · swipe up for details ▴':'')+'</div></section>').join('')
+    +(hasMap?'<section class="m-page"><div id="mMap" style="position:absolute;inset:0;"></div><div class="m-cue">▾ swipe up for photos · tap a dot to jump to its photo</div></section>':'')
+    +(photos.length?'<section class="m-page m-pphoto"><div class="m-hsnap" id="mHsnap">'
+      +photos.map((p,i)=>'<div class="m-hpage">'+(p.img?'<img src="'+p.img+'" alt="'+esc(p.name||"photo")+'" />':'')
+        +'<div class="m-pcap">'+esc(p.name||"")+' · '+(i+1)+'/'+photos.length+' ▸ · details ▴</div></div>').join('')
+      +'</div></section>':'')
     +'<section class="m-page m-pdet"><div class="m-body" style="height:100%;box-sizing:border-box;padding-top:70px;">'
     +'<div class="m-sec"><div class="m-lab">DESCRIPTION</div><div style="font-size:14px;color:var(--ink);line-height:1.5;white-space:pre-wrap;">'+(a.desc?esc(a.desc):'<span style="color:var(--faint)">—</span>')+'</div></div>'
     +((a.steps||[]).length?'<div class="m-sec"><div class="m-lab">ACTIONS</div>'+(a.steps||[]).map((s,i)=>{
@@ -3310,7 +3316,13 @@ function mShowDetail(ai,keepScroll){
     const pts=photos.filter(p=>p.lat!=null);
     mMiniMap=L.map(mapEl,{zoomControl:false,attributionControl:false,dragging:false,touchZoom:true,scrollWheelZoom:false,tap:false});   // one-finger swipes scroll the pager; two fingers zoom the map
     L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",{subdomains:["mt0","mt1","mt2","mt3"],maxZoom:22,maxNativeZoom:21}).addTo(mMiniMap);
-    for(const p of pts) L.circleMarker([p.lat,p.lng],{radius:9,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.85,className:"hl-dot",interactive:false}).addTo(mMiniMap);
+    photos.forEach((p,i)=>{ if(p.lat==null) return;
+      const tapDot=L.circleMarker([p.lat,p.lng],{radius:18,stroke:false,fill:true,fillOpacity:0}).addTo(mMiniMap);   // finger-sized tap target
+      tapDot.on("click",()=>{ const strip=snap.querySelector(".m-pphoto"), hs=document.getElementById("mHsnap");
+        if(strip) snap.scrollTo({top:strip.offsetTop,behavior:"smooth"});
+        if(hs) setTimeout(()=>hs.scrollTo({left:i*hs.clientWidth,behavior:"smooth"}),80); });
+      L.circleMarker([p.lat,p.lng],{radius:9,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.85,className:"hl-dot",interactive:false}).addTo(mMiniMap);
+    });
     if(mGeo) L.circleMarker([mGeo.lat,mGeo.lng],{radius:7,color:"#ffffff",weight:3,fillColor:"#2D7DFF",fillOpacity:1,interactive:false}).addTo(mMiniMap);
     const bb=L.latLngBounds(pts.map(p=>[p.lat,p.lng])); if(mGeo) bb.extend([mGeo.lat,mGeo.lng]);
     mMiniMap.fitBounds(bb,{padding:[36,36],maxZoom:19});
