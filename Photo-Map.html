@@ -182,8 +182,7 @@
   .ph-load{color:var(--accent);}
   .progress{display:none;}
 
-  .splitter{width:7px;flex:0 0 7px;cursor:col-resize;background:var(--line);position:relative;z-index:3;}
-  .splitter::after{content:"";position:absolute;inset:0 2px;background:var(--line2);border-radius:2px;}
+  .splitter{width:6px;flex:0 0 6px;cursor:col-resize;background:var(--accent);position:relative;z-index:3;}   /* the blue line IS the grip */
   .gallery{width:var(--side-w);flex:0 0 var(--side-w);height:calc(100% - 40px);margin-top:40px;background:var(--panel);display:flex;flex-direction:column;z-index:2;min-width:220px;border-left:1px solid var(--line);}
   .gallery-head{padding:11px 14px 9px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
   .gallery-head .title{font-family:var(--font);font-weight:700;font-size:14px;letter-spacing:.4px;text-transform:uppercase;color:var(--ink);}
@@ -606,9 +605,7 @@
   /* the desktop's segregated windows carry the same accent demarcation */
   header{border-bottom:4px solid var(--accent);}
   body:not(.mobile)::after{content:"";position:fixed;inset:0;border:4px solid var(--accent);pointer-events:none;z-index:9999;}   /* frame around the whole app */
-  .actpanel{border-right:4px solid var(--accent);}
-  .rtabs{border-left:4px solid var(--accent);border-bottom:4px solid var(--accent);}
-  .gallery,.imgpanel{border-left:4px solid var(--accent);}
+  .rtabs{border-bottom:4px solid var(--accent);}
   .datebar{border-color:var(--accent);}
   .m-ub{min-width:38px;padding:7px 8px;font-size:14px;line-height:1;flex-shrink:0;}
   .m-ub.off{opacity:.3;pointer-events:none;}
