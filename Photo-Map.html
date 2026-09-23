@@ -570,7 +570,7 @@
   .m-photo img{flex:1;min-height:0;object-fit:contain;width:100%;}
   .m-err{color:var(--bad);font-size:13px;line-height:1.5;}
   /* snap detail: map / full-screen photos / details, continuous scroll with gentle locking */
-  .m-snap{flex:1;min-height:0;overflow-y:auto;scroll-snap-type:y proximity;-webkit-overflow-scrolling:touch;background:#141413;}
+  .m-snap{flex:1;min-height:0;overflow-y:hidden;background:#141413;}   /* JS pager: TikTok-style one-page-per-swipe */
   .m-page{position:relative;height:100%;scroll-snap-align:start;overflow:hidden;}
   .m-pphoto{background:#141413;display:flex;align-items:center;justify-content:center;}
   .m-pphoto img{width:100%;height:100%;object-fit:contain;}
@@ -3738,6 +3738,7 @@ function mShowDetail(ai,keepScroll){
     ["touchstart","touchmove"].forEach(ev=>sub2.addEventListener(ev,e=>e.stopPropagation(),{passive:true}));
   }
   mWirePinch(hsEl);
+  mWirePager(snap);
   requestAnimationFrame(()=>{   // land on the first photo; the map waits one swipe down
     if(keepScroll!=null){ snap.scrollTop=keepScroll; }
     else { const first=snap.querySelector(".m-pphoto"); if(first) snap.scrollTop=first.offsetTop; }
@@ -3787,6 +3788,55 @@ function mWirePinch(hs){
       if(st.s<=1.04&&st.s!==1){ st.s=1; st.tx=0; st.ty=0; apply(); }
     },{passive:true});
   });
+}
+/* TikTok-style vertical pager: a swipe moves AT MOST one page, however hard you fling. A drag
+   under ~22% of the screen (and no flick) peeks and springs back; past that, or a quick flick,
+   commits to the neighbouring page. Horizontal gestures stay with the photo strip, an inner
+   scroller (the details body) scrolls natively until its edge, and pinch-zoomed photo pans are
+   consumed upstream by the pinch handler. */
+function mWirePager(snap){
+  if(!snap) return;
+  const pages=()=>Array.from(snap.children);
+  let anim=null, g=null;
+  const stopAnim=()=>{ if(anim){ cancelAnimationFrame(anim); anim=null; } };
+  const glide=to=>{ stopAnim(); const from=snap.scrollTop, d=to-from; if(!d) return;
+    const t0=performance.now(), dur=300;
+    const step=t=>{ const k=Math.min(1,(t-t0)/dur); snap.scrollTop=from+d*(1-Math.pow(1-k,3)); anim=(k<1)?requestAnimationFrame(step):null; };
+    anim=requestAnimationFrame(step); };
+  const pageAt=y=>{ const ps=pages(); let best=0,bd=1e9; ps.forEach((p,i)=>{ const d=Math.abs(p.offsetTop-y); if(d<bd){bd=d;best=i;} }); return best; };
+  snap.addEventListener("touchstart",e=>{
+    if(e.touches.length!==1){ g=null; return; }
+    stopAnim();
+    g={y0:e.touches[0].clientY,x0:e.touches[0].clientX,top0:snap.scrollTop,mode:null,applied:false,vel:0,lastY:e.touches[0].clientY,lastT:performance.now(),scroller:null};
+    let n=e.target;   // an inner scrollable (details body) gets first claim on vertical drags
+    while(n&&n!==snap){ const cs=getComputedStyle(n); if(n.scrollHeight>n.clientHeight+2&&(cs.overflowY==="auto"||cs.overflowY==="scroll")){ g.scroller=n; break; } n=n.parentElement; }
+  },{passive:true});
+  snap.addEventListener("touchmove",e=>{
+    if(!g||e.touches.length!==1) return;
+    const y=e.touches[0].clientY,x=e.touches[0].clientX, dy=y-g.y0, dx=x-g.x0;
+    if(!g.mode){ if(Math.abs(dy)<8&&Math.abs(dx)<8) return; g.mode=(Math.abs(dy)>=Math.abs(dx))?"v":"h"; }
+    if(g.mode!=="v") return;   // horizontal: the photo strip scrolls natively
+    if(g.scroller){ const s=g.scroller, up=(y-g.lastY)<0;
+      const can=up?(s.scrollTop+s.clientHeight<s.scrollHeight-1):(s.scrollTop>1);
+      if(can){ g.lastY=y; g.lastT=performance.now(); return; } }   // still native-scrolling inside
+    e.preventDefault();
+    if(!g.applied){ g.applied=true; g.y0=y; g.top0=snap.scrollTop; g.lastY=y; g.lastT=performance.now(); return; }   // re-baseline (smooth handoff from zoomed-pan release too)
+    const now=performance.now();
+    g.vel=(y-g.lastY)/Math.max(1,now-g.lastT); g.lastY=y; g.lastT=now;
+    const H=snap.clientHeight;
+    snap.scrollTop=Math.max(g.top0-H,Math.min(g.top0+H,g.top0-(y-g.y0)));   // 1:1 drag, hard-clamped to the neighbours
+  },{passive:false});
+  snap.addEventListener("touchend",()=>{
+    if(!g) return; const gg=g; g=null;
+    if(gg.mode!=="v"||!gg.applied) return;
+    const H=snap.clientHeight, moved=snap.scrollTop-gg.top0, cur=pageAt(gg.top0);
+    const FLICK=0.5;   // px/ms of finger speed that counts as a committed flick
+    let tgt=cur;
+    if(moved>H*0.22||(-gg.vel>FLICK&&moved>30)) tgt=cur+1;
+    else if(moved<-H*0.22||(gg.vel>FLICK&&moved<-30)) tgt=cur-1;
+    tgt=Math.max(0,Math.min(pages().length-1,tgt));
+    const ps=pages(); if(ps[tgt]) glide(ps[tgt].offsetTop);
+  },{passive:true});
 }
 /* Photo-note editing happens IN PLACE on the photo page: tapping the note bar swaps in a small
    panel with a textarea, the keyboard opens over the photo, and Save/✕ collapse it back. */
