@@ -2716,17 +2716,29 @@ function downloadCurrentView(btn){
     document.body.appendChild(a); a.click(); setTimeout(()=>{ a.remove(); URL.revokeObjectURL(a.href); },500); flashIcon(btn);
   },"image/jpeg",0.95)).catch(()=>alert("No image to download yet."));
 }
+/* Undo/redo must work no matter which control has focus — many inputs stop key bubbling for
+   their own hotkey isolation — so Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z are handled in the CAPTURE
+   phase, ahead of every other handler. One exception: a text box that currently HOLDS text
+   keeps the browser's native typing-undo (the app undo takes over the moment it's empty). */
+document.addEventListener("keydown",e=>{
+  if(!(e.ctrlKey||e.metaKey)) return;
+  const k=(e.key||"").toLowerCase(); if(k!=="z"&&k!=="y") return;
+  const ae=document.activeElement, tg=((ae&&ae.tagName)||"").toLowerCase();
+  const typing=(tg==="textarea"||(tg==="input"&&/^(text|search|url|tel|password|email|number)$/i.test(ae.type||"text")))&&ae.value;
+  if(typing||ae===tbText) return;   // native text undo wins while there's text to un-type
+  e.preventDefault(); e.stopPropagation();
+  const open=lb.classList.contains("open");
+  if(k==="z"&&!e.shiftKey){
+    if(measuring&&measurePts.length){ measurePts.pop(); drawMeasure(); return; }
+    if(open&&draft&&draft.t==="poly"&&draft.p.length){ draft.p.pop(); if(!draft.p.length){ draft=null; polyPrev=null; } redrawMarks(); return; }
+    undoLatest(open); return;
+  }
+  redoLatest(open);
+},true);
 document.addEventListener("keydown",e=>{
   if(document.activeElement===tbText) return;
   if((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==="+"||e.key==="="||e.key==="-"||e.key==="_")){   // Ctrl+Shift+ + / − rotates (− types _ on most layouts)
     if(lb.classList.contains("open")){ e.preventDefault(); rotatePhoto((e.key==="-"||e.key==="_")?-90:90); } return; }
-  if((e.ctrlKey||e.metaKey)&&(e.key==="z"||e.key==="Z")){ e.preventDefault();
-    if(measuring&&measurePts.length){ measurePts.pop(); drawMeasure(); return; }
-    const open=lb.classList.contains("open");
-    if(open&&draft&&draft.t==="poly"&&draft.p.length){ draft.p.pop(); if(!draft.p.length){ draft=null; polyPrev=null; } redrawMarks(); return; }
-    if(e.shiftKey){ redoLatest(open); return; }
-    undoLatest(open); return; }
-  if((e.ctrlKey||e.metaKey)&&(e.key==="y"||e.key==="Y")){ e.preventDefault(); redoLatest(lb.classList.contains("open")); return; }
   const tag=((e.target&&e.target.tagName)||"").toLowerCase();
   if(tag==="input"||tag==="select"||tag==="textarea") return;
   if(document.activeElement===tbText) return;
