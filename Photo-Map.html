@@ -590,6 +590,10 @@
   .m-sub2 .k2.on{background:#3BA55C;border-color:#3BA55C;}
   .m-sub2 .s2row .t{min-width:0;}
   .m-sub2 .s2row.done .t{text-decoration:line-through;color:#9A9DA5;}
+  .m-sub2 .s2row.s2drag{opacity:.55;}
+  .m-sub2 .s2row.s2ins{box-shadow:0 -2px 0 var(--accent);}
+  .m-sub2 .s2row.s2insb{box-shadow:0 2px 0 var(--accent);}
+  .m-sub2 .s2new{margin-top:5px;background:#232322;border-color:#4a4a48;color:#E3E5E8;font-size:15px;}
   .m-nedit{position:absolute;left:14px;right:14px;bottom:34px;z-index:6;display:flex;flex-direction:column;gap:8px;box-sizing:border-box;background:#141413ee;border:1px solid #4a4a48;border-radius:12px;padding:10px;}
   .m-nprev{max-height:80px;overflow-y:auto;font-size:12px;color:#C8CAD0;line-height:1.45;white-space:pre-wrap;}
   .m-nta{box-sizing:border-box;width:100%;min-height:56px;font:inherit;font-size:14px;color:#E3E5E8;background:#232322;border:1px solid #4a4a48;border-radius:10px;padding:8px 10px;outline:none;resize:none;}
@@ -3503,11 +3507,25 @@ function mNewActs(){ return mPend().newActs||[]; }
 function mIsNew(k){ return typeof k==="string"&&k.charAt(0)==="n"; }
 function mActAt(ai){ if(mIsNew(ai)){ const x=mNewActs()[+ai.slice(1)]; return x?{id:ai,_new:true,_ni:+ai.slice(1),text:x.text,steps:x.steps||[],photos:[],done:!!x.done}:null; } return (mPack.actions||[])[ai]; }
 function mTitle(a){ if(a._new) return a.text; const c=mCh(a.id); return (c.title&&c.title.trim())?c.title:a.text; }
-function mSteps(a){   // pack sub-actions (with pending text edits) + phone-added ones
+function mSteps(a){   // pack sub-actions (with pending text edits) + phone-added ones, in pending order
   if(a._new) return (a.steps||[]).map((s,i)=>({t:s.t,d:!!s.d,kind:"new",i}));
   const c=mCh(a.id);
-  const base=(a.steps||[]).map((s,i)=>({t:(c.stepEdits&&c.stepEdits[String(i)]!=null)?c.stepEdits[String(i)]:s.t,d:mStepDone(a,i),kind:"pack",i}));
-  return base.concat((c.newSteps||[]).map((s,i)=>({t:s.t,d:!!s.d,kind:"new",i})));
+  const base=(a.steps||[]).map((s,i)=>({t:(c.stepEdits&&c.stepEdits[String(i)]!=null)?c.stepEdits[String(i)]:s.t,d:mStepDone(a,i),kind:"pack",i}))
+    .concat((c.newSteps||[]).map((s,i)=>({t:s.t,d:!!s.d,kind:"new",i})));
+  if(Array.isArray(c.stepOrder)){
+    const used=new Set(), out=[];
+    for(const t of c.stepOrder){ const idx=base.findIndex((s,j)=>!used.has(j)&&t&&s.kind===t.k&&s.i===t.i); if(idx>=0){ used.add(idx); out.push(base[idx]); } }
+    base.forEach((s,j)=>{ if(!used.has(j)) out.push(s); });
+    return out;
+  }
+  return base;
+}
+function mReorderStep(a,from,to){
+  if(from===to||from<0||to<0) return;
+  if(a._new){ mEditNewAct(a._ni,x=>{ const mv=x.steps.splice(from,1)[0]; if(mv) x.steps.splice(to,0,mv); }); return; }
+  const toks=mSteps(a).map(s=>({k:s.kind,i:s.i}));
+  const mv=toks.splice(from,1)[0]; if(!mv) return; toks.splice(to,0,mv);
+  mMutate(()=>mSetCh(a.id,{stepOrder:toks}));
 }
 function mEditNewAct(ni,fn){ mMutate(()=>{ const p=mPend(); const x=(p.newActs||[])[ni]; if(!x) return; fn(x); mPendSave(p); }); }
 function mToggleStep(a,s){
@@ -3649,12 +3667,12 @@ function mShowDetail(ai,keepScroll){
         +'<button class="m-nbar" data-pi="'+i+'" type="button">'+mNbarHtml(p)+'</button>'
         +'<div class="m-pcap">'+esc(p.name||"")+' · '+(i+1)+'/'+photos.length+' ▸ · details ▴</div></div>').join('')
       +'</div>'+(hasMap?'<div class="m-inset" id="mInset"></div>':'')
-      +(mSteps(a).length?'<div class="m-sub2" id="mSub2"></div>':'')+'</section>':'')
+      +'<div class="m-sub2" id="mSub2"></div></section>':'')
     +'<section class="m-page m-pdet"><div class="m-body" style="height:100%;box-sizing:border-box;padding-top:70px;">'
-    +'<div class="m-sec"><div class="m-lab">SUB-ACTIONS</div>'+mSteps(a).map((s,i)=>
+    +(!photos.length?'<div class="m-sec"><div class="m-lab">SUB-ACTIONS</div>'+mSteps(a).map((s,i)=>
         '<div class="m-strow'+(s.d?' done':'')+'" data-si="'+i+'"><div class="m-chk'+(s.d?' on':'')+'">'+(s.d?'✓':'')+'</div><div class="t"><span style="color:var(--accent2);font-family:var(--mono);font-size:11px;">'+(i+1)+'.</span> <span class="m-stt">'+esc(s.t)+'</span></div><button class="m-sted" type="button" aria-label="Edit sub-action">✎</button></div>'
       ).join('')
-    +'<input class="m-in" id="mStNew" placeholder="+ sub-action" autocomplete="off" style="margin-top:4px;" /></div>'
+    +'<input class="m-in" id="mStNew" placeholder="+ sub-action" autocomplete="off" style="margin-top:4px;" /></div>':'')
     +'<button class="m-btn '+(done?'ghost':'green')+'" id="mDoneBtn">'+(done?'Reopen action':'Mark action complete')+'</button>'
     +'<button class="m-btn ghost" id="mAllBtn">All actions</button>'
     +'</div></section>'
@@ -3678,10 +3696,13 @@ function mShowDetail(ai,keepScroll){
     el.querySelector(".m-sted").addEventListener("click",e=>{ e.stopPropagation();
       mInline(el.querySelector(".m-stt"),s.t,v=>{ if(v!=null&&v.trim()&&v.trim()!==s.t) mEditStep(a,s,v.trim()); rer(); }); });
   });
-  document.getElementById("mStNew").addEventListener("keydown",e=>{
-    e.stopPropagation(); if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return;
-    mAddStep(a,v); rer(); });
-  ["click","touchstart","pointerdown"].forEach(ev=>document.getElementById("mStNew").addEventListener(ev,e=>e.stopPropagation()));
+  const stNew=document.getElementById("mStNew");
+  if(stNew){   // photo-less actions manage sub-actions from the details page
+    stNew.addEventListener("keydown",e=>{
+      e.stopPropagation(); if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return;
+      mAddStep(a,v); rer(); });
+    ["click","touchstart","pointerdown"].forEach(ev=>stNew.addEventListener(ev,e=>e.stopPropagation()));
+  }
   const mapEl=document.getElementById("mMap");
   if(mapEl){
     const pts=photos.filter(p=>p.lat!=null);
@@ -3736,17 +3757,40 @@ function mShowDetail(ai,keepScroll){
     if(hsEl) hsEl.addEventListener("scroll",()=>requestAnimationFrame(()=>{ const i=Math.round(hsEl.scrollLeft/Math.max(1,hsEl.clientWidth)); posOverlays(); if(i!==insEl._ci){ insEl._ci=i; setCur(i); } }));
   } else if(hsEl&&sub2) hsEl.addEventListener("scroll",()=>requestAnimationFrame(posOverlays));
   if(sub2){
-    const fill=()=>{ const rows2=mSteps(a);
-      sub2.innerHTML=rows2.map((s,i)=>'<div class="s2row'+(s.d?' done':'')+'" data-si="'+i+'"><span class="k2'+(s.d?' on':'')+'">'+(s.d?'✓':'')+'</span><span class="n">'+(i+1)+'.</span><span class="t">'+esc(s.t)+'</span></div>').join('');
+    /* the card is THE sub-action editor: tick via the box, tap text to edit, Enter in the input
+       to keep adding, drag the number badge to reorder. All refreshes stay local to the card. */
+    let s2drag=null;
+    const fill=(focusNew)=>{ const rows2=mSteps(a);
+      sub2.innerHTML=rows2.map((s,i)=>'<div class="s2row'+(s.d?' done':'')+'" data-si="'+i+'"><span class="k2'+(s.d?' on':'')+'">'+(s.d?'✓':'')+'</span><span class="n" title="Drag to reorder">'+(i+1)+'.</span><span class="t">'+esc(s.t)+'</span></div>').join('')
+        +'<input class="m-in s2new" placeholder="+ sub-action" autocomplete="off" />';
       sub2.querySelectorAll(".s2row").forEach(el2=>{
         const si=Number(el2.dataset.si);
-        el2.querySelector(".k2").addEventListener("click",e=>{ e.stopPropagation(); const s=mSteps(a)[si]; if(s){ mToggleStep(a,s); rer(); } });   // ticking is the box's job alone
+        el2.querySelector(".k2").addEventListener("click",e=>{ e.stopPropagation(); const s=mSteps(a)[si]; if(s){ mToggleStep(a,s); fill(); } });   // ticking is the box's job alone
         el2.querySelector(".t").addEventListener("click",e=>{ e.stopPropagation(); const s=mSteps(a)[si]; if(!s) return;
-          mInline(el2.querySelector(".t"),s.t,v=>{ if(v!=null&&v.trim()&&v.trim()!==s.t) mEditStep(a,s,v.trim()); rer(); }); });   // tapping the text edits it
+          mInline(el2.querySelector(".t"),s.t,v=>{ if(v!=null&&v.trim()&&v.trim()!==s.t) mEditStep(a,s,v.trim()); fill(); }); });   // tapping the text edits it
+        el2.querySelector(".n").addEventListener("touchstart",e=>{ e.preventDefault(); e.stopPropagation();
+          s2drag={si,rows:Array.from(sub2.querySelectorAll(".s2row")),to:null}; el2.classList.add("s2drag"); },{passive:false});
       });
+      const ninp=sub2.querySelector(".s2new");
+      ["click","touchstart","pointerdown"].forEach(ev=>ninp.addEventListener(ev,e=>e.stopPropagation()));
+      ninp.addEventListener("keydown",e=>{ e.stopPropagation(); if(e.key!=="Enter") return; const v=ninp.value.trim(); if(!v) return;
+        mAddStep(a,v); fill(true); });
+      if(focusNew){ const n2=sub2.querySelector(".s2new"); if(n2) n2.focus(); }
     };
     fill();
-    ["touchstart","touchmove"].forEach(ev=>sub2.addEventListener(ev,e=>e.stopPropagation(),{passive:true}));
+    sub2.addEventListener("touchstart",e=>e.stopPropagation(),{passive:true});
+    sub2.addEventListener("touchmove",e=>{ e.stopPropagation();
+      if(!s2drag) return; e.preventDefault();
+      const y=e.touches[0].clientY; let to=s2drag.rows.length;
+      s2drag.rows.forEach((r,idx)=>{ const b=r.getBoundingClientRect(); if(to===s2drag.rows.length&&y<b.top+b.height/2) to=idx; });
+      s2drag.to=to;
+      s2drag.rows.forEach((r,idx)=>{ r.classList.toggle("s2ins",idx===to); r.classList.remove("s2insb"); });
+      if(to===s2drag.rows.length&&s2drag.rows.length) s2drag.rows[s2drag.rows.length-1].classList.add("s2insb");
+    },{passive:false});
+    sub2.addEventListener("touchend",()=>{ if(!s2drag) return; const d=s2drag; s2drag=null;
+      d.rows.forEach(r=>r.classList.remove("s2ins","s2insb","s2drag"));
+      if(d.to!=null){ let to=d.to; if(to>d.si) to--; if(to!==d.si) mReorderStep(a,d.si,to); }
+      fill(); },{passive:true});
   }
   mWirePinch(hsEl);
   mWirePager(snap);
@@ -3906,6 +3950,18 @@ async function checkFieldChanges(){
         if(c.stepEdits) for(const k of Object.keys(c.stepEdits)){ const i=+k, t=String(c.stepEdits[k]||"").trim(); if(t&&a.steps&&a.steps[i]) a.steps[i].t=t; }
         if(c.steps) for(const k of Object.keys(c.steps)){ const i=+k; if(a.steps&&a.steps[i]) a.steps[i].d=!!c.steps[k]; }
         if(Array.isArray(c.newSteps)) for(const s of c.newSteps){ const t=String(s&&s.t||"").trim(); if(t){ if(!Array.isArray(a.steps)) a.steps=[]; a.steps.push({t,d:!!s.d}); } }
+        if(Array.isArray(c.stepOrder)&&Array.isArray(a.steps)&&a.steps.length){   // phone drag-reorder of sub-actions
+          const newLen=Array.isArray(c.newSteps)?c.newSteps.filter(s=>String(s&&s.t||"").trim()).length:0;
+          const origLen=a.steps.length-newLen;
+          const packArr=a.steps.slice(0,origLen), newArr=a.steps.slice(origLen);
+          const used=new Set(), out=[];
+          for(const t of c.stepOrder){ if(!t) continue;
+            if(t.k==="pack"&&packArr[t.i]!=null&&!used.has("p"+t.i)){ used.add("p"+t.i); out.push(packArr[t.i]); }
+            else if(t.k==="new"&&newArr[t.i]!=null&&!used.has("n"+t.i)){ used.add("n"+t.i); out.push(newArr[t.i]); } }
+          packArr.forEach((s,i)=>{ if(!used.has("p"+i)) out.push(s); });
+          newArr.forEach((s,i)=>{ if(!used.has("n"+i)) out.push(s); });
+          a.steps=out;
+        }
         if(c.done===true&&!a.done){ a.done=true; a.doneAt=c.doneAt||Date.now(); }
         if(c.done===false&&a.done){ a.done=false; a.doneAt=null; }
         recordActEdit(a,before);
