@@ -571,7 +571,7 @@
   .m-pphoto img{width:100%;height:100%;object-fit:contain;}
   .m-hsnap{position:absolute;top:19%;left:8px;right:8px;bottom:11%;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;background:#ECEEF1;border-radius:12px;}   /* the image window: 8px blue grout all around */
   .m-thumbs{position:absolute;z-index:4;overflow:hidden;background:var(--accent);border-radius:0 0 12px 12px;padding:8px;display:grid;gap:8px;}
-  .m-thumbs img{width:100%;height:100%;object-fit:contain;display:block;min-height:0;min-width:0;}   /* scaled, never cropped or stretched */
+  .m-thumbs img{width:100%;height:100%;object-fit:contain;display:block;min-height:0;min-width:0;background:#000;border-radius:6px;}   /* scaled, never cropped or stretched; black fills the slot */
   .m-thumbs img.cur{display:none;}   /* previews show the OTHER images of this action */
   .m-hsnap::-webkit-scrollbar{display:none;}
   .m-hpage{position:relative;flex:0 0 100%;height:100%;scroll-snap-align:start;}
