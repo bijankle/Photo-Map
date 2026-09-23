@@ -897,15 +897,15 @@ L.control.layers({ "Google":google, "Esri":esri, "None":none },null,{position:"t
   map.on("zoomend moveend resize",updateScale); setTimeout(updateScale,0);   // end-events only — updating per animation frame caused zoom jitter
 })();
 /* Filter bars pin to the map's TOP-LEFT; the area/measure buttons stack vertically at the
-   BOTTOM-RIGHT just above the scale bar. Mounted as Leaflet controls so they anchor to the map
-   itself (bottom controls insert on top, so adding after the scalebar lands above it). */
+   BOTTOM-RIGHT just above the scale bar. Mounted straight into the map container so they hug
+   the map's real edges and adapt as the side panels resize. */
 (function(){
-  const mk=(id,pos)=>{ const c=L.control({position:pos});
-    c.onAdd=function(){ const el=document.getElementById(id); el.classList.add("onmap");
-      L.DomEvent.disableClickPropagation(el); L.DomEvent.disableScrollPropagation(el); return el; };
-    c.addTo(map); };
-  mk("leftstack","topleft");
-  mk("toolstack","bottomright");
+  const cont=map.getContainer();
+  const mount=(id,css)=>{ const el=document.getElementById(id); if(!el) return;
+    el.classList.add("onmap"); Object.assign(el.style,css); cont.appendChild(el);
+    L.DomEvent.disableClickPropagation(el); L.DomEvent.disableScrollPropagation(el); };
+  mount("leftstack",{position:"absolute",top:"10px",left:"10px",zIndex:1200});
+  mount("toolstack",{position:"absolute",right:"10px",bottom:"76px",zIndex:1200});
 })();
 const markerLayer=L.layerGroup().addTo(map);
 const highlightLayer=L.layerGroup().addTo(map);
