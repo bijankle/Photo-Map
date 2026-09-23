@@ -341,12 +341,10 @@
   .asec{display:flex;flex-direction:column;gap:4px;margin-top:7px;}
   .asec .al{font-family:var(--mono);font-size:9px;letter-spacing:.8px;color:var(--faint);}
   .asec .d{margin:0;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:4px 8px;font-size:12px;cursor:text;white-space:pre-wrap;}
-  .act-num{flex-shrink:0;min-width:22px;height:22px;margin-top:4px;box-sizing:border-box;border-radius:7px;background:var(--accent-tint);color:var(--accent2);
-    font-family:var(--mono);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:grab;padding:0 4px;}
-  .act-num:active{cursor:grabbing;}
-  .act-row.drop-b{box-shadow:0 -3px 0 var(--accent);}
-  .act-row.drop-a{box-shadow:0 3px 0 var(--accent);}
-  .ipa-num{color:var(--accent2);font-family:var(--mono);font-size:11px;font-weight:700;}
+  .st-num{flex-shrink:0;min-width:16px;text-align:center;font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--accent2);cursor:grab;}
+  .st-num:active{cursor:grabbing;}
+  .st-row.drop-b{box-shadow:0 -2px 0 var(--accent);}
+  .st-row.drop-a{box-shadow:0 2px 0 var(--accent);}
   .ipa-body .asec{margin-top:5px;}
   .act-notes{display:flex;flex-direction:column;gap:4px;}
   .nt-row{display:flex;align-items:flex-start;gap:6px;}
@@ -566,6 +564,8 @@
   .m-hpage{position:relative;flex:0 0 100%;height:100%;scroll-snap-align:start;display:flex;align-items:center;justify-content:center;}
   .m-hpage img{width:100%;height:100%;object-fit:contain;}
   .m-pcap{position:absolute;bottom:12px;left:0;right:0;text-align:center;color:#fff;font-family:var(--mono);font-size:10px;text-shadow:0 1px 4px #000;pointer-events:none;}
+  .m-nbar{position:absolute;left:14px;right:14px;bottom:34px;z-index:3;box-sizing:border-box;border:1px solid #4a4a48;border-radius:10px;background:#141413cc;color:#E3E5E8;
+    font:inherit;font-size:12px;padding:8px 10px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
   .m-cue{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:10px;color:#fff;text-shadow:0 1px 4px #000;pointer-events:none;z-index:500;}
   .m-fhead{position:absolute;top:0;left:0;right:0;z-index:600;display:flex;align-items:center;gap:8px;padding:8px 14px 18px;background:linear-gradient(rgba(20,20,19,.75),rgba(20,20,19,0));pointer-events:none;}
   .m-fhead .m-back{pointer-events:auto;color:#fff;width:44px;height:44px;margin-left:-10px;border:none;background:none;font-size:26px;}
@@ -746,6 +746,8 @@
       <div class="ipa-head"><span class="t">Actions</span><button class="ipa-tgl" id="ipaHide" title="Hide completed actions">Hide done</button></div>
       <div class="ipa-list" id="ipaList"></div>
       <input type="text" id="ipaNew" placeholder="+ Add action for this photo" autocomplete="off" />
+      <div class="ipa-head" style="margin-top:4px;"><span class="t">Photo notes</span></div>
+      <div class="asec" id="ipaPnote" style="margin-top:0;"></div>
     </div>
     <div class="folder-pop" id="folderPop"></div>
     <div class="tbed" id="tbEditor" style="display:none">
@@ -1118,22 +1120,26 @@ function actPhotos(a){ return a?photos.filter(p=>Array.isArray(p.acts)&&p.acts.i
 function hasOpenAct(p){ return Array.isArray(p.acts)&&p.acts.some(id=>{ const a=actById(id); return a&&!a.done; }); }
 function passActs(p){ return !actOnlyMap||hasOpenAct(p); }
 function normActs(list){ let mx=0; const out=(list||[]).map(a=>{
-  let note=(typeof a.note==="string")?a.note:"";
-  if(!note){   // migrate retired fields: old description and note lists fold into ONE plain-text note
-    const parts=[];
-    if(a.desc&&String(a.desc).trim()) parts.push(String(a.desc).trim());
-    if(Array.isArray(a.notes)) for(const n of a.notes){ if(n&&n.t) parts.push(String(n.t)); }
-    note=parts.join("\n");
-  }
-  return {id:+a.id||0,text:String(a.text||""),done:!!a.done,created:a.created||null,doneAt:a.doneAt||null,
-    steps:Array.isArray(a.steps)?a.steps.map(s=>({t:String(s.t||""),d:!!s.d})).filter(s=>s.t):[],note};
+  const parts=[];   // retired fields (description, note lists, action-level note): stash for migration into a photo note
+  if(a.desc&&String(a.desc).trim()) parts.push(String(a.desc).trim());
+  if(typeof a.note==="string"&&a.note.trim()) parts.push(a.note.trim());
+  if(Array.isArray(a.notes)) for(const n of a.notes){ if(n&&n.t) parts.push(String(n.t)); }
+  const o={id:+a.id||0,text:String(a.text||""),done:!!a.done,created:a.created||null,doneAt:a.doneAt||null,
+    steps:Array.isArray(a.steps)?a.steps.map(s=>({t:String(s.t||""),d:!!s.d})).filter(s=>s.t):[]};
+  if(parts.length) o._n=parts.join("\n");
+  return o;
 }).filter(a=>a.id>0&&a.text); out.forEach(a=>{ if(a.id>mx)mx=a.id; }); nextActId=mx+1; return out; }
+function migrateActNotes(){   // notes live on PHOTOS now: any old action-level note moves to the action's first linked photo
+  for(const a of actions){ if(!a._n) continue; const t=a._n; delete a._n;
+    const p=photos.find(x=>Array.isArray(x.acts)&&x.acts.includes(a.id)); if(!p) continue;
+    p.note=(p.note?p.note+"\n":"")+t; }
+}
 function rebuildActionFilter(){ actionFilter=selActs.size?new Set([...selActs].flatMap(id=>actPhotos(actById(id)).map(p=>p.id))):null; }
 function drawActionRings(){ buildCluster(); renderClusters(); }   // highlights are rendered with the clusters (bubbles flash when they contain selected photos)
 function clearActSel(){ if(!selActs.size) return; selActs.clear(); actionFilter=null; renderActions(); drawActionRings(); updateGallery(); }
 function createAction(text,pids){
   text=(text||"").trim(); if(!text) return null;
-  const a={id:nextActId++,text,done:false,created:Date.now(),doneAt:null,steps:[],note:""};
+  const a={id:nextActId++,text,done:false,created:Date.now(),doneAt:null,steps:[]};
   actions.unshift(a);
   const items=(pids&&pids.length)?buildAssign([a.id],pids.map(photoById).filter(Boolean)):[];
   pushUndo({actCreate:{data:Object.assign({},a),index:0},items});   // creation (incl. its links) is one undo step
@@ -1169,53 +1175,61 @@ function startActEdit(a,row){
   });
 }
 function renameAction(a){ const row=document.querySelector('.act-row[data-aid="'+a.id+'"]'); if(row) startActEdit(a,row); }
-let dragActId=null;
-document.addEventListener("dragend",()=>{ dragActId=null; document.querySelectorAll(".drop-b,.drop-a").forEach(x=>x.classList.remove("drop-b","drop-a")); });
-function reorderAction(dragId,targetId,placeBefore){
-  const from=actions.findIndex(x=>x.id===dragId); if(from<0) return;
-  const beforeIds=actions.map(x=>x.id);
-  const mv=actions.splice(from,1)[0];
-  let to=actions.findIndex(x=>x.id===targetId);
-  if(to<0){ actions.splice(from,0,mv); return; }
-  if(!placeBefore) to++;
-  actions.splice(to,0,mv);
-  const afterIds=actions.map(x=>x.id);
-  if(JSON.stringify(beforeIds)!==JSON.stringify(afterIds)) pushUndo({order:{before:beforeIds,after:afterIds}});
-  afterFolderChange();
+let dragStep=null;   // {aid, si} — a sub-action's number badge is its drag handle
+document.addEventListener("dragend",()=>{ dragStep=null; document.querySelectorAll(".drop-b,.drop-a").forEach(x=>x.classList.remove("drop-b","drop-a")); });
+function reorderStep(a,from,to){
+  if(!Array.isArray(a.steps)||from===to||from<0||to<0||from>=a.steps.length) return;
+  const b=actState(a);
+  const mv=a.steps.splice(from,1)[0]; a.steps.splice(to,0,mv);
+  recordActEdit(a,b); afterFolderChange();
 }
 function expBtnHtml(a,set){ return '<button class="act-exp'+(set.has(a.id)?' on':'')+'" type="button" title="'+(set.has(a.id)?'Hide':'Show')+' details">▾</button>'; }
-/* Notes are ONE plain-text blob per action: an input when empty, a click-to-edit box when set. */
-function notesHtml(a){
-  if(!a.note) return '<input class="st-new nt-newp" type="text" placeholder="+ note" autocomplete="off" />';
-  return '<div class="d nt-box" title="Click to edit">'+esc(a.note)+'</div>';
+/* Photo notes: ONE plain-text blob per PHOTO (actions carry no notes) — an input when empty,
+   a click-to-edit box when set. Edits ride the standard photo-snapshot undo. */
+function setPhotoNote(p,v){
+  v=(v==null?"":v.trim());
+  if(v===(p.note||"")){ refreshActUI(); return; }
+  const before=snapshotTags(p); p.note=v;
+  pushUndo({items:[{id:p.id,before,after:snapshotTags(p)}]});
+  afterFolderChange();
 }
-function wireNotes(el,a){
+function pNoteHtml(p){
+  if(!p.note) return '<input class="st-new nt-newp" type="text" placeholder="+ photo note" autocomplete="off" />';
+  return '<div class="d nt-box" title="Click to edit">'+esc(p.note)+'</div>';
+}
+function wirePNote(el,p){
   const box=el.querySelector(".nt-box");
   if(box){
-    const edit=e=>{ e.stopPropagation(); clearTimeout(el._ct);
-      inlineEdit(box,a.note||"",true,v=>{ if(v!=null&&v.trim()!==(a.note||"")){ const b=actState(a); a.note=v.trim(); recordActEdit(a,b); afterFolderChange(); } else refreshActUI(); }); };
+    const edit=e=>{ e.stopPropagation();
+      inlineEdit(box,p.note||"",true,v=>{ if(v!=null) setPhotoNote(p,v); else refreshActUI(); }); };
     box.addEventListener("click",edit); box.addEventListener("dblclick",edit);
-    box.addEventListener("mousedown",e=>{ e.stopPropagation(); clearTimeout(el._ct); });
+    box.addEventListener("mousedown",e=>e.stopPropagation());
   }
   const inp=el.querySelector(".nt-newp");
   if(inp){
-    ["click","dblclick","mousedown"].forEach(ev=>inp.addEventListener(ev,e=>{ e.stopPropagation(); clearTimeout(el._ct); }));
-    inp.addEventListener("keydown",e=>{ e.stopPropagation(); if(e.key!=="Enter") return; const v=inp.value.trim(); if(!v) return;
-      const b=actState(a); a.note=v; recordActEdit(a,b); afterFolderChange(); });
+    ["click","dblclick","mousedown"].forEach(ev=>inp.addEventListener(ev,e=>e.stopPropagation()));
+    inp.addEventListener("keydown",e=>{ e.stopPropagation(); if(e.key!=="Enter") return; const v=inp.value.trim(); if(!v) return; setPhotoNote(p,v); });
   }
 }
 function stepsHtml(a){
   const rows=(a.steps||[]).map((s,i)=>'<div class="st-row" data-si="'+i+'">'
-    +'<button class="st-chk'+(s.d?' on':'')+'" type="button" title="'+(s.d?'Reopen step':'Mark step done')+'">'+(s.d?'✓':'')+'</button>'
+    +'<span class="st-num" draggable="true" title="Priority '+(i+1)+' — drag to reorder">'+(i+1)+'.</span>'
+    +'<button class="st-chk'+(s.d?' on':'')+'" type="button" title="'+(s.d?'Reopen sub-action':'Mark sub-action done')+'">'+(s.d?'✓':'')+'</button>'
     +'<span class="st-t'+(s.d?' done':'')+'" title="Double-click to edit">'+esc(s.t)+'</span>'
-    +'<button class="st-x" type="button" title="Remove step">&times;</button></div>').join("");
-  return '<div class="act-steps">'+rows+'<input class="st-new" type="text" placeholder="+ step" autocomplete="off" /></div>';
+    +'<button class="st-x" type="button" title="Remove sub-action">&times;</button></div>').join("");
+  return '<div class="act-steps">'+rows+'<input class="st-new" type="text" placeholder="+ sub-action" autocomplete="off" /></div>';
 }
 function wireSteps(el,a){
   const box=el.querySelector(".act-steps"); if(!box) return;
   ["click","dblclick","mousedown"].forEach(ev=>box.addEventListener(ev,e=>{ e.stopPropagation(); clearTimeout(el._ct); }));
   box.querySelectorAll(".st-row").forEach(row=>{
     const i=Number(row.dataset.si), s=(a.steps||[])[i]; if(!s) return;
+    /* priority drag & drop: the number badge is the handle, within this action's list */
+    row.querySelector(".st-num").addEventListener("dragstart",e=>{ dragStep={aid:a.id,si:i}; e.dataTransfer.effectAllowed="move"; try{ e.dataTransfer.setData("text/plain",String(i)); }catch(err){} });
+    row.addEventListener("dragover",e=>{ if(!dragStep||dragStep.aid!==a.id||dragStep.si===i) return; e.preventDefault(); const r=row.getBoundingClientRect(); const before=(e.clientY-r.top)<r.height/2; row.classList.toggle("drop-b",before); row.classList.toggle("drop-a",!before); });
+    row.addEventListener("dragleave",()=>row.classList.remove("drop-b","drop-a"));
+    row.addEventListener("drop",e=>{ e.preventDefault(); e.stopPropagation(); const before=row.classList.contains("drop-b"); row.classList.remove("drop-b","drop-a");
+      if(dragStep&&dragStep.aid===a.id&&dragStep.si!==i){ let to=i; if(!before) to++; if(dragStep.si<to) to--; reorderStep(a,dragStep.si,to); } dragStep=null; });
     row.querySelector(".st-chk").addEventListener("click",()=>{ const b=actState(a); s.d=!s.d; recordActEdit(a,b); afterFolderChange(); });
     row.querySelector(".st-x").addEventListener("click",()=>{ const b=actState(a); a.steps.splice(i,1); recordActEdit(a,b); afterFolderChange(); });
     row.querySelector(".st-t").addEventListener("dblclick",()=>{
@@ -1330,13 +1344,11 @@ function renderActions(){
   const cp=lb.classList.contains("open")?curPhoto():null;   // the open photo's actions get a marker in this list
   list.innerHTML=shown.map(a=>{ const n=actPhotos(a).length;
     const isCur=!!(cp&&Array.isArray(cp.acts)&&cp.acts.includes(a.id));
-    const exp=expActs.has(a.id), num=actions.indexOf(a)+1;
+    const exp=expActs.has(a.id);
     return '<div class="act-row'+(a.done?' done':'')+(selActs.has(a.id)?' sel':'')+(isCur?' cur':'')+'" data-aid="'+a.id+'">'
-      +'<div class="act-num" draggable="true" title="Priority '+num+' — drag to reorder">'+num+'</div>'
       +'<label class="act-chk" title="'+(a.done?'Reopen this action':'Mark completed')+'"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
       +'<div class="act-body"><div class="t">'+esc(a.text)+'</div>'
-      +(exp?('<div class="asec"><div class="al">ACTIONS</div>'+stepsHtml(a)+'</div>'
-        +'<div class="asec"><div class="al">NOTES</div>'+notesHtml(a)+'</div>'
+      +(exp?('<div class="asec"><div class="al">SUB-ACTIONS</div>'+stepsHtml(a)+'</div>'
         +'<div class="m">'+n+' photo'+(n===1?'':'s')
         +((a.steps&&a.steps.length)?' · steps '+a.steps.filter(s=>s.d).length+'/'+a.steps.length:'')
         +(a.done&&a.doneAt?' · done '+fmtDate(a.doneAt):'')+'</div>'):'')
@@ -1350,17 +1362,11 @@ function renderActions(){
       if(cp2&&Array.isArray(cp2.acts)&&cp2.acts.includes(a.id)) unassignAct(a,cp2);   // open photo is linked: X just removes that link
       else deleteAction(a); });
     wireSteps(el,a);
-    wireNotes(el,a);
     wireActRowCommon(el,a,expActs);
     /* single click selects/navigates (slightly delayed so a double-click can win); double click edits in place */
-    el.addEventListener("click",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes,.act-num")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); el._ct=setTimeout(()=>clickAction(a,e),260); });
-    el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes,.act-num")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); startActEdit(a,el); });
+    el.addEventListener("click",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); el._ct=setTimeout(()=>clickAction(a,e),260); });
+    el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); startActEdit(a,el); });
     el.addEventListener("contextmenu",e=>{ e.preventDefault(); e.stopPropagation(); openActMenu(a,e); });
-    /* priority drag & drop: the number badge is the handle */
-    el.querySelector(".act-num").addEventListener("dragstart",e=>{ dragActId=a.id; e.dataTransfer.effectAllowed="move"; try{ e.dataTransfer.setData("text/plain",String(a.id)); }catch(err){} });
-    el.addEventListener("dragover",e=>{ if(dragActId==null||dragActId===a.id) return; e.preventDefault(); const r=el.getBoundingClientRect(); const before=(e.clientY-r.top)<r.height/2; el.classList.toggle("drop-b",before); el.classList.toggle("drop-a",!before); });
-    el.addEventListener("dragleave",()=>el.classList.remove("drop-b","drop-a"));
-    el.addEventListener("drop",e=>{ e.preventDefault(); const before=el.classList.contains("drop-b"); el.classList.remove("drop-b","drop-a"); if(dragActId!=null&&dragActId!==a.id) reorderAction(dragActId,a.id,before); dragActId=null; });
   });
 }
 function renderIpActions(){
@@ -1375,12 +1381,10 @@ function renderIpActions(){
   hideBtn.style.display=all.some(a=>a.done)?"":"none";
   const listEl=document.getElementById("ipaList");
   listEl.innerHTML=shown.length?shown.map(a=>{
-    const num=actions.indexOf(a)+1;
     return '<div class="ipa-row'+(a.done?' done':'')+'" data-aid="'+a.id+'">'
     +'<label class="act-chk"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
-    +'<div class="ipa-body"><span class="t" title="Double-click to edit"><b class="ipa-num">'+num+'.</b> '+esc(a.text)+'</span>'
-    +((a.steps||[]).length?'<div class="asec"><div class="al">ACTIONS</div>'+stepsHtml(a)+'</div>':'<div class="asec">'+stepsHtml(a)+'</div>')
-    +'<div class="asec"><div class="al">NOTES</div>'+notesHtml(a)+'</div>'
+    +'<div class="ipa-body"><span class="t" title="Double-click to edit">'+esc(a.text)+'</span>'
+    +((a.steps||[]).length?'<div class="asec"><div class="al">SUB-ACTIONS</div>'+stepsHtml(a)+'</div>':'<div class="asec">'+stepsHtml(a)+'</div>')
     +'</div>'
     +'<button class="ipa-x" title="Remove this action from this photo">&times;</button></div>'; }).join("")
     :"";
@@ -1389,9 +1393,11 @@ function renderIpActions(){
     el.querySelector("input").addEventListener("click",e=>{ e.stopPropagation(); setActionDone(a,e.target.checked); });
     el.querySelector(".ipa-x").addEventListener("click",e=>{ e.stopPropagation(); unassignAct(a,curPhoto()); });
     wireSteps(el,a);
-    wireNotes(el,a);
     el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.ipa-x,.act-steps,.asec")||el.querySelector(".act-edit")) return; startActEdit(a,el); });
   });
+  const pnEl=document.getElementById("ipaPnote");
+  pnEl.innerHTML=pNoteHtml(p);
+  wirePNote(pnEl,p);
 }
 document.getElementById("actOpenOnly").addEventListener("click",()=>{ actShowOpenOnly=!actShowOpenOnly; renderActions(); persistState(); });
 document.getElementById("actMapOnly").addEventListener("click",()=>{ actOnlyMap=!actOnlyMap; buildCluster(); renderClusters(); updateGallery(); renderActions(); renderMapTags(); persistState(); });
@@ -1522,9 +1528,9 @@ async function ghPutFile(cfg,path,text,msg){
 function buildMobilePack(){
   const open=actions.filter(a=>!a.done);
   return {
-    v:1, exportedAt:new Date().toISOString(), project:loadedJsonName||folderName||"PhotoMap",
-    actions: open.map(a=>({ id:a.id, num:actions.indexOf(a)+1, text:a.text, note:a.note||"", steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d})),
-      photos: actPhotos(a).map(p=>({ id:p.id, name:p.name, lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null),
+    v:2, exportedAt:new Date().toISOString(), project:loadedJsonName||folderName||"PhotoMap",
+    actions: open.map(a=>({ id:a.id, text:a.text, steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d})),
+      photos: actPhotos(a).map(p=>({ id:p.id, name:p.name, note:(p.note||""), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null),
         img:(p.preview||p.thumb||null) })) }))
   };
 }
@@ -2733,7 +2739,7 @@ function openFolderPop(){
    undo by timestamp so "undo" always reverts whichever edit happened most recently. */
 let tagUndoStack=[], tagRedoStack=[], recentTags=[];   // recentTags: last folders assigned via the UI, newest first (speeds up bulk tagging)
 function noteRecentTag(f){ if(!f) return; recentTags=[f].concat(recentTags.filter(x=>x!==f)).slice(0,10); }
-function snapshotTags(p){ return {paths:physPaths(p).slice(), vpaths:virtPaths(p).slice(), acts:(Array.isArray(p.acts)?p.acts.slice():[]), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null)}; }
+function snapshotTags(p){ return {paths:physPaths(p).slice(), vpaths:virtPaths(p).slice(), acts:(Array.isArray(p.acts)?p.acts.slice():[]), note:(p.note||""), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null)}; }
 /* EVERY data change goes through pushUndo so Ctrl+Z always works — keep it that way for new features.
    Entry fields (any combination): items (photo snapshots), act (deleted action), actCreate (new action),
    actEdit (title/description/done change), marksSnap (a photo's whole markup array), rot (rotation). */
@@ -2744,11 +2750,11 @@ function pushTagAction(items){   // one undo step, possibly touching many photos
   pushUndo({items});
 }
 function recordTagChange(p,before){ pushTagAction([{id:p.id,before,after:snapshotTags(p)}]); }
-function actState(a){ return {text:a.text,done:!!a.done,doneAt:a.doneAt||null,steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d})),note:a.note||""}; }
+function actState(a){ return {text:a.text,done:!!a.done,doneAt:a.doneAt||null,steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d}))}; }
 function recordActEdit(a,before){ const after=actState(a); if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({actEdit:{id:a.id,before,after}}); }
 function cpMarks(ms){ return JSON.parse(JSON.stringify(ms||[])); }
 function pushMarksSnap(p,before,after){ if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({marksSnap:{id:p.id,before,after}}); }
-function applySnapRaw(id,snap){ const p=photoById(id); if(!p) return; p.paths=snap.paths.slice(); p.vpaths=snap.vpaths.slice(); if(snap.acts) p.acts=snap.acts.slice(); if(snap.lat!=null){ p.lat=snap.lat; p.lng=snap.lng; } if("glat" in snap){ p.glat=snap.glat; p.glng=snap.glng; } }
+function applySnapRaw(id,snap){ const p=photoById(id); if(!p) return; p.paths=snap.paths.slice(); p.vpaths=snap.vpaths.slice(); if(snap.acts) p.acts=snap.acts.slice(); if("note" in snap) p.note=snap.note; if(snap.lat!=null){ p.lat=snap.lat; p.lng=snap.lng; } if("glat" in snap){ p.glat=snap.glat; p.glng=snap.glng; } }
 function applyTagSnapshot(id,snap){ applySnapRaw(id,snap); afterFolderChange(); if(folderPopShown) openFolderPop(); }
 function applyUndoEntry(a,dir){   // dir: "before" (undo) or "after" (redo)
   const undo=dir==="before";
@@ -2760,7 +2766,7 @@ function applyUndoEntry(a,dir){   // dir: "before" (undo) or "after" (redo)
     if(undo){ actions=actions.filter(x=>x.id!==a.actCreate.data.id); selActs.delete(a.actCreate.data.id); }
     else { const d=a.actCreate.data; if(!actById(d.id)){ actions.splice(Math.min(a.actCreate.index,actions.length),0,Object.assign({},d)); if(nextActId<=d.id) nextActId=d.id+1; } }
   }
-  if(a.actEdit){ const x=actById(a.actEdit.id); if(x){ const src=undo?a.actEdit.before:a.actEdit.after; x.text=src.text; x.done=src.done; x.doneAt=src.doneAt; if(src.steps) x.steps=src.steps.map(s=>({t:s.t,d:!!s.d})); if("note" in src) x.note=src.note; } }
+  if(a.actEdit){ const x=actById(a.actEdit.id); if(x){ const src=undo?a.actEdit.before:a.actEdit.after; x.text=src.text; x.done=src.done; x.doneAt=src.doneAt; if(src.steps) x.steps=src.steps.map(s=>({t:s.t,d:!!s.d})); } }
   if(a.order){ const want=undo?a.order.before:a.order.after; actions.sort((x,y)=>{ let ix=want.indexOf(x.id), iy=want.indexOf(y.id); if(ix<0)ix=1e9; if(iy<0)iy=1e9; return ix-iy; }); }
   if(a.marksSnap){ const p=photoById(a.marksSnap.id); if(p){ p.marks=cpMarks(undo?a.marksSnap.before:a.marksSnap.after); if(selObj&&!p.marks.includes(selObj)) selObj=null; if(curPhoto()===p&&lb.classList.contains("open")) redrawMarks(); } }
   if(a.sizeSnap){ const p=photoById(a.sizeSnap.id); if(p){ const s=undo?a.sizeSnap.before:a.sizeSnap.after; p.mkw=(s.mkw==null?null:s.mkw); p.mth=(s.mth==null?null:s.mth); if(curPhoto()===p&&lb.classList.contains("open")){ redrawMarks(); syncSizeBars(); if(selMark) positionEditor(); } } }
@@ -3033,7 +3039,7 @@ document.getElementById("jsonInput").addEventListener("change",async e=>{ const 
 function serializeState(includeImages){
   return {
     version:3, folderName, savedAt:new Date().toISOString(),
-    actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.steps&&a.steps.length)o.steps=a.steps.map(s=>({t:s.t,d:!!s.d})); if(a.note)o.note=a.note; return o; }),
+    actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.steps&&a.steps.length)o.steps=a.steps.map(s=>({t:s.t,d:!!s.d})); return o; }),
     settings:{ baseLayer: map.hasLayer(google)?"google":map.hasLayer(esri)?"esri":"none", showNoGeo, sortBy:currentSort,
       thumb:getComputedStyle(document.documentElement).getPropertyValue("--thumb").trim(),
       sideW:getComputedStyle(document.documentElement).getPropertyValue("--side-w").trim(),
@@ -3049,6 +3055,7 @@ function serializeState(includeImages){
       if(Array.isArray(p.acts)&&p.acts.length)o.acts=p.acts;
       if(p.alt!=null)o.alt=p.alt;
       if(p.mkw!=null)o.mkw=p.mkw; if(p.mth!=null)o.mth=p.mth;
+      if(p.note)o.note=p.note;
       if(p.marks&&p.marks.length)o.marks=p.marks;
       if(includeImages){ if(p.thumb){ o.thumb=p.thumb; if(p.tv)o.tv=p.tv; } if(p.preview)o.preview=p.preview; }   // thumb + screenshot-quality preview; full quality always comes from disk
       return o; })
@@ -3073,8 +3080,9 @@ function applyState(st){
     if(vp===null){   // legacy file (mixed paths): keep the anchor path as physical, treat extras as virtual so tags can never be wrongly pruned
       vp=phys.filter(pa=>pa!==m.path); phys=m.path?[m.path]:phys.slice(0,1);
     }
-    photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,rot:m.rot||0,lat:m.lat,lng:m.lng,glat:(m.glat!=null?m.glat:null),glng:(m.glng!=null?m.glng:null),time:m.time,dir:m.dir,alt:(m.alt!=null?m.alt:null),mkw:(m.mkw!=null?m.mkw:null),mth:(m.mth!=null?m.mth:null),acts:Array.isArray(m.acts)?m.acts.slice():[],marks:Array.isArray(m.marks)?m.marks:[]});
+    photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,rot:m.rot||0,lat:m.lat,lng:m.lng,glat:(m.glat!=null?m.glat:null),glng:(m.glng!=null?m.glng:null),time:m.time,dir:m.dir,alt:(m.alt!=null?m.alt:null),mkw:(m.mkw!=null?m.mkw:null),mth:(m.mth!=null?m.mth:null),acts:Array.isArray(m.acts)?m.acts.slice():[],note:(typeof m.note==="string"?m.note:""),marks:Array.isArray(m.marks)?m.marks:[]});
   });   // baked full-quality renditions from old files are intentionally dropped
+  migrateActNotes();
   if(lastFullCache) overlayImagesFromCache(lastFullCache);   // the .json is metadata-only — fill thumbs/previews back in from the browser image cache
   const s=st.settings||{};
   if(s.thumb){ document.documentElement.style.setProperty("--thumb",s.thumb); document.getElementById("thumbSize").value=parseInt(s.thumb)||120; }
@@ -3104,8 +3112,8 @@ function applyState(st){
    metadata onto a reloaded session so folder additions are never lost. Matched by a stable key. */
 function metaKey(p){ const la=(p.glat!=null?p.glat:p.lat), ln=(p.glng!=null?p.glng:p.lng);   // identity uses the ORIGINAL GPS so in-app dot corrections never orphan a photo's cache/metadata
   return (p.name||"")+"|"+(p.size!=null?p.size:"")+"|"+(la!=null?Number(la).toFixed(5):"")+"|"+(ln!=null?Number(ln).toFixed(5):""); }
-function snapshotMeta(list){ const m=new Map(); for(const p of (list||[])){ const k=metaKey(p); if(!m.has(k)) m.set(k,{paths:Array.isArray(p.paths)?p.paths.slice():null, vpaths:Array.isArray(p.vpaths)?p.vpaths.slice():null, acts:(Array.isArray(p.acts)&&p.acts.length)?p.acts.slice():null, alt:(p.alt!=null?p.alt:null), rot:p.rot||0, marks:Array.isArray(p.marks)&&p.marks.length?p.marks:null, lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null)}); } return m; }
-function applyMetaMap(m){ if(!m||!m.size) return; for(const p of photos){ const meta=m.get(metaKey(p)); if(!meta) continue; if(meta.paths&&meta.paths.length) p.paths=meta.paths.slice(); if(meta.vpaths&&meta.vpaths.length) p.vpaths=meta.vpaths.slice(); if(meta.acts) p.acts=meta.acts.slice(); if(meta.alt!=null&&p.alt==null) p.alt=meta.alt; if(meta.marks) p.marks=meta.marks;
+function snapshotMeta(list){ const m=new Map(); for(const p of (list||[])){ const k=metaKey(p); if(!m.has(k)) m.set(k,{paths:Array.isArray(p.paths)?p.paths.slice():null, vpaths:Array.isArray(p.vpaths)?p.vpaths.slice():null, acts:(Array.isArray(p.acts)&&p.acts.length)?p.acts.slice():null, note:(p.note||null), alt:(p.alt!=null?p.alt:null), rot:p.rot||0, marks:Array.isArray(p.marks)&&p.marks.length?p.marks:null, lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null)}); } return m; }
+function applyMetaMap(m){ if(!m||!m.size) return; for(const p of photos){ const meta=m.get(metaKey(p)); if(!meta) continue; if(meta.paths&&meta.paths.length) p.paths=meta.paths.slice(); if(meta.vpaths&&meta.vpaths.length) p.vpaths=meta.vpaths.slice(); if(meta.acts) p.acts=meta.acts.slice(); if(meta.note) p.note=meta.note; if(meta.alt!=null&&p.alt==null) p.alt=meta.alt; if(meta.marks) p.marks=meta.marks;
   if(meta.glat!=null){ p.glat=meta.glat; p.glng=meta.glng; if(meta.lat!=null){ p.lat=meta.lat; p.lng=meta.lng; } }   // newer session moved this dot — carry the correction over
   if(meta.rot&&!p.rot){ p.rot=meta.rot; const d=rotDelta(p.rot); (async()=>{ if(p.thumb)p.thumb=await rotateDataURL(p.thumb,d,THUMB_Q); if(p.preview)p.preview=await rotateDataURL(p.preview,d,PREVIEW_Q); cacheFullSession(); })(); } } }
 
@@ -3213,7 +3221,9 @@ function mPend(){ try{ return JSON.parse(localStorage.getItem("pmField")||"{}")|
 function mPendSave(o){ try{ localStorage.setItem("pmField",JSON.stringify(o)); }catch(e){} }
 function mCh(id){ const p=mPend(); return (p.changes||{})[id]||{}; }
 function mSetCh(id,patch){ const p=mPend(); p.changes=p.changes||{}; p.changes[id]=Object.assign({},p.changes[id]||{},patch); mPendSave(p); }
-function mChCount(){ const p=mPend(); return Object.keys(p.changes||{}).length; }
+function mPn(pid){ const p=mPend(); const e=(p.pnotes||{})[String(pid)]; return e?e.t:null; }   // pending photo (field) note on this phone
+function mSetPn(pid,name,v){ const p=mPend(); p.pnotes=p.pnotes||{}; if(v) p.pnotes[String(pid)]={n:name||"",t:v}; else delete p.pnotes[String(pid)]; mPendSave(p); }
+function mChCount(){ const p=mPend(); return Object.keys(p.changes||{}).length+Object.keys(p.pnotes||{}).length; }
 async function ghGetRaw(cfg,path){
   const r=await fetch("https://api.github.com/repos/"+cfg.repo+"/contents/"+path+"?t="+Date.now(),{headers:Object.assign(ghHeaders(cfg.token),{Accept:"application/vnd.github.raw+json"})});
   if(r.status===404) return null;
@@ -3269,8 +3279,7 @@ function mShowList(){
     +(acts.length?acts.map((a,i)=>{
       const done=mDone(a), sd=(a.steps||[]).filter((s,j)=>mStepDone(a,j)).length, st=(a.steps||[]).length, d=mDist(a);
       return '<div class="m-card'+(done?' done':'')+'" data-i="'+i+'"><div class="m-chk'+(done?' on':'')+'">'+(done?'✓':'')+'</div>'
-        +'<div class="m-cbody"><div class="m-ct"'+(done?' style="text-decoration:line-through;color:var(--muted)"':'')+'>'+(a.num?'<span style="color:var(--accent2);font-family:var(--mono);font-size:12px;">'+a.num+'.</span> ':'')+esc(a.text)+'</div>'
-        +(a.note?'<div class="m-cd">'+esc(a.note.length>90?a.note.slice(0,90)+"…":a.note)+'</div>':'')
+        +'<div class="m-cbody"><div class="m-ct"'+(done?' style="text-decoration:line-through;color:var(--muted)"':'')+'>'+esc(a.text)+'</div>'
         +'<div class="m-cm"><b>'+(a.photos||[]).length+' photo'+((a.photos||[]).length===1?'':'s')+'</b>'+(st?'<span>steps '+sd+'/'+st+'</span>':'')+(d!=null?'<span>'+mFmtD(d)+' away</span>':'')+'</div></div>'
         +'<div style="align-self:center;color:var(--line2);font-size:22px;">›</div></div>';
     }).join(''):'<div class="m-note" style="padding-top:40px">No open actions in the pack.</div>')
@@ -3283,36 +3292,36 @@ function mShowList(){
 }
 async function mSendChanges(){
   const cfg=ghCfg(), note=document.getElementById("mSendNote"), btn=document.getElementById("mSend");
-  const p=mPend(); if(!p.changes||!Object.keys(p.changes).length) return;
+  const p=mPend(); if(!mChCount()) return;
   btn.disabled=true; note.textContent="Sending…";
   try{
-    await ghPutFile(cfg,"changes.json",JSON.stringify({v:1,updatedAt:new Date().toISOString(),changes:p.changes}),"Field changes from phone");
+    await ghPutFile(cfg,"changes.json",JSON.stringify({v:2,updatedAt:new Date().toISOString(),changes:p.changes||{},photoNotes:p.pnotes||{}}),"Field changes from phone");
     p.sentAt=Date.now(); mPendSave(p);
     note.textContent="✓ Sent — merge on desktop when you're back"; btn.disabled=false;
   }catch(err){ note.textContent="Failed: "+(err&&err.message||err); btn.disabled=false; }
 }
 function mShowDetail(ai,keepScroll){
   const a=(mPack.actions||[])[ai]; if(!a){ mShowList(); return; }
-  const done=mDone(a), c=mCh(a.id);
+  const done=mDone(a);
   const photos=(a.photos||[]), hasMap=photos.some(p=>p.lat!=null);
   /* Snapchat-style vertical pager: MAP on top, full-screen PHOTOS (landing), DETAILS below —
      one continuous scroll with gentle (proximity) locking. */
   mScr('<div class="m-fhead"><button class="m-back" id="mBack" aria-label="Back">‹</button>'
-    +'<div class="m-fht">'+(a.num?a.num+'. ':'')+esc(a.text)+'</div>'
+    +'<div class="m-fht">'+esc(a.text)+'</div>'
     +'<span class="m-chip" style="pointer-events:none;background:#141413cc;border-color:#4a4a48;color:'+(done?'#3BA55C':'#E3E5E8')+';">'+(done?'DONE':'OPEN')+'</span></div>'
     +'<div class="m-snap" id="mSnap">'
     +(hasMap?'<section class="m-page"><div id="mMap" style="position:absolute;inset:0;"></div><div class="m-cue">▾ swipe up for photos · tap a dot to jump to its photo</div></section>':'')
     +(photos.length?'<section class="m-page m-pphoto"><div class="m-hsnap" id="mHsnap">'
-      +photos.map((p,i)=>'<div class="m-hpage">'+(p.img?'<img src="'+p.img+'" alt="'+esc(p.name||"photo")+'" />':'')
-        +'<div class="m-pcap">'+esc(p.name||"")+' · '+(i+1)+'/'+photos.length+' ▸ · details ▴</div></div>').join('')
+      +photos.map((p,i)=>{ const fn=mPn(p.id); const t=(fn!=null?fn:(p.note||""));
+        return '<div class="m-hpage">'+(p.img?'<img src="'+p.img+'" alt="'+esc(p.name||"photo")+'" />':'')
+        +'<button class="m-nbar" data-pi="'+i+'" type="button">'+(t?(fn!=null?'✎ ':'')+esc(t.length>70?t.slice(0,70)+"…":t):'+ photo note')+'</button>'
+        +'<div class="m-pcap">'+esc(p.name||"")+' · '+(i+1)+'/'+photos.length+' ▸ · details ▴</div></div>'; }).join('')
       +'</div></section>':'')
     +'<section class="m-page m-pdet"><div class="m-body" style="height:100%;box-sizing:border-box;padding-top:70px;">'
-    +((a.steps||[]).length?'<div class="m-sec"><div class="m-lab">ACTIONS</div>'+(a.steps||[]).map((s,i)=>{
+    +((a.steps||[]).length?'<div class="m-sec"><div class="m-lab">SUB-ACTIONS</div>'+(a.steps||[]).map((s,i)=>{
         const sd=mStepDone(a,i);
-        return '<div class="m-strow'+(sd?' done':'')+'" data-si="'+i+'"><div class="m-chk'+(sd?' on':'')+'">'+(sd?'✓':'')+'</div><div class="t">'+esc(s.t)+'</div></div>';
+        return '<div class="m-strow'+(sd?' done':'')+'" data-si="'+i+'"><div class="m-chk'+(sd?' on':'')+'">'+(sd?'✓':'')+'</div><div class="t"><span style="color:var(--accent2);font-family:var(--mono);font-size:11px;">'+(i+1)+'.</span> '+esc(s.t)+'</div></div>';
       }).join('')+'</div>':'')
-    +(a.note?'<div class="m-sec"><div class="m-lab">NOTES</div><div style="font-size:13px;color:var(--ink);line-height:1.5;white-space:pre-wrap;">'+esc(a.note)+'</div></div>':'')
-    +'<div class="m-sec"><div class="m-lab">FIELD NOTE</div><textarea class="m-ta" id="mNote" placeholder="Syncs into this action’s notes on the desktop…">'+esc(c.note||"")+'</textarea></div>'
     +'<button class="m-btn '+(done?'ghost':'green')+'" id="mDoneBtn">'+(done?'Reopen action':'Mark action complete')+'</button>'
     +'<button class="m-btn ghost" id="mAllBtn">All actions</button>'
     +'</div></section>'
@@ -3321,7 +3330,7 @@ function mShowDetail(ai,keepScroll){
   document.getElementById("mAllBtn").addEventListener("click",mShowList);
   const snap=document.getElementById("mSnap");
   document.getElementById("mDoneBtn").addEventListener("click",()=>{ mSetCh(a.id,{done:!done,doneAt:Date.now()}); mShowDetail(ai,snap.scrollTop); });
-  document.getElementById("mNote").addEventListener("change",e=>{ const v=e.target.value.trim(); mSetCh(a.id,{note:v||undefined}); });
+  document.querySelectorAll(".m-nbar").forEach(el=>el.addEventListener("click",e=>{ e.stopPropagation(); mEditPnote(ai,Number(el.dataset.pi),snap.scrollTop); }));
   document.querySelectorAll(".m-strow").forEach(el=>el.addEventListener("click",()=>{ const i=Number(el.dataset.si); mSetCh(a.id,{steps:Object.assign({},mCh(a.id).steps||{},{[String(i)]:!mStepDone(a,i)})}); mShowDetail(ai,snap.scrollTop); }));
   const mapEl=document.getElementById("mMap");
   if(mapEl){
@@ -3345,6 +3354,22 @@ function mShowDetail(ai,keepScroll){
     if(mMiniMap) setTimeout(()=>{ try{ mMiniMap.invalidateSize(); const pts2=photos.filter(p=>p.lat!=null); const bb2=L.latLngBounds(pts2.map(p=>[p.lat,p.lng])); if(mGeo) bb2.extend([mGeo.lat,mGeo.lng]); mMiniMap.fitBounds(bb2,{padding:[36,36],maxZoom:19}); }catch(e){} },120);
   });
 }
+function mEditPnote(ai,pi,keepScroll){
+  const a=(mPack.actions||[])[ai]; const p=a&&(a.photos||[])[pi]; if(!p){ mShowDetail(ai); return; }
+  const fn=mPn(p.id);
+  mScr('<div class="m-head"><button class="m-back" id="mBack" aria-label="Back">‹</button>'
+    +'<div style="flex:1;display:flex;flex-direction:column;gap:2px;"><div style="font-size:14px;font-weight:600;">'+esc(p.name||"photo")+'</div>'
+    +'<div class="m-sub">PHOTO NOTES</div></div></div>'
+    +'<div class="m-body">'
+    +(p.note?'<div class="m-sec"><div class="m-lab">ON THE PHOTO</div><div style="font-size:13px;color:var(--ink);line-height:1.5;white-space:pre-wrap;">'+esc(p.note)+'</div></div>':'')
+    +'<div class="m-sec"><div class="m-lab">'+(p.note?'ADD FIELD NOTE':'FIELD NOTE')+'</div>'
+    +'<textarea class="m-ta" id="mPnTa" placeholder="Saved to this photo when you send changes back…">'+esc(fn||"")+'</textarea></div>'
+    +'</div>'
+    +'<div class="m-foot"><button class="m-btn" id="mPnSave">Save note</button></div>');
+  const back=()=>mShowDetail(ai,keepScroll);
+  document.getElementById("mBack").addEventListener("click",back);
+  document.getElementById("mPnSave").addEventListener("click",()=>{ mSetPn(p.id,p.name||"",document.getElementById("mPnTa").value.trim()); back(); });
+}
 function mShowPhoto(ai,pi){
   const a=(mPack.actions||[])[ai]; const p=a&&(a.photos||[])[pi]; if(!p){ mShowDetail(ai); return; }
   mScr('<div class="m-photo"><div class="m-head" style="background:#141413;border-bottom:1px solid #2a2a28;"><button class="m-back" id="mBack" style="color:#E3E5E8;" aria-label="Back">‹</button>'
@@ -3366,11 +3391,13 @@ async function checkFieldChanges(){
   const cfg=ghCfg(); if(!cfg.token) return;
   try{
     const text=await ghGetRaw(cfg,"changes.json"); if(!text) return;
-    const data=JSON.parse(text); const ch=data&&data.changes||{};
-    const ids=Object.keys(ch); if(!ids.length) return;
+    const data=JSON.parse(text); const ch=data&&data.changes||{}; const pnCh=data&&data.photoNotes||{};
+    const ids=Object.keys(ch), pids=Object.keys(pnCh);
+    if(!ids.length&&!pids.length) return;
     let merged=""; try{ merged=localStorage.getItem("pmMergedChanges")||""; }catch(e){}
     if(data.updatedAt&&data.updatedAt===merged) return;   // already merged this batch
-    showBanner("Field changes from the phone — <b>"+ids.length+" action"+(ids.length===1?"":"s")+"</b>. Click to merge them into this project.",async()=>{
+    const bits=[]; if(ids.length) bits.push(ids.length+" action"+(ids.length===1?"":"s")); if(pids.length) bits.push(pids.length+" photo note"+(pids.length===1?"":"s"));
+    showBanner("Field changes from the phone — <b>"+bits.join(" + ")+"</b>. Click to merge them into this project.",async()=>{
       hideBanner();
       for(const id of ids){
         const a=actById(+id); if(!a) continue;
@@ -3378,13 +3405,23 @@ async function checkFieldChanges(){
         if(c.steps) for(const k of Object.keys(c.steps)){ const i=+k; if(a.steps&&a.steps[i]) a.steps[i].d=!!c.steps[k]; }
         if(c.done===true&&!a.done){ a.done=true; a.doneAt=c.doneAt||Date.now(); }
         if(c.done===false&&a.done){ a.done=false; a.doneAt=null; }
-        if(c.note) a.note=(a.note?a.note+"\n":"")+"[Field "+new Date(Date.parse(data.updatedAt||"")||Date.now()).toLocaleDateString(undefined,{day:"numeric",month:"short"})+"] "+c.note;   // field notes append to the plain-text note
         recordActEdit(a,before);
       }
+      const day=new Date(Date.parse(data.updatedAt||"")||Date.now()).toLocaleDateString(undefined,{day:"numeric",month:"short"});
+      const items=[];
+      for(const k of pids){   // field notes append to the PHOTO's note; matched by name first (photo ids can shift between sessions)
+        const e=pnCh[k]; const t=((typeof e==="string"?e:(e&&e.t))||"").trim(); if(!t) continue;
+        const nm=(e&&e.n)||null;
+        const ph=(nm?photos.find(x=>x.name===nm):null)||photoById(+k); if(!ph) continue;
+        const before=snapshotTags(ph); ph.note=(ph.note?ph.note+"\n":"")+"[Field "+day+"] "+t;
+        items.push({id:ph.id,before,after:snapshotTags(ph)});
+      }
+      if(items.length) pushUndo({items});
       afterFolderChange();
       try{ localStorage.setItem("pmMergedChanges",data.updatedAt||String(Date.now())); }catch(e){}
-      ghPutFile(cfg,"changes.json",JSON.stringify({v:1,changes:{},clearedAt:new Date().toISOString()}),"Field changes merged on desktop").catch(()=>{});
-      loadNote("Merged "+ids.length+" field change"+(ids.length===1?"":"s")+" ✓"); setTimeout(()=>loadNote(""),3000);
+      ghPutFile(cfg,"changes.json",JSON.stringify({v:2,changes:{},photoNotes:{},clearedAt:new Date().toISOString()}),"Field changes merged on desktop").catch(()=>{});
+      const n=ids.length+pids.length;
+      loadNote("Merged "+n+" field change"+(n===1?"":"s")+" ✓"); setTimeout(()=>loadNote(""),3000);
     });
   }catch(e){ console.warn("field-changes check failed",e); }
 }
@@ -3412,7 +3449,7 @@ async function checkFieldChanges(){
       applyState(full);
       // lastState (image-free autosave) is written on every change; if newer than the cached full snapshot, overlay its fresh folders.
       if(last && Array.isArray(last.photos) && last.savedAt && (!full.savedAt || last.savedAt>full.savedAt)){
-        if(Array.isArray(last.actions)) actions=normActs(last.actions);   // actions list travels with the newer metadata
+        if(Array.isArray(last.actions)){ actions=normActs(last.actions); migrateActNotes(); }   // actions list travels with the newer metadata
         applyMetaMap(snapshotMeta(last.photos)); buildCluster(); renderClusters(); updateGallery(); renderActions(); persistState();
       }
     }
