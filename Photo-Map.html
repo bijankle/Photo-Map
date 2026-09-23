@@ -736,13 +736,6 @@
             <span id="mobExpStatus" style="font-family:var(--mono);font-size:10px;color:var(--dim);"></span>
           </div>
         </div>
-        <div class="set-row">
-          <div class="set-lbl">Download as Excel<span class="set-sub">Saves every action to an .xlsx spreadsheet — priority number, status, sub-actions, photo notes and the annotated photos side by side.</span></div>
-          <div class="set-ctl" style="flex-direction:column;align-items:flex-start;gap:6px;">
-            <button class="btn primary" id="btnXlsxExport" style="font-size:13px;">Download .xlsx</button>
-            <span id="xlsxStatus" style="font-family:var(--mono);font-size:10px;color:var(--dim);"></span>
-          </div>
-        </div>
       </div>
       <div class="set-sec" data-sec="actions">
         <h3>Actions</h3>
@@ -766,7 +759,7 @@
 
 <div class="main tab-photo" id="main">
   <aside class="actpanel" id="actPanel">
-    <div class="act-head"><span class="title">Actions</span><span class="count" id="actCount">0 open</span>
+    <div class="act-head"><span class="title">Actions</span><button class="act-tgl" id="actXlsx" title="Download every action — status, sub-actions, photo notes and annotated photos — as an .xlsx spreadsheet">Export</button><span style="flex:1"></span>
       <button class="act-tgl" id="actOpenOnly" title="Show only uncompleted actions in this list">Open only</button>
       <button class="act-tgl" id="actMapOnly" title="Show only photos with an uncompleted action on the map">Actions only</button>
       <button class="act-tgl" id="actExpAll" title="Expand or collapse every action's details">Collapse all</button></div>
@@ -1577,8 +1570,6 @@ async function maybeStartGeo(){
 /* Zoom to a set of photos, at MINIMUM deep enough that none of them is hidden inside a cluster. */
 function renderActions(){
   const list=document.getElementById("actList"); if(!list) return;
-  const openN=actions.filter(a=>!a.done).length;
-  document.getElementById("actCount").textContent=openN+" open / "+actions.length;
   document.getElementById("actOpenOnly").classList.toggle("on",actShowOpenOnly);
   document.getElementById("actMapOnly").classList.toggle("on",actOnlyMap);
   document.getElementById("actExpAll").textContent=actions.some(a=>!collActs.has(a.id))?"Collapse all":"Expand all";
@@ -1831,9 +1822,13 @@ async function xlsImage(p){   // annotated preview scaled into a 180x110 box for
   }catch(e){ return null; }
 }
 async function exportActionsXlsx(){
-  const st=document.getElementById("xlsxStatus"), btn=document.getElementById("btnXlsxExport");
-  if(!actions.length){ st.textContent="No actions to export."; return; }
-  btn.disabled=true; st.textContent="Loading Excel library\u2026";
+  const btn=document.getElementById("actXlsx");
+  const say=t=>{ btn.textContent=t; };
+  const done=(t,hold)=>{ say(t); setTimeout(()=>{ say("Export"); btn.disabled=false; },hold); };
+  const st={ set textContent(t){ say(t); } };   /* progress writes go straight onto the button */
+  if(!actions.length){ done("Nothing to export",1800); return; }
+  if(btn.disabled) return;
+  btn.disabled=true; st.textContent="Loading\u2026";
   try{
     await loadExcelJS();
     const wb=new ExcelJS.Workbook(); wb.created=new Date();
@@ -1878,11 +1873,10 @@ async function exportActionsXlsx(){
     aEl.download=String(loadedJsonName||folderName||"PhotoMap").replace(/\.[^.]+$/,"")+"-actions-"+new Date().toISOString().slice(0,10)+".xlsx";
     document.body.appendChild(aEl); aEl.click(); aEl.remove();
     setTimeout(()=>{ try{ URL.revokeObjectURL(aEl.href); }catch(e){} },4000);
-    st.textContent="\u2713 Saved "+order.length+" action"+(order.length===1?"":"s")+" to Excel.";
-  }catch(err){ st.textContent="Failed: "+(err&&err.message||err); }
-  btn.disabled=false;
+    done("\u2713 Saved",2200); return;
+  }catch(err){ btn.title="Failed: "+(err&&err.message||err); done("Failed \u2014 hover for why",5000); }
 }
-document.getElementById("btnXlsxExport").addEventListener("click",exportActionsXlsx);
+document.getElementById("actXlsx").addEventListener("click",e=>{ e.stopPropagation(); exportActionsXlsx(); });
 document.getElementById("setGhRepo").addEventListener("change",e=>{ try{ localStorage.setItem("pmGhRepo",e.target.value.trim()); }catch(err){} });
 document.getElementById("setGhToken").addEventListener("change",e=>{ try{ localStorage.setItem("pmGhToken",e.target.value.trim()); }catch(err){} });
 document.getElementById("setActMap").addEventListener("change",e=>{ actOnlyMap=e.target.checked; buildCluster(); renderClusters(); updateGallery(); renderMapTags(); persistState(); });
