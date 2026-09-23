@@ -604,6 +604,9 @@
   .m-fhead{position:absolute;top:0;left:0;right:0;z-index:600;display:flex;align-items:center;gap:8px;padding:8px 14px 18px;background:linear-gradient(rgba(20,20,19,.75),rgba(20,20,19,0));pointer-events:none;}
   .m-fhead .m-chip{pointer-events:auto;background:#141413cc;border-color:#4a4a48;color:#E3E5E8;}
   .m-fhead input.m-in{pointer-events:auto;flex:1;min-width:0;}
+  .m-fhead .m-fht{pointer-events:auto;}
+  .m-ur{position:absolute;right:8px;z-index:5;display:flex;gap:6px;}
+  .m-ur .m-chip{background:#141413cc;border:1px solid #4a4a48;color:#E3E5E8;}
   .m-fhead .m-back{pointer-events:auto;color:#fff;width:44px;height:44px;margin-left:-10px;border:none;background:none;font-size:26px;}
   .m-fht{color:#fff;font-weight:600;font-size:15px;text-shadow:0 1px 4px #000;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .m-pdet{background:#F2F3F5;overflow-y:auto;-webkit-overflow-scrolling:touch;}
@@ -3493,7 +3496,10 @@ function mChCount(){ const p=mPend(); return Object.keys(p.changes||{}).length+O
    changes[id] gains title / stepEdits {idx:text} / newSteps [{t,d}]; newActs holds actions
    created on the phone. Every mutation is undo/redo-able via whole-state snapshots. */
 let mUndoStack=[],mRedoStack=[],mRerender=null;
-function mMutate(fn){ const before=localStorage.getItem("pmField")||"{}"; fn(); mUndoStack.push(before); if(mUndoStack.length>100) mUndoStack.shift(); mRedoStack.length=0; }
+function mUpdUndoUI(){ const u=document.getElementById("mUndoB"),r=document.getElementById("mRedoB");
+  if(u) u.classList.toggle("off",!mUndoStack.length);
+  if(r) r.classList.toggle("off",!mRedoStack.length); }
+function mMutate(fn){ const before=localStorage.getItem("pmField")||"{}"; fn(); mUndoStack.push(before); if(mUndoStack.length>100) mUndoStack.shift(); mRedoStack.length=0; mUpdUndoUI(); }
 function mUndo(){ if(!mUndoStack.length) return; mRedoStack.push(localStorage.getItem("pmField")||"{}"); try{ localStorage.setItem("pmField",mUndoStack.pop()); }catch(e){} if(mRerender) mRerender(); }
 function mRedo(){ if(!mRedoStack.length) return; mUndoStack.push(localStorage.getItem("pmField")||"{}"); try{ localStorage.setItem("pmField",mRedoStack.pop()); }catch(e){} if(mRerender) mRerender(); }
 function mUndoHtml(){ return '<button class="m-chip m-ub'+(mUndoStack.length?'':' off')+'" id="mUndoB" type="button" aria-label="Undo">↺</button><button class="m-chip m-ub'+(mRedoStack.length?'':' off')+'" id="mRedoB" type="button" aria-label="Redo">↻</button>'; }
@@ -3595,11 +3601,35 @@ async function mLoadPack(){
     mPack=JSON.parse(text);
     const p=mPend();
     if(p.sentAt&&mPack.exportedAt&&Date.parse(mPack.exportedAt)>p.sentAt){ mPendSave({}); }   // desktop has re-exported since we sent: its truth wins
-    navigator.geolocation&&navigator.geolocation.getCurrentPosition(pos=>{ mGeo={lat:pos.coords.latitude,lng:pos.coords.longitude};
-      if(document.getElementById("mList")) mShowList();   // late GPS fix refreshes distances ONLY if the list is still on screen — never yanks you out of a detail
-    },()=>{},{enableHighAccuracy:true,timeout:8000});
+    mStartGeo();
     mShowList();
   }catch(err){ mShowSetup("Could not load: "+(err&&err.message||err)); }
+}
+/* Live location: a continuous watch (not a one-shot). Fixes that arrive AFTER a screen was
+   built are fed straight into any open maps — pin added or moved, and the site view refitted
+   to include you the first time — instead of being lost. */
+let mGeoWatch=null;
+function mStartGeo(){
+  if(mGeoWatch!=null||!navigator.geolocation) return;
+  mGeoWatch=navigator.geolocation.watchPosition(pos=>{
+    const first=!mGeo;
+    mGeo={lat:pos.coords.latitude,lng:pos.coords.longitude};
+    if(document.getElementById("mList")){ if(first) mShowList(); }   // refresh distance sort once, only while the list is visible
+    else mGeoLive(first);
+  },()=>{},{enableHighAccuracy:true,maximumAge:10000,timeout:20000});
+}
+function mGeoLive(refit){
+  try{
+    if(mInsetMapL){
+      if(mInsetMapL._geoPin) mInsetMapL._geoPin.setLatLng([mGeo.lat,mGeo.lng]);
+      else{ mInsetMapL._geoPin=L.marker([mGeo.lat,mGeo.lng],{icon:youAreHereIcon(26),interactive:false,zIndexOffset:900}).addTo(mInsetMapL);
+        const el=document.getElementById("mInset"); if(refit&&el&&el._refit) el._refit(); }
+    }
+    if(mMiniMap){
+      if(mMiniMap._geoPin) mMiniMap._geoPin.setLatLng([mGeo.lat,mGeo.lng]);
+      else mMiniMap._geoPin=L.marker([mGeo.lat,mGeo.lng],{icon:youAreHereIcon(40),interactive:false,zIndexOffset:900}).addTo(mMiniMap);
+    }
+  }catch(e){}
 }
 function mShowList(){
   if(!mPack){ mLoadPack(); return; }
@@ -3654,9 +3684,7 @@ function mShowDetail(ai,keepScroll){
   /* Snapchat-style vertical pager: MAP on top, full-screen PHOTOS (landing), DETAILS below —
      one continuous scroll with gentle (proximity) locking. */
   mScr('<div class="m-fhead"><button class="m-back" id="mBack" aria-label="Back">‹</button>'
-    +'<div class="m-fht" id="mFht">'+esc(mTitle(a))+'</div>'
-    +'<button class="m-chip m-ub" id="mTedit" type="button" aria-label="Edit title">✎</button>'+mUndoHtml()
-    +'<span class="m-chip" style="pointer-events:none;background:#141413cc;border-color:#4a4a48;color:'+(done?'#3BA55C':(a._new?'var(--accent2)':'#E3E5E8'))+';">'+(done?'DONE':(a._new?'NEW':'OPEN'))+'</span></div>'
+    +'<div class="m-fht" id="mFht" title="Tap to rename">'+esc(mTitle(a))+'</div></div>'
     +'<div class="m-snap" id="mSnap">'
     +(hasMap?'<section class="m-page"><div id="mMap" style="position:absolute;inset:0;"></div><div class="m-cue">▾ swipe up for photos · tap a dot to jump to its photo</div></section>':'')
     +(photos.length?'<section class="m-page m-pphoto"><div class="m-hsnap" id="mHsnap">'
@@ -3664,6 +3692,7 @@ function mShowDetail(ai,keepScroll){
         +'<input class="m-nin" data-pi="'+i+'" placeholder="Image note" autocomplete="off" />'
         +'<div class="m-pcap">'+esc(p.name||"")+' · '+(i+1)+'/'+photos.length+' ▸ · details ▴</div></div>').join('')
       +'</div>'+(hasMap?'<div class="m-inset" id="mInset"></div>':'')
+      +'<div class="m-ur" id="mUR">'+mUndoHtml()+'</div>'
       +'<div class="m-sub2" id="mSub2"></div></section>':'')
     +'<section class="m-page m-pdet"><div class="m-body" style="height:100%;box-sizing:border-box;padding-top:70px;">'
     +(!photos.length?'<div class="m-sec"><div class="m-lab">SUB-ACTIONS</div>'+mSteps(a).map((s,i)=>
@@ -3683,8 +3712,9 @@ function mShowDetail(ai,keepScroll){
     if(a._new) mEditNewAct(a._ni,x=>{ x.done=!done; x.doneAt=Date.now(); });
     else mMutate(()=>mSetCh(a.id,{done:!done,doneAt:Date.now()}));
     rer(); });
-  document.getElementById("mTedit").addEventListener("click",e=>{ e.stopPropagation();
-    mInline(document.getElementById("mFht"),mTitle(a),v=>{ if(v!=null&&v.trim()&&v.trim()!==mTitle(a)) mSetTitle(a,v.trim()); rer(); }); });
+  const fht=document.getElementById("mFht");
+  fht.addEventListener("click",e=>{ e.stopPropagation();
+    mInline(fht,mTitle(a),v=>{ if(v!=null&&v.trim()&&v.trim()!==mTitle(a)) mSetTitle(a,v.trim()); rer(); }); });
   /* image note: a single-row inline input ON the photo — desktop-style edit-in-place, dark theme */
   mNoteWire(document,photos);
   const rows=mSteps(a);
@@ -3713,7 +3743,7 @@ function mShowDetail(ai,keepScroll){
         if(hs) setTimeout(()=>hs.scrollTo({left:i*hs.clientWidth,behavior:"smooth"}),80); });
       L.circleMarker([p.lat,p.lng],{radius:9,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.85,className:"hl-dot",interactive:false}).addTo(mMiniMap);
     });
-    if(mGeo) L.marker([mGeo.lat,mGeo.lng],{icon:youAreHereIcon(40),interactive:false,zIndexOffset:900}).addTo(mMiniMap);
+    if(mGeo) mMiniMap._geoPin=L.marker([mGeo.lat,mGeo.lng],{icon:youAreHereIcon(40),interactive:false,zIndexOffset:900}).addTo(mMiniMap);
     const bb=L.latLngBounds(pts.map(p=>[p.lat,p.lng])); if(mGeo) bb.extend([mGeo.lat,mGeo.lng]);
     mMiniMap.fitBounds(bb,{padding:[36,36],maxZoom:19});
   }
@@ -3737,7 +3767,11 @@ function mShowDetail(ai,keepScroll){
       if(nb){ nb.style.left=Math.round(lbX+8)+"px"; nb.style.right="auto"; nb.style.width=Math.round(Math.max(140,gm.w-16))+"px";
         nb.style.top=Math.round(Math.max(36,gm.h-50))+"px"; nb.style.bottom="auto"; }
       const cap=pg.querySelector(".m-pcap"); if(cap){ cap.style.top=Math.round(Math.min(gm.h+3,H-15))+"px"; cap.style.bottom="auto"; }
-    }); };
+    });
+    const ur=document.getElementById("mUR");   // undo/redo chips: right under the current image
+    if(ur){ const i=Math.round(hsEl.scrollLeft/Math.max(1,hsEl.clientWidth));
+      const gc=geom(hsEl.children[i]&&hsEl.children[i].querySelector("img"));
+      ur.style.top=Math.round(hsEl.offsetTop+Math.min(gc.h+2,H-34))+"px"; } };
   if(hsEl){ hsEl.querySelectorAll("img").forEach(im=>im.addEventListener("load",posOverlays));
     requestAnimationFrame(posOverlays); setTimeout(posOverlays,120); setTimeout(posOverlays,450); }   // data-URL images can be complete before the load listeners attach
   if(insEl){
@@ -3753,14 +3787,14 @@ function mShowDetail(ai,keepScroll){
       L.circleMarker([p.lat,p.lng],{radius:4,color:"#ffffff",weight:2,fillColor:"#5865F2",fillOpacity:.9,interactive:false}).addTo(mInsetMapL);
       L.circleMarker([p.lat,p.lng],{radius:4,color:"#ffffff",weight:2,fillColor:"#5865F2",fillOpacity:.9,interactive:false}).addTo(mInsetMap);
     }
-    if(mGeo) L.marker([mGeo.lat,mGeo.lng],{icon:youAreHereIcon(26),interactive:false,zIndexOffset:900}).addTo(mInsetMapL);
+    if(mGeo) mInsetMapL._geoPin=L.marker([mGeo.lat,mGeo.lng],{icon:youAreHereIcon(26),interactive:false,zIndexOffset:900}).addTo(mInsetMapL);
     mInsetCur=L.circleMarker([pts[0].lat,pts[0].lng],{radius:7,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:1,className:"hl-dot",interactive:false}).addTo(mInsetMap);
     const bbR=L.latLngBounds(pts.map(p=>[p.lat,p.lng]));
-    const bbL=L.latLngBounds(pts.map(p=>[p.lat,p.lng])); if(mGeo) bbL.extend([mGeo.lat,mGeo.lng]);
     const ifit=()=>{ try{
       mInsetMapL.invalidateSize(); mInsetMap.invalidateSize();
       if(pts.length>1) mInsetMap.fitBounds(bbR,{padding:[12,12],maxZoom:19}); else mInsetMap.setView([pts[0].lat,pts[0].lng],18);
-      if(mGeo||pts.length>1) mInsetMapL.fitBounds(bbL,{padding:[14,14],maxZoom:17}); else mInsetMapL.setView([pts[0].lat,pts[0].lng],15);
+      const bl=L.latLngBounds(pts.map(p=>[p.lat,p.lng])); if(mGeo) bl.extend([mGeo.lat,mGeo.lng]);   // location can arrive late — always current
+      if(mGeo||pts.length>1) mInsetMapL.fitBounds(bl,{padding:[14,14],maxZoom:17}); else mInsetMapL.setView([pts[0].lat,pts[0].lng],15);
     }catch(e){} };
     insEl._refit=ifit;
     setTimeout(ifit,150);
