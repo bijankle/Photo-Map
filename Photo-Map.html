@@ -567,6 +567,14 @@
   .m-nbar{position:absolute;left:14px;right:14px;bottom:34px;z-index:3;box-sizing:border-box;border:1px solid #4a4a48;border-radius:10px;background:#141413cc;color:#E3E5E8;
     font:inherit;font-size:12px;padding:8px 10px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
   .m-cue{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:10px;color:#fff;text-shadow:0 1px 4px #000;pointer-events:none;z-index:500;}
+  .m-inset{position:absolute;top:68px;right:10px;width:118px;height:118px;z-index:4;border-radius:14px;overflow:hidden;border:2px solid rgba(255,255,255,.85);box-shadow:0 2px 12px rgba(0,0,0,.55);pointer-events:none;background:#141413;transition:opacity .2s;}
+  .m-nedit{position:absolute;left:14px;right:14px;bottom:34px;z-index:6;display:flex;flex-direction:column;gap:8px;box-sizing:border-box;background:#141413ee;border:1px solid #4a4a48;border-radius:12px;padding:10px;}
+  .m-nprev{max-height:80px;overflow-y:auto;font-size:12px;color:#C8CAD0;line-height:1.45;white-space:pre-wrap;}
+  .m-nta{box-sizing:border-box;width:100%;min-height:56px;font:inherit;font-size:14px;color:#E3E5E8;background:#232322;border:1px solid #4a4a48;border-radius:10px;padding:8px 10px;outline:none;resize:none;}
+  .m-nbtns{display:flex;gap:8px;}
+  .m-nbtns button{box-sizing:border-box;min-height:40px;border-radius:10px;font:inherit;font-weight:600;cursor:pointer;}
+  .m-nok{flex:1;border:none;background:var(--accent);color:#fff;}
+  .m-ncl{width:48px;border:1px solid #4a4a48;background:#232322;color:#E3E5E8;}
   .m-fhead{position:absolute;top:0;left:0;right:0;z-index:600;display:flex;align-items:center;gap:8px;padding:8px 14px 18px;background:linear-gradient(rgba(20,20,19,.75),rgba(20,20,19,0));pointer-events:none;}
   .m-fhead .m-back{pointer-events:auto;color:#fff;width:44px;height:44px;margin-left:-10px;border:none;background:none;font-size:26px;}
   .m-fht{color:#fff;font-weight:600;font-size:15px;text-shadow:0 1px 4px #000;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -3269,7 +3277,7 @@ function parseShareHash(){
    Phone-sized touch screens get an actions-first UI at the SAME link. It reads the latest
    pack.json from the private data repo (token pasted once) and pushes ticks/notes back. */
 function isMobile(){ try{ return matchMedia("(pointer:coarse)").matches && Math.min(screen.width,screen.height)<600 && !localStorage.getItem("pmForceDesktop"); }catch(e){ return false; } }
-let mPack=null, mGeo=null, mMiniMap=null;
+let mPack=null, mGeo=null, mMiniMap=null, mInsetMap=null, mInsetCur=null;
 function mPend(){ try{ return JSON.parse(localStorage.getItem("pmField")||"{}")||{}; }catch(e){ return {}; } }
 function mPendSave(o){ try{ localStorage.setItem("pmField",JSON.stringify(o)); }catch(e){} }
 function mCh(id){ const p=mPend(); return (p.changes||{})[id]||{}; }
@@ -3293,7 +3301,7 @@ function mDist(a){   // metres from the phone to the nearest of the action's pho
 function mFmtD(m){ return m==null?"":(m>=1000?(m/1000).toFixed(1)+" km":Math.round(m)+" m"); }
 function mDone(a){ const c=mCh(a.id); return c.done===true; }
 function mStepDone(a,i){ const c=mCh(a.id); return (c.steps&&(String(i) in c.steps))?!!c.steps[String(i)]:!!(a.steps[i]&&a.steps[i].d); }
-function mScr(html){ if(mMiniMap){ try{ mMiniMap.remove(); }catch(e){} mMiniMap=null; } document.getElementById("mroot").innerHTML='<div class="m-scr">'+html+'</div>'; }
+function mScr(html){ [mMiniMap,mInsetMap].forEach(m=>{ if(m){ try{ m.remove(); }catch(e){} } }); mMiniMap=null; mInsetMap=null; mInsetCur=null; document.getElementById("mroot").innerHTML='<div class="m-scr">'+html+'</div>'; }
 function mShowSetup(msg){
   const g=ghCfg();
   mScr('<div class="m-head"><div class="m-brand">Photo<span>Map</span> Field</div></div>'
@@ -3365,11 +3373,10 @@ function mShowDetail(ai,keepScroll){
     +'<div class="m-snap" id="mSnap">'
     +(hasMap?'<section class="m-page"><div id="mMap" style="position:absolute;inset:0;"></div><div class="m-cue">▾ swipe up for photos · tap a dot to jump to its photo</div></section>':'')
     +(photos.length?'<section class="m-page m-pphoto"><div class="m-hsnap" id="mHsnap">'
-      +photos.map((p,i)=>{ const fn=mPn(p.id); const t=(fn!=null?fn:(p.note||""));
-        return '<div class="m-hpage">'+(p.img?'<img src="'+p.img+'" alt="'+esc(p.name||"photo")+'" />':'')
-        +'<button class="m-nbar" data-pi="'+i+'" type="button">'+(t?(fn!=null?'✎ ':'')+esc(t.length>70?t.slice(0,70)+"…":t):'+ photo note')+'</button>'
-        +'<div class="m-pcap">'+esc(p.name||"")+' · '+(i+1)+'/'+photos.length+' ▸ · details ▴</div></div>'; }).join('')
-      +'</div></section>':'')
+      +photos.map((p,i)=>'<div class="m-hpage">'+(p.img?'<img src="'+p.img+'" alt="'+esc(p.name||"photo")+'" />':'')
+        +'<button class="m-nbar" data-pi="'+i+'" type="button">'+mNbarHtml(p)+'</button>'
+        +'<div class="m-pcap">'+esc(p.name||"")+' · '+(i+1)+'/'+photos.length+' ▸ · details ▴</div></div>').join('')
+      +'</div>'+(hasMap?'<div class="m-inset" id="mInset"></div>':'')+'</section>':'')
     +'<section class="m-page m-pdet"><div class="m-body" style="height:100%;box-sizing:border-box;padding-top:70px;">'
     +((a.steps||[]).length?'<div class="m-sec"><div class="m-lab">SUB-ACTIONS</div>'+(a.steps||[]).map((s,i)=>{
         const sd=mStepDone(a,i);
@@ -3383,7 +3390,7 @@ function mShowDetail(ai,keepScroll){
   document.getElementById("mAllBtn").addEventListener("click",mShowList);
   const snap=document.getElementById("mSnap");
   document.getElementById("mDoneBtn").addEventListener("click",()=>{ mSetCh(a.id,{done:!done,doneAt:Date.now()}); mShowDetail(ai,snap.scrollTop); });
-  document.querySelectorAll(".m-nbar").forEach(el=>el.addEventListener("click",e=>{ e.stopPropagation(); mEditPnote(ai,Number(el.dataset.pi),snap.scrollTop); }));
+  document.querySelectorAll(".m-nbar").forEach(el=>el.addEventListener("click",e=>{ e.stopPropagation(); mInlineNote(photos[Number(el.dataset.pi)],el); }));
   document.querySelectorAll(".m-strow").forEach(el=>el.addEventListener("click",()=>{ const i=Number(el.dataset.si); mSetCh(a.id,{steps:Object.assign({},mCh(a.id).steps||{},{[String(i)]:!mStepDone(a,i)})}); mShowDetail(ai,snap.scrollTop); }));
   const mapEl=document.getElementById("mMap");
   if(mapEl){
@@ -3401,27 +3408,49 @@ function mShowDetail(ai,keepScroll){
     const bb=L.latLngBounds(pts.map(p=>[p.lat,p.lng])); if(mGeo) bb.extend([mGeo.lat,mGeo.lng]);
     mMiniMap.fitBounds(bb,{padding:[36,36],maxZoom:19});
   }
+  /* Inset mini-map top-right of the photo pages: every action dot, with the photo being
+     viewed as the flashing one. It follows the horizontal swipe. */
+  const insEl=document.getElementById("mInset");
+  if(insEl){
+    const pts=photos.filter(p=>p.lat!=null);
+    mInsetMap=L.map(insEl,{zoomControl:false,attributionControl:false,dragging:false,touchZoom:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false,tap:false});
+    L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",{subdomains:["mt0","mt1","mt2","mt3"],maxZoom:22,maxNativeZoom:21}).addTo(mInsetMap);
+    for(const p of pts) L.circleMarker([p.lat,p.lng],{radius:4,color:"#ffffff",weight:2,fillColor:"#5865F2",fillOpacity:.9,interactive:false}).addTo(mInsetMap);
+    mInsetCur=L.circleMarker([pts[0].lat,pts[0].lng],{radius:7,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:1,className:"hl-dot",interactive:false}).addTo(mInsetMap);
+    const ibb=L.latLngBounds(pts.map(p=>[p.lat,p.lng]));
+    const ifit=()=>{ try{ mInsetMap.invalidateSize(); if(pts.length>1) mInsetMap.fitBounds(ibb,{padding:[12,12],maxZoom:19}); else mInsetMap.setView([pts[0].lat,pts[0].lng],18); }catch(e){} };
+    setTimeout(ifit,150);
+    const hs=document.getElementById("mHsnap");
+    const setCur=i=>{ const p=photos[i]; if(!p) return;
+      if(p.lat!=null){ insEl.style.opacity="1"; mInsetCur.setLatLng([p.lat,p.lng]); }
+      else insEl.style.opacity="0.25"; };   // photo without GPS: dim the inset instead of pointing at nothing
+    setCur(0);
+    if(hs) hs.addEventListener("scroll",()=>requestAnimationFrame(()=>{ const i=Math.round(hs.scrollLeft/Math.max(1,hs.clientWidth)); if(i!==insEl._ci){ insEl._ci=i; setCur(i); } }));
+  }
   requestAnimationFrame(()=>{   // land on the first photo; the map waits one swipe down
     if(keepScroll!=null){ snap.scrollTop=keepScroll; }
     else { const first=snap.querySelector(".m-pphoto"); if(first) snap.scrollTop=first.offsetTop; }
     if(mMiniMap) setTimeout(()=>{ try{ mMiniMap.invalidateSize(); const pts2=photos.filter(p=>p.lat!=null); const bb2=L.latLngBounds(pts2.map(p=>[p.lat,p.lng])); if(mGeo) bb2.extend([mGeo.lat,mGeo.lng]); mMiniMap.fitBounds(bb2,{padding:[36,36],maxZoom:19}); }catch(e){} },120);
   });
 }
-function mEditPnote(ai,pi,keepScroll){
-  const a=(mPack.actions||[])[ai]; const p=a&&(a.photos||[])[pi]; if(!p){ mShowDetail(ai); return; }
-  const fn=mPn(p.id);
-  mScr('<div class="m-head"><button class="m-back" id="mBack" aria-label="Back">‹</button>'
-    +'<div style="flex:1;display:flex;flex-direction:column;gap:2px;"><div style="font-size:14px;font-weight:600;">'+esc(p.name||"photo")+'</div>'
-    +'<div class="m-sub">PHOTO NOTES</div></div></div>'
-    +'<div class="m-body">'
-    +(p.note?'<div class="m-sec"><div class="m-lab">ON THE PHOTO</div><div style="font-size:13px;color:var(--ink);line-height:1.5;white-space:pre-wrap;">'+esc(p.note)+'</div></div>':'')
-    +'<div class="m-sec"><div class="m-lab">'+(p.note?'ADD FIELD NOTE':'FIELD NOTE')+'</div>'
-    +'<textarea class="m-ta" id="mPnTa" placeholder="Saved to this photo when you send changes back…">'+esc(fn||"")+'</textarea></div>'
-    +'</div>'
-    +'<div class="m-foot"><button class="m-btn" id="mPnSave">Save note</button></div>');
-  const back=()=>mShowDetail(ai,keepScroll);
-  document.getElementById("mBack").addEventListener("click",back);
-  document.getElementById("mPnSave").addEventListener("click",()=>{ mSetPn(p.id,p.name||"",document.getElementById("mPnTa").value.trim()); back(); });
+/* Photo-note editing happens IN PLACE on the photo page: tapping the note bar swaps in a small
+   panel with a textarea, the keyboard opens over the photo, and Save/✕ collapse it back. */
+function mNbarHtml(p){ const fn=mPn(p.id); const t=(fn!=null?fn:(p.note||"")); return t?(fn!=null?'✎ ':'')+esc(t.length>70?t.slice(0,70)+"…":t):'+ photo note'; }
+function mInlineNote(p,bar){
+  if(!p||!bar) return;
+  const page=bar.closest(".m-hpage"); if(!page||page.querySelector(".m-nedit")) return;
+  bar.style.display="none";
+  const box=document.createElement("div"); box.className="m-nedit";
+  box.innerHTML=(p.note?'<div class="m-nprev">'+esc(p.note)+'</div>':'')
+    +'<textarea class="m-nta" placeholder="'+(p.note?'Add field note…':'Photo note…')+'"></textarea>'
+    +'<div class="m-nbtns"><button class="m-nok" type="button">Save</button><button class="m-ncl" type="button">✕</button></div>';
+  page.appendChild(box);
+  ["click","touchstart","pointerdown"].forEach(ev=>box.addEventListener(ev,e=>e.stopPropagation()));
+  const ta=box.querySelector(".m-nta"); ta.value=mPn(p.id)||"";
+  const close=()=>{ box.remove(); bar.style.display=""; };
+  box.querySelector(".m-nok").addEventListener("click",()=>{ mSetPn(p.id,p.name||"",ta.value.trim()); bar.innerHTML=mNbarHtml(p); close(); });
+  box.querySelector(".m-ncl").addEventListener("click",close);
+  ta.focus();
 }
 function mShowPhoto(ai,pi){
   const a=(mPack.actions||[])[ai]; const p=a&&(a.photos||[])[pi]; if(!p){ mShowDetail(ai); return; }
