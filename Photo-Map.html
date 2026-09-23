@@ -388,6 +388,11 @@
   .act-lcol{display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0;}
   .act-pic{display:flex;align-items:center;color:var(--muted);line-height:1;}
   .act-pic svg{display:block;border-radius:3.5px;}
+  /* cover photo column: fixed width, flush to the tile's right edge, black fills the letterbox */
+  .act-cover{flex:0 0 84px;width:84px;align-self:stretch;margin:-8px -9px -8px 2px;border-radius:0 9px 9px 0;overflow:hidden;background:#000;display:flex;align-items:center;justify-content:center;min-height:34px;}
+  .act-cover img{width:100%;height:100%;object-fit:contain;display:block;}
+  .card.drop-l{box-shadow:-3px 0 0 var(--accent);}
+  .card.drop-r{box-shadow:3px 0 0 var(--accent);}
   .act-row:hover{border-color:var(--accent);}
   .act-row.sel{border-color:var(--accent);background:var(--accent-tint);animation:rowpulse 1.2s ease-in-out infinite;}
   @keyframes rowpulse{0%,100%{box-shadow:0 0 0 2px rgba(88,101,242,.65);}50%{box-shadow:0 0 0 2px rgba(88,101,242,.15);}}
@@ -1163,7 +1168,24 @@ map.on("click",e=>{
 let actions=[], nextActId=1, selActs=new Set(), actionFilter=null;
 let actShowOpenOnly=false, actOnlyMap=false, rightTab="photo";
 function actById(id){ return actions.find(a=>a.id===id)||null; }
-function actPhotos(a){ return a?photos.filter(p=>Array.isArray(p.acts)&&p.acts.includes(a.id)):[]; }
+function actPhotos(a){   // per-action photo order: a.porder ids first (stable), everything else in add order
+  if(!a) return [];
+  const list=photos.filter(p=>Array.isArray(p.acts)&&p.acts.includes(a.id));
+  if(Array.isArray(a.porder)&&a.porder.length){
+    const idx=new Map(); a.porder.forEach((id,i)=>idx.set(id,i));
+    list.sort((x,y)=>(idx.has(x.id)?idx.get(x.id):1e9)-(idx.has(y.id)?idx.get(y.id):1e9));
+  }
+  return list;
+}
+function reorderActPhoto(a,dragId,targetId,before){   // gallery drag: photo order (and therefore the cover) is an undoable action edit
+  if(!a||dragId===targetId) return;
+  const ids=actPhotos(a).map(p=>p.id);
+  const from=ids.indexOf(dragId); if(from<0||!ids.includes(targetId)) return;
+  ids.splice(from,1);
+  let to=ids.indexOf(targetId); if(!before) to++;
+  ids.splice(to,0,dragId);
+  const b=actState(a); a.porder=ids; recordActEdit(a,b); afterFolderChange();
+}
 function hasOpenAct(p){ return Array.isArray(p.acts)&&p.acts.some(id=>{ const a=actById(id); return a&&!a.done; }); }
 function passActs(p){ return !actOnlyMap||hasOpenAct(p); }
 function normActs(list){ let mx=0; const out=(list||[]).map(a=>{
@@ -1173,6 +1195,7 @@ function normActs(list){ let mx=0; const out=(list||[]).map(a=>{
   if(Array.isArray(a.notes)) for(const n of a.notes){ if(n&&n.t) parts.push(String(n.t)); }
   const o={id:+a.id||0,text:String(a.text||""),done:!!a.done,created:a.created||null,doneAt:a.doneAt||null,
     steps:Array.isArray(a.steps)?a.steps.map(s=>({t:String(s.t||""),d:!!s.d})).filter(s=>s.t):[]};
+  if(Array.isArray(a.porder)){ const po=a.porder.map(Number).filter(x=>x>0); if(po.length) o.porder=po; }
   if(parts.length) o._n=parts.join("\n");
   return o;
 }).filter(a=>a.id>0&&a.text); out.forEach(a=>{ if(a.id>mx)mx=a.id; }); nextActId=mx+1; return out; }
@@ -1232,7 +1255,8 @@ function startActEdit(a,row){
 function renameAction(a){ const row=document.querySelector('.act-row[data-aid="'+a.id+'"]'); if(row) startActEdit(a,row); }
 let dragStep=null;   // {aid, si} — a sub-action's number badge is its drag handle
 let dragActId=null;   // whole action rows drag to re-prioritise the left list
-document.addEventListener("dragend",()=>{ dragStep=null; dragActId=null; document.querySelectorAll(".drop-b,.drop-a").forEach(x=>x.classList.remove("drop-b","drop-a")); });
+let galDragPid=null;   // gallery cards drag to reorder a selected action's photos
+document.addEventListener("dragend",()=>{ dragStep=null; dragActId=null; galDragPid=null; document.querySelectorAll(".drop-b,.drop-a,.drop-l,.drop-r").forEach(x=>x.classList.remove("drop-b","drop-a","drop-l","drop-r")); });
 function reorderAction(dragId,targetId,placeBefore){
   const from=actions.findIndex(x=>x.id===dragId); if(from<0) return;
   const beforeIds=actions.map(x=>x.id);
@@ -1510,7 +1534,9 @@ function renderActions(){
   const shown=(actShowOpenOnly?actions.filter(a=>!a.done):actions.slice()).sort((x,y)=>(x.done?1:0)-(y.done?1:0));   // completed actions sink to the bottom (display only — stored order unchanged)
   if(!shown.length){ list.innerHTML=""; return; }
   const cp=lb.classList.contains("open")?curPhoto():null;   // the open photo's actions get a marker in this list
-  list.innerHTML=shown.map(a=>{ const n=actPhotos(a).length;
+  list.innerHTML=shown.map(a=>{ const ap=actPhotos(a), n=ap.length;
+    if(n) ensureAnnotThumb(ap[0]);
+    const cov=n&&ap[0].thumb?('<div class="act-cover"><img data-cov="'+ap[0].id+'" src="'+thumbSrc(ap[0])+'" alt=""/></div>'):'';
     const isCur=!!(cp&&Array.isArray(cp.acts)&&cp.acts.includes(a.id));
     const exp=!collActs.has(a.id);
     return '<div class="act-row'+(a.done?' done':'')+(selActs.has(a.id)?' sel':'')+(isCur?' cur':'')+'" data-aid="'+a.id+'" draggable="true">'
@@ -1523,7 +1549,7 @@ function renderActions(){
         +((a.steps&&a.steps.length)?'steps '+a.steps.filter(s=>s.d).length+'/'+a.steps.length:'')
         +(a.done&&a.doneAt?((a.steps&&a.steps.length)?' · ':'')+'done '+fmtDate(a.doneAt):'')+'</div>'):'')):'')
       +'</div>'
-      +expBtnHtml(a)+'<button class="ipa-x act-del" type="button" title="'+(isCur?'Remove this action from the open photo':'Delete this action')+'">&times;</button></div>'; }).join("");
+      +expBtnHtml(a)+'<button class="ipa-x act-del" type="button" title="'+(isCur?'Remove this action from the open photo':'Delete this action')+'">&times;</button>'+cov+'</div>'; }).join("");
   list.querySelectorAll(".act-row").forEach(el=>{
     const a=actById(Number(el.dataset.aid)); if(!a) return;
     el.querySelector("input").addEventListener("click",e=>{ e.stopPropagation(); setActionDone(a,e.target.checked); });
@@ -1538,7 +1564,7 @@ function renderActions(){
     el.addEventListener("click",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes")||el.querySelector(".act-edit")) return;
       clearTimeout(el._ct); clickAction(a,e,true);
       if(!e.ctrlKey&&!e.metaKey&&!e.shiftKey) el._ct=setTimeout(()=>actNavigate(a),260); });
-    el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); startActEdit(a,el); });
+    el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes,.act-cover")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); startActEdit(a,el); });
     el.addEventListener("contextmenu",e=>{ e.preventDefault(); e.stopPropagation(); openActMenu(a,e); });
     /* priority drag & drop: the whole row is the handle (a drag begun on a sub-action's number stays a sub-action drag) */
     el.addEventListener("dragstart",e=>{ if(dragStep) return;   // a sub-action drag already owns this gesture
@@ -1985,7 +2011,7 @@ function fitToPhotos(){
 const dz=document.getElementById("dropzone"); let dragDepth=0;
 /* The upload overlay is only for drags that carry FILES from outside the app — internal drags
    (sub-action reorder) carry text and must never trigger it. */
-const dragHasFiles=e=>{ try{ return !dragStep && dragActId==null && !!e.dataTransfer && Array.from(e.dataTransfer.types||[]).includes("Files"); }catch(err){ return false; } };
+const dragHasFiles=e=>{ try{ return !dragStep && dragActId==null && galDragPid==null && !!e.dataTransfer && Array.from(e.dataTransfer.types||[]).includes("Files"); }catch(err){ return false; } };
 window.addEventListener("dragenter",e=>{e.preventDefault();if(!dragHasFiles(e))return;dragDepth++;dz.classList.add("show");});
 window.addEventListener("dragover",e=>e.preventDefault());
 window.addEventListener("dragleave",e=>{e.preventDefault();if(--dragDepth<=0)dz.classList.remove("show");});
@@ -2241,6 +2267,11 @@ function updateGallery(keepLimit){
   const spatialOK=p=>actionFilter?true:spatial.contains([p.lat,p.lng]);   // an action's photos list regardless of where the map sits
   let inView=sortPhotos(photos.filter(p=>p.lat!=null&&passDate(p)&&passName(p)&&spatialOK(p)),center);
   let noGeo=(showNoGeo||actionFilter)?sortPhotos(photos.filter(p=>p.lat==null&&passDate(p)&&passName(p)),center):[];
+  /* one selected action: the gallery shows ITS order (drag to rearrange; first photo = cover) */
+  const orderAct=(actionFilter&&selActs.size===1)?actById([...selActs][0]):null;
+  if(orderAct){ const ord=new Map(actPhotos(orderAct).map((p,i)=>[p.id,i]));
+    const byOrd=(x,y)=>(ord.has(x.id)?ord.get(x.id):1e9)-(ord.has(y.id)?ord.get(y.id):1e9);
+    inView.sort(byOrd); noGeo.sort(byOrd); }
   /* keep the open viewer pinned to the same photo across re-sorts (lightboxIndex is positional) */
   const openP=lb.classList.contains("open")?lightboxList[lightboxIndex]:null;
   lightboxList=inView.concat(noGeo);
@@ -2273,7 +2304,19 @@ function updateGallery(keepLimit){
     const gx=el.querySelector(".gal-x");
     if(gx) gx.addEventListener("click",e=>{ e.stopPropagation(); e.preventDefault(); unassignFromSelActs(p); });
     el.addEventListener("contextmenu",e=>{ e.preventDefault(); e.stopPropagation(); openDotMenu(p,e); });   // same menu as the map dots
-    el.addEventListener("mouseenter",()=>highlightDot(p)); el.addEventListener("mouseleave",highlightCurrent); });
+    el.addEventListener("mouseenter",()=>highlightDot(p)); el.addEventListener("mouseleave",highlightCurrent);
+    if(orderAct){   // drag to rearrange this action's photo order (first = cover)
+      el.draggable=true;
+      el.addEventListener("dragstart",e=>{ galDragPid=p.id; e.dataTransfer.effectAllowed="move"; try{ e.dataTransfer.setData("text/plain","gal:"+p.id); }catch(err){} });
+      el.addEventListener("dragover",e=>{ if(galDragPid==null||galDragPid===p.id) return; e.preventDefault();
+        const r=el.getBoundingClientRect(); const left=(e.clientX-r.left)<r.width/2;
+        el.classList.toggle("drop-l",left); el.classList.toggle("drop-r",!left); });
+      el.addEventListener("dragleave",()=>el.classList.remove("drop-l","drop-r"));
+      el.addEventListener("drop",e=>{ e.preventDefault(); e.stopPropagation();
+        const left=el.classList.contains("drop-l"); el.classList.remove("drop-l","drop-r");
+        if(galDragPid!=null&&galDragPid!==p.id) reorderActPhoto(orderAct,galDragPid,p.id,left);
+        galDragPid=null; });
+    } });
   const more=body.querySelector("#galMore"); if(more) more.addEventListener("click",()=>{ galleryLimit+=GALLERY_CHUNK*2; updateGallery(true); });
   const anx=body.querySelector("#actNoteX"); if(anx) anx.addEventListener("click",clearActSel);
   if(!body._moreWired){ body._moreWired=true; body.addEventListener("scroll",()=>{ if(!document.getElementById("galMore")) return; if(body.scrollTop+body.clientHeight>body.scrollHeight-320){ galleryLimit+=GALLERY_CHUNK*2; updateGallery(true); } }); }
@@ -2307,7 +2350,7 @@ function ensureAnnotThumb(p){
   }).catch(()=>{}).then(()=>annotBusy.delete(p.id));
 }
 function patchThumbEls(p){ const src=thumbSrc(p); if(!src) return;
-  document.querySelectorAll('.card[data-id="'+p.id+'"] img.thumb').forEach(im=>{ if(im.src!==src) im.src=src; }); }
+  document.querySelectorAll('.card[data-id="'+p.id+'"] img.thumb,.act-cover img[data-cov="'+p.id+'"]').forEach(im=>{ if(im.src!==src) im.src=src; }); }
 function cardHtml(p,isNoGeo){
   const sub=p.time?fmtDate(p.time):(p.lat!=null?fmtCoord(p.lat,p.lng):"no metadata");
   const flag=isNoGeo?'<div class="flag">NO GPS</div>':"";
@@ -2997,7 +3040,7 @@ function pushTagAction(items){   // one undo step, possibly touching many photos
   pushUndo({items});
 }
 function recordTagChange(p,before){ pushTagAction([{id:p.id,before,after:snapshotTags(p)}]); }
-function actState(a){ return {text:a.text,done:!!a.done,doneAt:a.doneAt||null,steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d}))}; }
+function actState(a){ return {text:a.text,done:!!a.done,doneAt:a.doneAt||null,steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d})),porder:(Array.isArray(a.porder)&&a.porder.length)?a.porder.slice():null}; }
 function recordActEdit(a,before){ const after=actState(a); if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({actEdit:{id:a.id,before,after}}); }
 function cpMarks(ms){ return JSON.parse(JSON.stringify(ms||[])); }
 function pushMarksSnap(p,before,after){ if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({marksSnap:{id:p.id,before,after}}); }
@@ -3013,7 +3056,7 @@ function applyUndoEntry(a,dir){   // dir: "before" (undo) or "after" (redo)
     if(undo){ actions=actions.filter(x=>x.id!==a.actCreate.data.id); selActs.delete(a.actCreate.data.id); }
     else { const d=a.actCreate.data; if(!actById(d.id)){ actions.splice(Math.min(a.actCreate.index,actions.length),0,Object.assign({},d)); if(nextActId<=d.id) nextActId=d.id+1; } }
   }
-  if(a.actEdit){ const x=actById(a.actEdit.id); if(x){ const src=undo?a.actEdit.before:a.actEdit.after; x.text=src.text; x.done=src.done; x.doneAt=src.doneAt; if(src.steps) x.steps=src.steps.map(s=>({t:s.t,d:!!s.d})); } }
+  if(a.actEdit){ const x=actById(a.actEdit.id); if(x){ const src=undo?a.actEdit.before:a.actEdit.after; x.text=src.text; x.done=src.done; x.doneAt=src.doneAt; if(src.steps) x.steps=src.steps.map(s=>({t:s.t,d:!!s.d})); x.porder=(src.porder&&src.porder.slice())||undefined; } }
   if(a.addPhotos){   // pasted/dropped photos: undo removes them (kept aside), redo puts them back
     if(undo){
       const ids=new Set(a.addPhotos);
@@ -3297,7 +3340,7 @@ document.getElementById("jsonInput").addEventListener("change",async e=>{ const 
 function serializeState(includeImages){
   return {
     version:3, folderName, savedAt:new Date().toISOString(),
-    actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.steps&&a.steps.length)o.steps=a.steps.map(s=>({t:s.t,d:!!s.d})); return o; }),
+    actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.steps&&a.steps.length)o.steps=a.steps.map(s=>({t:s.t,d:!!s.d})); if(Array.isArray(a.porder)&&a.porder.length)o.porder=a.porder; return o; }),
     settings:{ baseLayer: map.hasLayer(google)?"google":map.hasLayer(esri)?"esri":"none", showNoGeo, sortBy:currentSort,
       thumb:getComputedStyle(document.documentElement).getPropertyValue("--thumb").trim(),
       sideW:getComputedStyle(document.documentElement).getPropertyValue("--side-w").trim(),
