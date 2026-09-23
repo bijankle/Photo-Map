@@ -697,7 +697,8 @@
   <aside class="actpanel" id="actPanel">
     <div class="act-head"><span class="title">Actions</span><span class="count" id="actCount">0 open</span>
       <button class="act-tgl" id="actOpenOnly" title="Show only uncompleted actions in this list">Open only</button>
-      <button class="act-tgl" id="actMapOnly" title="Show only photos with an uncompleted action on the map">Actions only</button></div>
+      <button class="act-tgl" id="actMapOnly" title="Show only photos with an uncompleted action on the map">Actions only</button>
+      <button class="act-tgl" id="actExpAll" title="Expand or collapse every action's details">Collapse all</button></div>
     <div class="act-new"><input type="text" id="actNewInput" placeholder="+ New action — Enter to add" autocomplete="off" /></div>
     <div class="act-list" id="actList"></div>
   </aside>
@@ -1158,7 +1159,7 @@ function setActionDone(a,done){ const before=actState(a); a.done=!!done; a.doneA
 /* Inline editing (titles and descriptions, in both the Actions panel and the under-photo strip):
    double-click the text to edit in place. Enter (Shift+Enter = new line in a description) or
    clicking away commits; Escape cancels. */
-let expActs=new Set(), expActsIp=new Set();   // expanded descriptions — separate per view (left panel vs photo strip), session-only
+let collActs=new Set();   // COLLAPSED action tiles in the left panel — default is fully expanded; session-only
 function inlineEdit(el,value,multiline,onCommit){
   if(!el||el.parentElement.querySelector(".act-edit")) return;
   el.style.display="none";
@@ -1191,7 +1192,7 @@ function reorderStep(a,from,to){
   const mv=a.steps.splice(from,1)[0]; a.steps.splice(to,0,mv);
   recordActEdit(a,b); afterFolderChange();
 }
-function expBtnHtml(a,set){ return '<button class="act-exp'+(set.has(a.id)?' on':'')+'" type="button" title="'+(set.has(a.id)?'Hide':'Show')+' details">▾</button>'; }
+function expBtnHtml(a){ const exp=!collActs.has(a.id); return '<button class="act-exp'+(exp?' on':'')+'" type="button" title="'+(exp?'Hide':'Show')+' details">▾</button>'; }
 /* Photo notes: ONE plain-text blob per PHOTO (actions carry no notes) — an input when empty,
    a click-to-edit box when set. Edits ride the standard photo-snapshot undo. */
 function setPhotoNote(p,v){
@@ -1252,9 +1253,9 @@ function wireSteps(el,a){
     const row2=document.querySelector('.act-row[data-aid="'+a.id+'"] .st-new'); if(row2) row2.focus();   // keep typing the next step
   });
 }
-function wireActRowCommon(el,a,set){
+function wireActRowCommon(el,a){
   const ex=el.querySelector(".act-exp");
-  if(ex) ex.addEventListener("click",e=>{ e.stopPropagation(); if(set.has(a.id)) set.delete(a.id); else set.add(a.id); refreshActUI(); });
+  if(ex) ex.addEventListener("click",e=>{ e.stopPropagation(); if(collActs.has(a.id)) collActs.delete(a.id); else collActs.add(a.id); refreshActUI(); });
 }
 function deleteAction(a){   // no confirm needed: Ctrl+Z restores the action and all its photo links
   const items=[];
@@ -1347,12 +1348,13 @@ function renderActions(){
   document.getElementById("actCount").textContent=openN+" open / "+actions.length;
   document.getElementById("actOpenOnly").classList.toggle("on",actShowOpenOnly);
   document.getElementById("actMapOnly").classList.toggle("on",actOnlyMap);
+  document.getElementById("actExpAll").textContent=actions.some(a=>!collActs.has(a.id))?"Collapse all":"Expand all";
   const shown=actShowOpenOnly?actions.filter(a=>!a.done):actions;
   if(!shown.length){ list.innerHTML=""; return; }
   const cp=lb.classList.contains("open")?curPhoto():null;   // the open photo's actions get a marker in this list
   list.innerHTML=shown.map(a=>{ const n=actPhotos(a).length;
     const isCur=!!(cp&&Array.isArray(cp.acts)&&cp.acts.includes(a.id));
-    const exp=expActs.has(a.id);
+    const exp=!collActs.has(a.id);
     return '<div class="act-row'+(a.done?' done':'')+(selActs.has(a.id)?' sel':'')+(isCur?' cur':'')+'" data-aid="'+a.id+'">'
       +'<label class="act-chk" title="'+(a.done?'Reopen this action':'Mark completed')+'"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
       +'<div class="act-body"><div class="t">'+esc(a.text)+'</div>'
@@ -1361,7 +1363,7 @@ function renderActions(){
         +((a.steps&&a.steps.length)?' · steps '+a.steps.filter(s=>s.d).length+'/'+a.steps.length:'')
         +(a.done&&a.doneAt?' · done '+fmtDate(a.doneAt):'')+'</div>'):'')
       +'</div>'
-      +expBtnHtml(a,expActs)+'<button class="ipa-x act-del" type="button" title="'+(isCur?'Remove this action from the open photo':'Delete this action')+'">&times;</button></div>'; }).join("");
+      +expBtnHtml(a)+'<button class="ipa-x act-del" type="button" title="'+(isCur?'Remove this action from the open photo':'Delete this action')+'">&times;</button></div>'; }).join("");
   list.querySelectorAll(".act-row").forEach(el=>{
     const a=actById(Number(el.dataset.aid)); if(!a) return;
     el.querySelector("input").addEventListener("click",e=>{ e.stopPropagation(); setActionDone(a,e.target.checked); });
@@ -1370,7 +1372,7 @@ function renderActions(){
       if(cp2&&Array.isArray(cp2.acts)&&cp2.acts.includes(a.id)) unassignAct(a,cp2);   // open photo is linked: X just removes that link
       else deleteAction(a); });
     wireSteps(el,a);
-    wireActRowCommon(el,a,expActs);
+    wireActRowCommon(el,a);
     /* single click selects/navigates (slightly delayed so a double-click can win); double click edits in place */
     el.addEventListener("click",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); el._ct=setTimeout(()=>clickAction(a,e),260); });
     el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); startActEdit(a,el); });
@@ -1409,6 +1411,7 @@ function renderIpActions(){
 }
 document.getElementById("actOpenOnly").addEventListener("click",()=>{ actShowOpenOnly=!actShowOpenOnly; renderActions(); persistState(); });
 document.getElementById("actMapOnly").addEventListener("click",()=>{ actOnlyMap=!actOnlyMap; buildCluster(); renderClusters(); updateGallery(); renderActions(); renderMapTags(); persistState(); });
+document.getElementById("actExpAll").addEventListener("click",()=>{ if(actions.some(a=>!collActs.has(a.id))) actions.forEach(a=>collActs.add(a.id)); else collActs.clear(); renderActions(); });
 /* Right-click "New action" on photos doesn't pop a dialog: it ARMS this input — type the action
    and Enter creates it already assigned to those photos. Escape disarms. */
 let pendingActPhotos=null;
