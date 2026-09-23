@@ -1181,8 +1181,16 @@ function inlineEdit(el,value,multiline,onCommit){
   inp.className="act-edit"; inp.value=value; if(multiline) inp.rows=3;
   el.parentElement.insertBefore(inp,el);
   inp.focus(); inp.select();
-  let done=false;
-  const finish=(commit)=>{ if(done) return; done=true; onCommit(commit?inp.value:null); };
+  let done=false, clickRow=null;
+  /* Closing the editor by clicking an action row re-renders the list before the row's own click
+     can fire — remember which row was hit and replay the selection, so one click does BOTH. */
+  const md=ev=>{ if(ev.target===inp) return;
+    const row=ev.target.closest("#actList .act-row");
+    if(row&&!ev.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-edit")) clickRow=Number(row.dataset.aid); };
+  document.addEventListener("mousedown",md,true);
+  const finish=(commit)=>{ if(done) return; done=true; document.removeEventListener("mousedown",md,true);
+    onCommit(commit?inp.value:null);
+    if(clickRow!=null){ const a2=actById(clickRow); if(a2) clickAction(a2,null); } };
   inp.addEventListener("keydown",e=>{ e.stopPropagation();
     if(e.key==="Enter"&&(!multiline||!e.shiftKey)){ e.preventDefault(); finish(true); }
     else if(e.key==="Escape") finish(false); });
