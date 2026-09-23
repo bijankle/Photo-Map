@@ -1333,7 +1333,10 @@ function unassignAct(a,p){
 /* Explorer-style selection: plain click selects just that action (clicking the sole selection
    deselects it), Ctrl/Cmd+click toggles it in the selection, Shift+click selects the range. */
 let lastActClick=null;
-function clickAction(a,ev){
+/* Selection paints instantly (class toggle, no list rebuild — a rebuild would eat pending
+   double-clicks and make rapid clicks feel dead); the zoom is what can be deferred. */
+function refreshActSelClasses(){ document.querySelectorAll("#actList .act-row").forEach(el=>el.classList.toggle("sel",selActs.has(Number(el.dataset.aid)))); }
+function clickAction(a,ev,deferNav){
   if(pickMode) return;   // while picking photos, the panel stays put
   const ctrl=!!(ev&&(ev.ctrlKey||ev.metaKey)), shift=!!(ev&&ev.shiftKey);
   if(shift&&lastActClick!=null){
@@ -1348,8 +1351,12 @@ function clickAction(a,ev){
     selActs=new Set([a.id]);   // plain click always selects — re-clicking a selected action just re-navigates to its photos
     lastActClick=a.id;
   }
-  rebuildActionFilter(); renderActions(); drawActionRings(); updateGallery();
+  rebuildActionFilter(); refreshActSelClasses(); drawActionRings(); updateGallery();
   if(!selActs.has(a.id)||ctrl||shift) return;   // multi-select gestures only change the selection — no navigation
+  if(!deferNav) actNavigate(a);
+}
+function actNavigate(a){
+  if(!selActs.has(a.id)) return;   // selection moved on before a deferred zoom fired — the newest click wins
   const ps=actPhotos(a);
   const geo=ps.filter(p=>p.lat!=null);
   if(geo.length){
@@ -1440,7 +1447,10 @@ function renderActions(){
     wireSteps(el,a);
     wireActRowCommon(el,a);
     /* single click selects/navigates (slightly delayed so a double-click can win); double click edits in place */
-    el.addEventListener("click",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); el._ct=setTimeout(()=>clickAction(a,e),260); });
+    /* selection is INSTANT; only the zoom waits briefly so a double-click (edit) can cancel it */
+    el.addEventListener("click",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes")||el.querySelector(".act-edit")) return;
+      clearTimeout(el._ct); clickAction(a,e,true);
+      if(!e.ctrlKey&&!e.metaKey&&!e.shiftKey) el._ct=setTimeout(()=>actNavigate(a),260); });
     el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); startActEdit(a,el); });
     el.addEventListener("contextmenu",e=>{ e.preventDefault(); e.stopPropagation(); openActMenu(a,e); });
     /* priority drag & drop: the whole row is the handle (a drag begun on a sub-action's number stays a sub-action drag) */
