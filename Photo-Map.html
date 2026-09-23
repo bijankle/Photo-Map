@@ -780,7 +780,6 @@
       <div class="vals"><span id="aStart">&mdash;</span><span class="dmid"><span class="t">Altitude</span><label class="ab-blank" title="Also show photos with no altitude in their metadata"><input type="checkbox" id="altBlank" checked /> blank</label></span><span id="aEnd">&mdash;</span></div>
       <div class="slider-wrap"><div class="slider-track"></div><div class="slider-fill" id="altFill"></div>
         <input type="range" id="altMin" min="0" max="100" value="0" /><input type="range" id="altMax" min="0" max="100" value="100" /></div>
-      <button class="ab-read hidden" id="altRead">Read altitudes from the photo files</button>
     </div>
     <div class="datebar hidden" id="datebar">
       <div class="vals"><span id="dStart">—</span><span class="dmid"><span class="t">Date</span><label class="ab-blank" title="Also show photos with no capture date in their metadata"><input type="checkbox" id="dateBlank" checked /> blank</label></span><span id="dEnd">—</span></div>
@@ -1838,7 +1837,7 @@ function scaleToDataURL(img,max,q){
   const c=document.createElement("canvas"); c.width=w; c.height=h; c.getContext("2d").drawImage(img,0,0,w,h);
   try{ return c.toDataURL("image/jpeg",q); }catch(e){ return null; }
 }
-function finishLoad(refit){ buildDateFilter(); buildCluster(); if(refit) fitToPhotos(); renderClusters(); updateStats(); updateGallery(); persistState(); cacheFullSession(); hideBanner(); }
+function finishLoad(refit){ buildDateFilter(); buildCluster(); if(refit) fitToPhotos(); renderClusters(); updateStats(); updateGallery(); persistState(); cacheFullSession(); hideBanner(); setTimeout(autoReadAltitudes,300); }
 function fitToPhotos(){
   let geo=photos.filter(p=>p.lat!=null && passDate(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng])));
   if(!geo.length) geo=photos.filter(p=>p.lat!=null);
@@ -1944,9 +1943,6 @@ function buildAltFilter(){
   if(!photos.length){ bar.classList.add("hidden"); altMinV=altMaxV=altLo=altHi=null; return; }
   bar.classList.remove("hidden");
   const alts=photos.filter(p=>p.alt!=null).map(p=>p.alt);
-  const missing=photos.length-alts.length;
-  const rd=document.getElementById("altRead"); rd.classList.toggle("hidden",missing===0);
-  if(rd) rd.textContent="Read altitudes from the photo files"+(missing&&alts.length?" ("+missing+" missing)":"");
   if(alts.length<2){ altMinV=altMaxV=altLo=altHi=null; document.getElementById("aStart").textContent="—"; document.getElementById("aEnd").textContent="—";
     document.getElementById("altFill").style.left="0%"; document.getElementById("altFill").style.width="100%"; return; }
   let mn=alts[0],mx=alts[0]; for(const a of alts){ if(a<mn)mn=a; if(a>mx)mx=a; }
@@ -1965,27 +1961,27 @@ function onAltSlider(){ if(altMinV==null) return; let lo=parseFloat(aMin.value),
   altLo=Math.round(altFromPct(lo)*10)/10; altHi=Math.round(altFromPct(hi)*10)/10; syncAltUI(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); }
 aMin.addEventListener("input",onAltSlider); aMax.addEventListener("input",onAltSlider);
 document.getElementById("altBlank").addEventListener("change",e=>{ altBlank=e.target.checked; buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); });
-document.getElementById("altRead").addEventListener("click",readAltitudes);
-async function readAltitudes(){
+/* Altitude backfill is fully automatic: whenever the photo files are reachable, photos missing
+   an altitude get their EXIF read silently in the background — no prompts, no button. Photos
+   that truly have none are simply covered by the "blank" tickbox. A photo is only marked as
+   tried once its file could actually be opened, so connecting the folder later still fills it. */
+let altAutoBusy=false;
+async function autoReadAltitudes(){
+  if(altAutoBusy) return;
   const targets=photos.filter(p=>p.alt==null&&!p._altTried);
-  if(!targets.length){ buildAltFilter(); return; }
-  const btn=document.getElementById("altRead"); btn.disabled=true;
-  if(dirHandle){ try{ await ensurePermission(dirHandle); }catch(e){} }   // one prompt up front (stuck-drag safe), then silent reads
-  const total=targets.length; let done=0, found=0;
-  etaStart("altread",total,"Loading — reading altitudes 0/"+total+"…");
+  if(!targets.length) return;
+  altAutoBusy=true;
+  let found=0;
   const queue=targets.slice();
   await Promise.all(Array.from({length:4},async()=>{
     for(;;){ const p=queue.shift(); if(!p) break;
       try{ const f=await getOriginalFileSilent(p);
-        if(f){ const ex=await exifr.parse(f,{gps:true}).catch(()=>null); const a=altFromExif(ex); if(a!=null){ p.alt=a; found++; } }
+        if(f){ p._altTried=true; const ex=await exifr.parse(f,{gps:true}).catch(()=>null); const a=altFromExif(ex); if(a!=null){ p.alt=a; found++; } }
       }catch(e){}
-      p._altTried=true; done++;
-      if(done===total||done%5===0) loadNote("Loading — reading altitudes "+done+"/"+total+"…");
     }
   }));
-  etaEnd(); btn.disabled=false;
-  buildAltFilter(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState();
-  if(!found) alert("No altitudes could be read.\n\nEither the photos have no altitude in their metadata, or the photos folder isn't connected — click Refresh (or Open Folder) to connect it, then try again.");
+  altAutoBusy=false;
+  if(found){ buildAltFilter(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); }
 }
 
 /* area (box) filter */
@@ -3200,6 +3196,7 @@ function applyState(st){
   if(s.view && Array.isArray(s.view.center)) map.setView(s.view.center, (s.view.zoom!=null?s.view.zoom:map.getZoom()));
   else fitToPhotos();
   maybeOfferReconnect(); cacheFullSession(); renderProjHead();
+  setTimeout(autoReadAltitudes,800);
 }
 /* Folder membership + markup are lightweight and are autosaved (lastState) on every change,
    even when the heavy image Save fails or goes stale. These helpers let us re-apply that fresh
