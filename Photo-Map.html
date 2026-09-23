@@ -219,26 +219,22 @@
   .empty-msg b{color:var(--text);}
   .hint{font-family:var(--mono);font-size:10px;color:var(--muted);}
 
-  .leftstack{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:1000;display:flex;flex-direction:column;gap:10px;align-items:center;}
-  .btnrow{display:flex;gap:8px;}
-  .areabtn{font-family:var(--mono);font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--text);background:#ffffffe8;backdrop-filter:blur(8px);border:1px solid var(--line2);border-radius:9px;padding:9px 13px;cursor:pointer;box-shadow:0 8px 24px #1e1f2222;white-space:nowrap;}
+  .leftstack{position:absolute;top:12px;left:12px;z-index:1000;display:flex;flex-direction:column;gap:5px;align-items:flex-start;}
+  .btnrow{display:flex;gap:6px;}
+  .areabtn{font-family:var(--mono);font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:var(--text);background:#ffffffe8;backdrop-filter:blur(8px);border:1px solid var(--line2);border-radius:8px;padding:6px 9px;cursor:pointer;box-shadow:0 4px 14px #1e1f221f;white-space:nowrap;}
   .areabtn:hover{border-color:var(--accent);color:var(--accent);}
   .areabtn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
   .measure-lbl{background:#fff;color:var(--accent);font-family:var(--mono);font-size:12px;font-weight:700;padding:3px 7px;border:1px solid var(--accent);border-radius:6px;white-space:nowrap;box-shadow:0 4px 14px #1e1f2226;}
   .measure-lbl.leaflet-tooltip-top:before{border-top-color:var(--accent);}
-  .datebar{background:#ffffffe8;backdrop-filter:blur(8px);border:1px solid var(--line2);border-radius:11px;padding:8px 13px 10px;width:min(440px,60vw);box-shadow:0 8px 24px #1e1f2222;}
-  .dmid{display:flex;align-items:center;gap:12px;}
-  .dmid .ab-blank{margin:0;}
-  .dmid .t{font-family:var(--mono);font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);}
+  .datebar{background:#ffffffe8;backdrop-filter:blur(8px);border:1px solid var(--line2);border-radius:9px;padding:4px 9px 5px;width:190px;box-shadow:0 4px 14px #1e1f221f;}
   .datebar.hidden{display:none;}
-  .datebar .reset{font-family:var(--mono);font-size:10px;color:var(--accent);cursor:pointer;background:none;border:none;padding:0;}
-  .datebar .vals{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--accent2);margin-bottom:8px;}
-  .slider-wrap{position:relative;height:24px;}
-  .slider-track{position:absolute;top:10px;left:0;right:0;height:4px;background:var(--line2);border-radius:2px;}
-  .slider-fill{position:absolute;top:10px;height:4px;background:var(--accent);border-radius:2px;}
-  .slider-wrap input[type=range]{-webkit-appearance:none;appearance:none;position:absolute;top:0;left:0;width:100%;height:24px;background:none;pointer-events:none;margin:0;}
-  .slider-wrap input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;pointer-events:auto;width:17px;height:17px;border-radius:50%;background:var(--accent);border:3px solid #fff;cursor:grab;box-shadow:0 0 0 1px var(--accent),0 1px 4px #1e1f2233;}
-  .slider-wrap input[type=range]::-moz-range-thumb{pointer-events:auto;width:13px;height:13px;border-radius:50%;background:var(--accent);border:3px solid #fff;cursor:grab;}
+  .datebar .vals{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--accent2);margin-bottom:2px;}
+  .slider-wrap{position:relative;height:16px;}
+  .slider-track{position:absolute;top:6.5px;left:0;right:0;height:3px;background:var(--line2);border-radius:2px;}
+  .slider-fill{position:absolute;top:6.5px;height:3px;background:var(--accent);border-radius:2px;}
+  .slider-wrap input[type=range]{-webkit-appearance:none;appearance:none;position:absolute;top:0;left:0;width:100%;height:16px;background:none;pointer-events:none;margin:0;}
+  .slider-wrap input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;pointer-events:auto;width:13px;height:13px;border-radius:50%;background:var(--accent);border:2px solid #fff;cursor:grab;box-shadow:0 0 0 1px var(--accent),0 1px 4px #1e1f2233;}
+  .slider-wrap input[type=range]::-moz-range-thumb{pointer-events:auto;width:11px;height:11px;border-radius:50%;background:var(--accent);border:2px solid #fff;cursor:grab;}
 
   .cl-bubble{display:flex;align-items:center;justify-content:center;border-radius:50%;background:radial-gradient(circle at 35% 30%,#7782f5,#5865F2);color:#fff;font-family:var(--mono);font-weight:600;border:2px solid #fff;box-shadow:0 0 0 4px #5865F233,0 2px 8px #1e1f2233;cursor:pointer;}
   .cl-bubble.cl-hl{animation:clpulse 1.2s ease-in-out infinite;}   /* the whole cluster flashes when it holds a selected photo */
@@ -343,10 +339,8 @@
   .asec{display:flex;flex-direction:column;gap:4px;margin-top:7px;}
   .asec .al{font-family:var(--mono);font-size:9px;letter-spacing:.8px;color:var(--faint);}
   .asec .d{margin:0;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:4px 8px;font-size:12px;cursor:text;white-space:pre-wrap;}
-  /* current-location marker: pin with person on a water ellipse; the puddle breathes gently */
-  .geo-pin{filter:drop-shadow(0 2px 4px rgba(0,0,0,.35));}
-  .geo-pin .pud{transform-box:fill-box;transform-origin:center;animation:geoPud 2.4s ease-in-out infinite;}
-  @keyframes geoPud{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(1.18);opacity:.7;}}
+  /* current-location marker: red YOU ARE HERE pin */
+  .geo-pin{filter:drop-shadow(0 2px 5px rgba(0,0,0,.4));}
   .st-num{flex-shrink:0;min-width:16px;text-align:center;font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--accent2);cursor:grab;}
   .st-num:active{cursor:grabbing;}
   .st-row.drop-b{box-shadow:0 -2px 0 var(--accent);}
@@ -512,8 +506,6 @@
   .set-radios input{accent-color:var(--accent);cursor:pointer;}
 
   /* altitude bar extras */
-  .ab-blank{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;color:var(--muted);cursor:pointer;margin-left:auto;margin-right:10px;}
-  .ab-blank input{accent-color:var(--accent);cursor:pointer;}
   .ab-read{width:100%;box-sizing:border-box;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--accent);background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:7px 10px;cursor:pointer;}
   .ab-read:hover{border-color:var(--accent);}
   .ab-read.hidden{display:none;}
@@ -645,6 +637,7 @@
       <div class="set-title">Settings</div>
       <button class="set-tab on" data-sec="map">Map</button>
       <button class="set-tab" data-sec="photos">Photos</button>
+      <button class="set-tab" data-sec="filters">Filters</button>
       <button class="set-tab" data-sec="actions">Actions</button>
       <button class="set-tab" data-sec="mobile">Mobile</button>
     </div>
@@ -663,6 +656,17 @@
             <label><input type="radio" name="setBase" value="esri" /> Esri</label>
             <label><input type="radio" name="setBase" value="none" /> None</label>
           </div>
+        </div>
+      </div>
+      <div class="set-sec" data-sec="filters">
+        <h3>Filters</h3>
+        <div class="set-row">
+          <div class="set-lbl">Altitude: include blank<span class="set-sub">Photos with no altitude in their metadata stay visible while the altitude range is narrowed.</span></div>
+          <div class="set-ctl"><input type="checkbox" id="altBlank" checked /></div>
+        </div>
+        <div class="set-row">
+          <div class="set-lbl">Date: include blank<span class="set-sub">Photos with no capture date stay visible while the date range is narrowed.</span></div>
+          <div class="set-ctl"><input type="checkbox" id="dateBlank" checked /></div>
         </div>
       </div>
       <div class="set-sec" data-sec="photos">
@@ -786,12 +790,12 @@
   <div class="progress" id="progress"></div>
   <div class="leftstack" id="leftstack">
     <div class="datebar hidden" id="altbar">
-      <div class="vals"><span id="aStart">&mdash;</span><span class="dmid"><span class="t">Altitude</span><label class="ab-blank" title="Also show photos with no altitude in their metadata"><input type="checkbox" id="altBlank" checked /> blank</label></span><span id="aEnd">&mdash;</span></div>
+      <div class="vals"><span id="aStart">&mdash;</span><span id="aEnd">&mdash;</span></div>
       <div class="slider-wrap"><div class="slider-track"></div><div class="slider-fill" id="altFill"></div>
         <input type="range" id="altMin" min="0" max="100" value="0" /><input type="range" id="altMax" min="0" max="100" value="100" /></div>
     </div>
     <div class="datebar hidden" id="datebar">
-      <div class="vals"><span id="dStart">—</span><span class="dmid"><span class="t">Date</span><label class="ab-blank" title="Also show photos with no capture date in their metadata"><input type="checkbox" id="dateBlank" checked /> blank</label></span><span id="dEnd">—</span></div>
+      <div class="vals"><span id="dStart">—</span><span id="dEnd">—</span></div>
       <div class="slider-wrap"><div class="slider-track"></div><div class="slider-fill" id="sliderFill"></div>
         <input type="range" id="rangeMin" min="0" max="100" value="0" /><input type="range" id="rangeMax" min="0" max="100" value="100" /></div>
     </div>
@@ -1386,14 +1390,13 @@ function startGeoWatch(){
     try{ localStorage.setItem("pmGeoOn","1"); }catch(e){}
     const ll=[pos.coords.latitude,pos.coords.longitude];
     if(!geoMarker) geoMarker=L.marker(ll,{icon:L.divIcon({className:"",html:'<div class="geo-pin">'
-      +'<svg viewBox="0 0 64 78" width="42" height="51">'
-      +'<ellipse class="pud" cx="32" cy="68" rx="21" ry="7.5" fill="#C9E8F7" stroke="#332A26" stroke-width="4"/>'
-      +'<path d="M32 62C19 45 12 38.5 12 26a20 20 0 1 1 40 0c0 12.5-7 19-20 36z" fill="#F47B5D" stroke="#332A26" stroke-width="5" stroke-linejoin="round"/>'
-      +'<circle cx="32" cy="26" r="13.5" fill="#E8472B" opacity=".55"/>'
-      +'<circle cx="32" cy="26" r="12" fill="#fff" stroke="#332A26" stroke-width="4"/>'
-      +'<circle cx="32" cy="21.5" r="4.4" fill="#F4795B" stroke="#332A26" stroke-width="3"/>'
-      +'<path d="M24.8 33.5a7.2 7.2 0 0 1 14.4 0z" fill="#F6C453" stroke="#332A26" stroke-width="3" stroke-linejoin="round"/>'
-      +'</svg></div>',iconSize:[42,51],iconAnchor:[21,44]}),interactive:false,zIndexOffset:900}).addTo(map);
+      +'<svg viewBox="0 0 64 80" width="46" height="58">'
+      +'<path d="M32 78C17 57 3 46.5 3 30a29 29 0 1 1 58 0c0 16.5-14 27-29 48z" fill="#E8281E"/>'
+      +'<circle cx="32" cy="30" r="21.5" fill="#fff"/>'
+      +'<text x="32" y="26" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="10.5" font-weight="800" fill="#111">YOU</text>'
+      +'<text x="32" y="34.5" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="8" font-style="italic" font-weight="700" fill="#111">ARE</text>'
+      +'<text x="32" y="45" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="10.5" font-weight="800" fill="#111">HERE</text>'
+      +'</svg></div>',iconSize:[46,58],iconAnchor:[23,57]}),interactive:false,zIndexOffset:900}).addTo(map);
     else geoMarker.setLatLng(ll);
   },err=>{ if(err&&err.code===1){ try{ localStorage.setItem("pmGeoOn","0"); }catch(e){} } geoWatchId=null; },
   {enableHighAccuracy:true,maximumAge:15000,timeout:20000});
