@@ -579,8 +579,10 @@
   .m-hpage{position:relative;flex:0 0 100%;height:100%;scroll-snap-align:start;}
   .m-hpage img{position:absolute;top:0;left:0;width:100%;height:62%;object-fit:contain;object-position:top center;}   /* photo rides the TOP; JS sizes it exactly */
   .m-pcap{position:absolute;bottom:12px;left:0;right:0;text-align:center;color:#fff;font-family:var(--mono);font-size:10px;text-shadow:0 1px 4px #000;pointer-events:none;}
-  .m-nbar{position:absolute;left:14px;right:14px;bottom:34px;z-index:3;box-sizing:border-box;border:1px solid #4a4a48;border-radius:10px;background:#141413cc;color:#E3E5E8;
-    font:inherit;font-size:18px;padding:9px 12px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
+  .m-nin{position:absolute;left:14px;bottom:34px;z-index:3;box-sizing:border-box;border:1px solid #4a4a48;border-radius:10px;background:#141413cc;color:#E3E5E8;
+    font:inherit;font-size:16px;padding:8px 11px;outline:none;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
+  .m-nin:focus{border-color:var(--accent);}
+  .m-nin::placeholder{color:#9A9DA5;}
   .m-cue{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:10px;color:#fff;text-shadow:0 1px 4px #000;pointer-events:none;z-index:500;}
   .m-inset{position:absolute;z-index:4;border-radius:12px;overflow:hidden;border:2px solid rgba(255,255,255,.7);box-shadow:0 2px 12px rgba(0,0,0,.55);pointer-events:none;background:#141413;transition:opacity .2s;}
   .m-sub2{position:absolute;left:8px;z-index:4;box-sizing:border-box;overflow-y:auto;background:#141413cc;border:1px solid #4a4a48;border-radius:10px;padding:6px 9px;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
@@ -594,13 +596,6 @@
   .m-sub2 .s2row.s2ins{box-shadow:0 -2px 0 var(--accent);}
   .m-sub2 .s2row.s2insb{box-shadow:0 2px 0 var(--accent);}
   .m-sub2 .s2new{margin-top:5px;background:#232322;border-color:#4a4a48;color:#E3E5E8;font-size:15px;}
-  .m-nedit{position:absolute;left:14px;right:14px;bottom:34px;z-index:6;display:flex;flex-direction:column;gap:8px;box-sizing:border-box;background:#141413ee;border:1px solid #4a4a48;border-radius:12px;padding:10px;}
-  .m-nprev{max-height:80px;overflow-y:auto;font-size:12px;color:#C8CAD0;line-height:1.45;white-space:pre-wrap;}
-  .m-nta{box-sizing:border-box;width:100%;min-height:56px;font:inherit;font-size:14px;color:#E3E5E8;background:#232322;border:1px solid #4a4a48;border-radius:10px;padding:8px 10px;outline:none;resize:none;}
-  .m-nbtns{display:flex;gap:8px;}
-  .m-nbtns button{box-sizing:border-box;min-height:40px;border-radius:10px;font:inherit;font-weight:600;cursor:pointer;}
-  .m-nok{flex:1;border:none;background:var(--accent);color:#fff;}
-  .m-ncl{width:48px;border:1px solid #4a4a48;background:#232322;color:#E3E5E8;}
   .m-ub{min-width:38px;padding:7px 8px;font-size:14px;line-height:1;flex-shrink:0;}
   .m-ub.off{opacity:.3;pointer-events:none;}
   .m-sted{border:none;background:none;color:#9A9DA5;font-size:14px;padding:4px 6px;flex-shrink:0;cursor:pointer;}
@@ -3664,7 +3659,7 @@ function mShowDetail(ai,keepScroll){
     +(hasMap?'<section class="m-page"><div id="mMap" style="position:absolute;inset:0;"></div><div class="m-cue">▾ swipe up for photos · tap a dot to jump to its photo</div></section>':'')
     +(photos.length?'<section class="m-page m-pphoto"><div class="m-hsnap" id="mHsnap">'
       +photos.map((p,i)=>'<div class="m-hpage">'+(p.img?'<img src="'+p.img+'" alt="'+esc(p.name||"photo")+'" />':'')
-        +'<button class="m-nbar" data-pi="'+i+'" type="button">'+mNbarHtml(p)+'</button>'
+        +'<input class="m-nin" data-pi="'+i+'" placeholder="Image note" autocomplete="off" />'
         +'<div class="m-pcap">'+esc(p.name||"")+' · '+(i+1)+'/'+photos.length+' ▸ · details ▴</div></div>').join('')
       +'</div>'+(hasMap?'<div class="m-inset" id="mInset"></div>':'')
       +'<div class="m-sub2" id="mSub2"></div></section>':'')
@@ -3688,7 +3683,18 @@ function mShowDetail(ai,keepScroll){
     rer(); });
   document.getElementById("mTedit").addEventListener("click",e=>{ e.stopPropagation();
     mInline(document.getElementById("mFht"),mTitle(a),v=>{ if(v!=null&&v.trim()&&v.trim()!==mTitle(a)) mSetTitle(a,v.trim()); rer(); }); });
-  document.querySelectorAll(".m-nbar").forEach(el=>el.addEventListener("click",e=>{ e.stopPropagation(); mInlineNote(photos[Number(el.dataset.pi)],el); }));
+  /* image note: a single-row inline input ON the photo — desktop-style edit-in-place, dark theme.
+     Empty shows just the placeholder; Enter or tapping away commits (undoable pending change). */
+  document.querySelectorAll(".m-nin").forEach(inp=>{
+    const p=photos[Number(inp.dataset.pi)]; if(!p) return;
+    const pend=mPn(p.id); inp.value=(pend!=null?pend:(p.note||""));
+    ["click","touchstart","pointerdown"].forEach(ev=>inp.addEventListener(ev,e=>e.stopPropagation()));
+    const commit=()=>{ const v=inp.value.trim(); const base=(mPn(p.id)!=null?mPn(p.id):(p.note||""));
+      if(v===base) return; if(!v&&mPn(p.id)==null) return;
+      mMutate(()=>mSetPn(p.id,p.name||"",v)); };
+    inp.addEventListener("keydown",e=>{ e.stopPropagation(); if(e.key==="Enter"){ e.preventDefault(); inp.blur(); } });
+    inp.addEventListener("blur",commit);
+  });
   const rows=mSteps(a);
   document.querySelectorAll(".m-strow").forEach(el=>{
     const s=rows[Number(el.dataset.si)]; if(!s) return;
@@ -3734,11 +3740,9 @@ function mShowDetail(ai,keepScroll){
       const img=pg.querySelector("img"); const gm=geom(img); const lbX=(W-gm.w)/2;
       if(img){ img.style.position="absolute"; img.style.top="0"; img.style.left=Math.round(lbX)+"px";
         img.style.width=Math.round(gm.w)+"px"; img.style.height=Math.round(gm.h)+"px"; img.style.objectFit="fill"; }
-      const nb=pg.querySelector(".m-nbar");
+      const nb=pg.querySelector(".m-nin");
       if(nb){ nb.style.left=Math.round(lbX+8)+"px"; nb.style.right="auto"; nb.style.width=Math.round(Math.max(140,gm.w-16))+"px";
-        nb.style.top=Math.round(Math.max(40,gm.h-54))+"px"; nb.style.bottom="auto"; }
-      const ed=pg.querySelector(".m-nedit");
-      if(ed&&nb){ ed.style.top=nb.style.top; ed.style.left=nb.style.left; ed.style.right="auto"; ed.style.width=nb.style.width; ed.style.bottom="auto"; }
+        nb.style.top=Math.round(Math.max(40,gm.h-52))+"px"; nb.style.bottom="auto"; }
       const cap=pg.querySelector(".m-pcap"); if(cap){ cap.style.top=Math.round(gm.h+3)+"px"; cap.style.bottom="auto"; }
     });
     const i=Math.round(hsEl.scrollLeft/Math.max(1,hsEl.clientWidth));
@@ -3748,7 +3752,8 @@ function mShowDetail(ai,keepScroll){
     if(insEl){ insEl.style.left=Math.round(W/2+6)+"px"; insEl.style.right="8px"; insEl.style.top=zoneTop+"px"; insEl.style.bottom="8px";
       const key=zoneTop+"x"+W;
       if(insEl._k!==key){ insEl._k=key; setTimeout(()=>{ try{ if(mInsetMap){ mInsetMap.invalidateSize(); if(insEl._refit) insEl._refit(); } }catch(e){} },80); } } };
-  if(hsEl){ hsEl.querySelectorAll("img").forEach(im=>im.addEventListener("load",posOverlays)); requestAnimationFrame(posOverlays); }
+  if(hsEl){ hsEl.querySelectorAll("img").forEach(im=>im.addEventListener("load",posOverlays));
+    requestAnimationFrame(posOverlays); setTimeout(posOverlays,120); setTimeout(posOverlays,450); }   // data-URL images can be complete before the load listeners attach
   if(insEl){
     const pts=photos.filter(p=>p.lat!=null);
     mInsetMap=L.map(insEl,{zoomControl:false,attributionControl:false,dragging:false,touchZoom:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false,tap:false});
@@ -3900,26 +3905,6 @@ function mWirePager(snap){
     const ps=pages(); if(ps[tgt]) glide(ps[tgt].offsetTop);
   },{passive:true});
 }
-/* Photo-note editing happens IN PLACE on the photo page: tapping the note bar swaps in a small
-   panel with a textarea, the keyboard opens over the photo, and Save/✕ collapse it back. */
-function mNbarHtml(p){ const fn=mPn(p.id); const t=(fn!=null?fn:(p.note||"")); return t?(fn!=null?'✎ ':'')+esc(t.length>70?t.slice(0,70)+"…":t):'+ photo note'; }
-function mInlineNote(p,bar){
-  if(!p||!bar) return;
-  const page=bar.closest(".m-hpage"); if(!page||page.querySelector(".m-nedit")) return;
-  bar.style.display="none";
-  const box=document.createElement("div"); box.className="m-nedit";
-  box.innerHTML=(p.note?'<div class="m-nprev">'+esc(p.note)+'</div>':'')
-    +'<textarea class="m-nta" placeholder="'+(p.note?'Add field note…':'Photo note…')+'"></textarea>'
-    +'<div class="m-nbtns"><button class="m-nok" type="button">Save</button><button class="m-ncl" type="button">✕</button></div>';
-  page.appendChild(box);
-  if(bar.style.top){ box.style.top=bar.style.top; box.style.bottom="auto"; }   // open where the bar sits (just under the photo)
-  ["click","touchstart","pointerdown"].forEach(ev=>box.addEventListener(ev,e=>e.stopPropagation()));
-  const ta=box.querySelector(".m-nta"); ta.value=mPn(p.id)||"";
-  const close=()=>{ box.remove(); bar.style.display=""; };
-  box.querySelector(".m-nok").addEventListener("click",()=>{ mMutate(()=>mSetPn(p.id,p.name||"",ta.value.trim())); bar.innerHTML=mNbarHtml(p); close(); });
-  box.querySelector(".m-ncl").addEventListener("click",close);
-  ta.focus();
-}
 function mShowPhoto(ai,pi){
   const a=(mPack.actions||[])[ai]; const p=a&&(a.photos||[])[pi]; if(!p){ mShowDetail(ai); return; }
   mScr('<div class="m-photo"><div class="m-head" style="background:#141413;border-bottom:1px solid #2a2a28;"><button class="m-back" id="mBack" style="color:#E3E5E8;" aria-label="Back">‹</button>'
@@ -3934,7 +3919,21 @@ function mShowPhoto(ai,pi){
   const pv=document.getElementById("mPrev"); if(pv) pv.addEventListener("click",()=>mShowPhoto(ai,pi-1));
   const nx=document.getElementById("mNext"); if(nx) nx.addEventListener("click",()=>mShowPhoto(ai,pi+1));
 }
-function mobileBoot(){ document.body.classList.add("mobile"); mLoadPack(); }
+/* The mobile UI has no update pill, so a stale cached copy could linger forever: on boot,
+   compare this file's timestamp with the server's and force ONE clean reload when behind. */
+async function mCheckFresh(){
+  try{
+    if(sessionStorage.getItem("pmMobUpd")) return;
+    const r=await fetch(location.pathname+"?u="+Date.now(),{method:"HEAD",cache:"no-store"});
+    const lm=r.headers.get("last-modified"); if(!lm) return;
+    const srv=Date.parse(lm), mine=Date.parse(document.lastModified);
+    if(isNaN(srv)||isNaN(mine)||srv-mine<90000) return;   // fresh enough (or clocks disagree slightly)
+    sessionStorage.setItem("pmMobUpd","1");
+    try{ await fetch(location.pathname,{cache:"reload"}); }catch(e){}
+    location.reload();
+  }catch(e){}
+}
+function mobileBoot(){ document.body.classList.add("mobile"); mCheckFresh(); mLoadPack(); }
 
 /* Desktop side of the loop: offer to merge field changes pushed by the phone. */
 async function checkFieldChanges(){
@@ -3980,13 +3979,12 @@ async function checkFieldChanges(){
         if(na.done){ a2.done=true; a2.doneAt=na.doneAt||Date.now(); }
         recordActEdit(a2,b2);
       }
-      const day=new Date(Date.parse(data.updatedAt||"")||Date.now()).toLocaleDateString(undefined,{day:"numeric",month:"short"});
       const items=[];
-      for(const k of pids){   // field notes append to the PHOTO's note; matched by name first (photo ids can shift between sessions)
+      for(const k of pids){   // the phone edits the note IN PLACE (it pre-fills with the current text), so merging REPLACES; matched by name first (photo ids can shift between sessions)
         const e=pnCh[k]; const t=((typeof e==="string"?e:(e&&e.t))||"").trim(); if(!t) continue;
         const nm=(e&&e.n)||null;
-        const ph=(nm?photos.find(x=>x.name===nm):null)||photoById(+k); if(!ph) continue;
-        const before=snapshotTags(ph); ph.note=(ph.note?ph.note+"\n":"")+"[Field "+day+"] "+t;
+        const ph=(nm?photos.find(x=>x.name===nm):null)||photoById(+k); if(!ph||ph.note===t) continue;
+        const before=snapshotTags(ph); ph.note=t;
         items.push({id:ph.id,before,after:snapshotTags(ph)});
       }
       if(items.length) pushUndo({items});
