@@ -1809,11 +1809,15 @@ function fitToPhotos(){
 
 /* drag and drop */
 const dz=document.getElementById("dropzone"); let dragDepth=0;
-window.addEventListener("dragenter",e=>{e.preventDefault();dragDepth++;dz.classList.add("show");});
+/* The upload overlay is only for drags that carry FILES from outside the app — internal drags
+   (sub-action reorder) carry text and must never trigger it. */
+const dragHasFiles=e=>{ try{ return !dragStep && !!e.dataTransfer && Array.from(e.dataTransfer.types||[]).includes("Files"); }catch(err){ return false; } };
+window.addEventListener("dragenter",e=>{e.preventDefault();if(!dragHasFiles(e))return;dragDepth++;dz.classList.add("show");});
 window.addEventListener("dragover",e=>e.preventDefault());
 window.addEventListener("dragleave",e=>{e.preventDefault();if(--dragDepth<=0)dz.classList.remove("show");});
 window.addEventListener("drop",async e=>{
   e.preventDefault();dragDepth=0;dz.classList.remove("show");
+  if(!dragHasFiles(e))return;   // an internal drag that missed its target — not an upload
   const dt=e.dataTransfer;
   const items=dt.items?Array.from(dt.items):[];
   const useFSA=hasFSA&&items[0]&&items[0].getAsFileSystemHandle;
