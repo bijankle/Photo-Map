@@ -2210,10 +2210,33 @@ function updateGallery(keepLimit){
 function physPaths(p){ return Array.isArray(p.paths)?p.paths:(p.path?[p.path]:[]); }
 function virtPaths(p){ return Array.isArray(p.vpaths)?p.vpaths:[]; }
 function pathsOf(p){ const a=physPaths(p), b=virtPaths(p); return b.length?a.concat(b.filter(v=>!a.includes(v))):a; }
+/* Annotated thumbnails: gallery cards and hovers show the drawing marks baked over the thumb.
+   Derived and cached per photo (never saved to the .json); regenerated whenever the marks, line
+   weight, text size or rotation change, then patched into any cards already on screen. */
+function annotKey(p){ return (p.marks&&p.marks.length)?JSON.stringify([p.marks,p.mkw||0,p.mth||0,p.rot||0,p.tv||0]):""; }
+function thumbSrc(p){ return (p._ta&&p._taKey&&p._taKey===annotKey(p))?p._ta:p.thumb; }
+const annotBusy=new Set();
+function ensureAnnotThumb(p){
+  if(!p||!p.thumb) return;
+  const key=annotKey(p);
+  if(!key){ if(p._ta){ p._ta=null; p._taKey=null; patchThumbEls(p); } return; }
+  if(p._taKey===key||annotBusy.has(p.id)) return;
+  annotBusy.add(p.id);
+  loadImg(p.thumb).then(im=>{
+    const c=document.createElement("canvas"); c.width=im.width; c.height=im.height;
+    const ctx=c.getContext("2d"); ctx.drawImage(im,0,0);
+    paintMarks(ctx,0,0,im.width,im.height,Math.min(im.width,im.height)*0.0012,p.marks,(p.mkw!=null?p.mkw:null),(p.mth!=null?p.mth:null));
+    p._ta=c.toDataURL("image/jpeg",0.78); p._taKey=key;
+    patchThumbEls(p);
+  }).catch(()=>{}).then(()=>annotBusy.delete(p.id));
+}
+function patchThumbEls(p){ const src=thumbSrc(p); if(!src) return;
+  document.querySelectorAll('.card[data-id="'+p.id+'"] img.thumb').forEach(im=>{ if(im.src!==src) im.src=src; }); }
 function cardHtml(p,isNoGeo){
   const sub=p.time?fmtDate(p.time):(p.lat!=null?fmtCoord(p.lat,p.lng):"no metadata");
   const flag=isNoGeo?'<div class="flag">NO GPS</div>':"";
-  const src=p.thumb;
+  ensureAnnotThumb(p);
+  const src=thumbSrc(p);
   const img=src?'<img class="thumb" src="'+src+'" loading="lazy" decoding="async" alt="">':'<div class="ph">no image</div>';
   const paths=pathsOf(p); const title=esc(paths.length?paths.join("\n"):p.name);   // all folders this photo was found in
   const dupe=(paths.length>1&&!actionFilter)?'<div class="hq" style="left:auto;right:5px;background:#4752C4;color:#fff;border-color:#4752C4" title="In '+paths.length+' folders">\u00D7'+paths.length+'</div>':"";
@@ -2231,7 +2254,7 @@ function dist(p,c){ if(p.lat==null)return Infinity; const dx=p.lat-c.lat,dy=p.ln
 
 /* hover preview top left */
 const hoverview=document.getElementById("hoverview"),hvImg=document.getElementById("hvImg"),hvCap=document.getElementById("hvCap");
-function showHover(p,ev){ const src=p&&p.thumb; if(!src)return; hvImg.src=src; hvCap.textContent=p.time?fmtDate(p.time):p.name; hoverview.classList.add("show"); if(ev) positionHover(ev); }
+function showHover(p,ev){ if(p) ensureAnnotThumb(p); const src=p&&thumbSrc(p); if(!src)return; hvImg.src=src; hvCap.textContent=p.time?fmtDate(p.time):p.name; hoverview.classList.add("show"); if(ev) positionHover(ev); }
 function positionHover(ev){ const w=hoverview.offsetWidth||220,h=hoverview.offsetHeight||200; let x=ev.clientX-w/2, y=ev.clientY-h-16; x=Math.max(6,Math.min(x,window.innerWidth-w-6)); if(y<6) y=ev.clientY+20; hoverview.style.left=x+"px"; hoverview.style.top=y+"px"; }
 function hideHover(){ hoverview.classList.remove("show"); }
 
@@ -2519,7 +2542,7 @@ function applyMoveMark(m,orig,dx,dy){
 }
 function curPhoto(){ return lightboxList[lightboxIndex]; }
 function curMarks(){ const p=curPhoto(); if(!p)return []; if(!p.marks)p.marks=[]; return p.marks; }
-function afterMarkChange(){ const ms=curMarks(); if(ms.length&&!ms[ms.length-1]._t) ms[ms.length-1]._t=Date.now(); redoMarks=[]; redrawMarks(); persistState(); }   // stamp marks so undo can interleave chronologically with tag edits
+function afterMarkChange(){ const ms=curMarks(); if(ms.length&&!ms[ms.length-1]._t) ms[ms.length-1]._t=Date.now(); redoMarks=[]; redrawMarks(); persistState(); ensureAnnotThumb(curPhoto()); }   // stamp marks so undo can interleave chronologically with tag edits
 function setColor(c){ markColor=c; document.querySelectorAll("#markPalette .sw").forEach(b=>b.classList.toggle("on",b.dataset.c===c)); if(selMark){ selMark.c=c; tbText.style.color=c; tbText.style.borderColor=c; } if(selObj){ selObj.c=c; redrawMarks(); persistState(); } }
 document.querySelectorAll("#markPalette .sw").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); setColor(b.dataset.c); }));
 /* Universal sizing: ONE line weight (p.mkw) and ONE text size (p.mth) per photo — the vertical
@@ -2926,7 +2949,7 @@ function applyUndoEntry(a,dir){   // dir: "before" (undo) or "after" (redo)
     rebuildSizeIndex(); buildDateFilter(); updateStats();
   }
   if(a.order){ const want=undo?a.order.before:a.order.after; actions.sort((x,y)=>{ let ix=want.indexOf(x.id), iy=want.indexOf(y.id); if(ix<0)ix=1e9; if(iy<0)iy=1e9; return ix-iy; }); }
-  if(a.marksSnap){ const p=photoById(a.marksSnap.id); if(p){ p.marks=cpMarks(undo?a.marksSnap.before:a.marksSnap.after); if(selObj&&!p.marks.includes(selObj)) selObj=null; if(curPhoto()===p&&lb.classList.contains("open")) redrawMarks(); } }
+  if(a.marksSnap){ const p=photoById(a.marksSnap.id); if(p){ p.marks=cpMarks(undo?a.marksSnap.before:a.marksSnap.after); if(selObj&&!p.marks.includes(selObj)) selObj=null; if(curPhoto()===p&&lb.classList.contains("open")) redrawMarks(); ensureAnnotThumb(p); } }
   if(a.sizeSnap){ const p=photoById(a.sizeSnap.id); if(p){ const s=undo?a.sizeSnap.before:a.sizeSnap.after; p.mkw=(s.mkw==null?null:s.mkw); p.mth=(s.mth==null?null:s.mth); if(curPhoto()===p&&lb.classList.contains("open")){ redrawMarks(); syncSizeBars(); if(selMark) positionEditor(); } } }
   if(a.rot){ const p=photoById(a.rot.id); if(p){ const d=((a.rot.delta%360)+360)%360; applyRotation(p,undo?(360-d)%360:d).catch(()=>{}); } }
   const its=a.items?a.items:(a.id!=null?[{id:a.id,before:a.before,after:a.after}]:[]);
@@ -2940,14 +2963,14 @@ function undoLatest(open){
   const markT=(ms&&ms.length)?(ms[ms.length-1]._t||0):null;
   const tagT=tagUndoStack.length?tagUndoStack[tagUndoStack.length-1].t:null;
   if(markT===null&&tagT===null){ undoDelete(); return; }
-  if(tagT===null||(markT!==null&&markT>=tagT)){ redoMarks.push(ms.pop()); redrawMarks(); persistState(); }   // markup was the most recent edit
+  if(tagT===null||(markT!==null&&markT>=tagT)){ redoMarks.push(ms.pop()); redrawMarks(); persistState(); ensureAnnotThumb(curPhoto()); }   // markup was the most recent edit
   else undoTag();
 }
 function redoLatest(open){
   const markRT=(open&&redoMarks.length)?(redoMarks[redoMarks.length-1]._t||0):null;
   const tagRT=tagRedoStack.length?tagRedoStack[tagRedoStack.length-1].t:null;
   if(markRT===null&&tagRT===null) return;
-  if(tagRT===null||(markRT!==null&&markRT<=tagRT)){ curMarks().push(redoMarks.pop()); redrawMarks(); persistState(); }   // replay forward in time
+  if(tagRT===null||(markRT!==null&&markRT<=tagRT)){ curMarks().push(redoMarks.pop()); redrawMarks(); persistState(); ensureAnnotThumb(curPhoto()); }   // replay forward in time
   else redoTag();
 }
 function afterFolderChange(){ if(typeof rebuildActionFilter==="function"&&actionFilter) rebuildActionFilter();
