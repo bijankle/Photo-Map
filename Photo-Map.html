@@ -604,39 +604,48 @@
   body:not(.mobile)::after{content:"";position:fixed;inset:0;border:4px solid var(--accent);pointer-events:none;z-index:9999;}   /* frame around the whole app */
   .rtabs{border-bottom:4px solid var(--accent);}
   .datebar{border-color:var(--accent);}
-  /* ============ SQUARE BLUE-RULED SKIN (desktop): simple boxes, no pills, no white gaps —
-     everything separated by solid accent rules ============ */
+  /* ============ SQUARE BLUE-RULED SKIN (desktop): simple boxes, no pills — ONE line weight
+     (4px, matching the app's demarcation), shared edges between adjacent boxes, snug uniform
+     padding, and no solid-blue dead fields ============ */
   body:not(.mobile) button,body:not(.mobile) input,body:not(.mobile) select,body:not(.mobile) textarea{border-radius:0 !important;}
-  .btn{border-radius:0;border:2px solid var(--accent);box-shadow:none !important;}
+  .btn{border-radius:0;border:4px solid var(--accent);box-shadow:none !important;padding:6px 10px;}
   .btn:active{transform:none !important;}
-  .btn.ghost,.btn.grpR{border:2px solid var(--accent);}
-  .act-tgl{border:2px solid var(--accent) !important;border-radius:0 !important;background:var(--panel);}
-  .toolbar{gap:2px;}
-  .act-head{gap:2px;}
+  .btn.ghost,.btn.grpR{border:4px solid var(--accent);}
+  .toolbar{gap:0;}
+  .toolbar .btn+.btn{margin-left:-4px;}   /* adjacent boxes share one line */
+  .act-tgl{border:4px solid var(--accent) !important;border-radius:0 !important;background:var(--panel);padding:5px 9px !important;}
+  .act-head{gap:0;padding:8px;}
   .act-head .title{margin-right:6px;}
-  /* actions list: tiles on an accent grid */
-  .act-list{gap:2px;padding:2px;background:var(--accent);}
-  .act-row{border:none;border-radius:0;}
-  .act-cover{border-radius:0;border-left:2px solid var(--accent);}
-  body:not(.mobile) input[type="text"],body:not(.mobile) select,body:not(.mobile) textarea{border-color:var(--accent);}
-  /* gallery: cards on an accent grid */
-  .grid{gap:2px;background:var(--accent);padding:2px;}
+  .act-head .act-tgl+.act-tgl{margin-left:-4px;}
+  .act-new{padding:0;}
+  #actNewInput{border:4px solid var(--accent) !important;margin:0;width:100%;box-sizing:border-box;padding:8px 10px;}   /* fills its whole delineated slot */
+  /* identity rule: INPUT FIELDS are light blue inside; BUTTONS stay white */
+  body:not(.mobile) input[type="text"],body:not(.mobile) input[type="search"],body:not(.mobile) input[type="password"],body:not(.mobile) select,body:not(.mobile) textarea{border-color:var(--accent);background:var(--accent-tint);}
+  /* actions list: tiles share 4px rules, flush to the panel edges, plain panel below the last */
+  .act-list{gap:0;padding:0;background:var(--panel);}
+  .act-row{border:4px solid var(--accent);border-radius:0;margin-top:-4px;}   /* shares its top line with the input / previous tile */
+  .act-cover{border-radius:0;border-left:4px solid var(--accent);margin:-8px -9px -8px 4px;}
+  /* gallery: cards on an accent grid (the grid only spans its rows, no dead field) */
+  .grid{gap:4px;background:var(--accent);padding:4px;border:0;}
   .card{border:none;border-radius:0;}
   .card .thumb,.card img{border-radius:0;}
-  .rtab{border-radius:0 !important;border:2px solid var(--accent);background:var(--panel);color:var(--ink);}
+  .rtab{border-radius:0 !important;border:4px solid var(--accent);background:var(--panel);color:var(--ink);}
+  .rtab+.rtab{margin-left:-4px;}
   .rtab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
   .datebar,.areabtn,.scalebar,.hoverview,.areaprev,.set-win,.folder-pop,.reconnect,.cogbtn{border-radius:0 !important;}
-  .datebar{border-width:2px;}
-  .areabtn{border:2px solid var(--accent);}
-  .toolstack.onmap,.leftstack.onmap{gap:2px;}
-  .scalebar{border:2px solid var(--accent);}
-  .hoverview,.areaprev{border-width:2px;}
+  .datebar{border-width:4px;}
+  .areabtn{border:4px solid var(--accent);}
+  .leftstack.onmap{gap:4px;}
+  .toolstack.onmap{gap:0;}
+  .toolstack .areabtn+.areabtn{margin-top:-4px;}
+  .scalebar{border:4px solid var(--accent);}
+  .hoverview,.areaprev{border-width:4px;}
   .hoverview img,.areaprev .ap-map{border-radius:0;}
-  .set-win{border:3px solid var(--accent);}
+  .set-win{border:4px solid var(--accent);}
   .set-tab{border-radius:0 !important;}
-  .gal-more{border:2px solid var(--accent);border-radius:0 !important;}
-  .updpill{border-radius:0 !important;border:2px solid var(--accent);}
-  .ctxmenu,#ctxmenu{border-radius:0 !important;border:2px solid var(--accent);}
+  .gal-more{border:4px solid var(--accent);border-radius:0 !important;}
+  .updpill{border-radius:0 !important;border:4px solid var(--accent);}
+  .ctxmenu,#ctxmenu{border-radius:0 !important;border:4px solid var(--accent);}
   .m-ub{min-width:38px;padding:7px 8px;font-size:14px;line-height:1;flex-shrink:0;}
   .m-ub.off{opacity:.3;pointer-events:none;}
   .m-sted{border:none;background:none;color:var(--faint);font-size:14px;padding:4px 6px;flex-shrink:0;cursor:pointer;}
