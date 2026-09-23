@@ -584,7 +584,7 @@
   .m-nin:focus{border-color:var(--accent);}
   .m-nin::placeholder{color:#9A9DA5;}
   .m-cue{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:10px;color:#fff;text-shadow:0 1px 4px #000;pointer-events:none;z-index:500;}
-  .m-inset{position:absolute;top:8px;left:8px;right:8px;height:calc(19% - 12px);z-index:4;border-radius:12px;overflow:hidden;border:2px solid rgba(255,255,255,.7);box-shadow:0 2px 12px rgba(0,0,0,.55);pointer-events:none;background:#141413;transition:opacity .2s;}
+  .m-inset{position:absolute;top:8px;left:8px;right:8px;height:calc(19% - 12px);z-index:4;border-radius:12px;overflow:hidden;border:2px solid rgba(255,255,255,.7);box-shadow:0 2px 12px rgba(0,0,0,.55);background:#141413;transition:opacity .2s;}
   .m-sub2{position:absolute;left:8px;right:8px;bottom:8px;top:calc(89% + 4px);z-index:4;box-sizing:border-box;overflow-y:auto;background:#141413cc;border:1px solid #4a4a48;border-radius:10px;padding:6px 9px;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
   .m-sub2 .s2row{display:flex;gap:7px;align-items:flex-start;font-size:16px;color:#E3E5E8;line-height:1.35;padding:3px 0;}
   .m-sub2 .s2row .n{color:#fff;font-family:var(--mono);font-size:15px;font-weight:700;flex-shrink:0;margin-top:1px;}
@@ -3740,7 +3740,7 @@ function mShowDetail(ai,keepScroll){
     requestAnimationFrame(posOverlays); setTimeout(posOverlays,120); setTimeout(posOverlays,450); }   // data-URL images can be complete before the load listeners attach
   if(insEl){
     const pts=photos.filter(p=>p.lat!=null);
-    mInsetMap=L.map(insEl,{zoomControl:false,attributionControl:false,dragging:false,touchZoom:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false,tap:false});
+    mInsetMap=L.map(insEl,{zoomControl:false,attributionControl:false,dragging:false,touchZoom:true,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false,tap:false});   // two fingers zoom the strip map; one finger still pages
     L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",{subdomains:["mt0","mt1","mt2","mt3"],maxZoom:22,maxNativeZoom:21}).addTo(mInsetMap);
     for(const p of pts) L.circleMarker([p.lat,p.lng],{radius:4,color:"#ffffff",weight:2,fillColor:"#5865F2",fillOpacity:.9,interactive:false}).addTo(mInsetMap);
     mInsetCur=L.circleMarker([pts[0].lat,pts[0].lng],{radius:7,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:1,className:"hl-dot",interactive:false}).addTo(mInsetMap);
@@ -3752,7 +3752,7 @@ function mShowDetail(ai,keepScroll){
       if(p.lat!=null){ insEl.style.opacity="1"; mInsetCur.setLatLng([p.lat,p.lng]); }
       else insEl.style.opacity="0.25"; };   // photo without GPS: dim the inset instead of pointing at nothing
     setCur(0);
-    if(hsEl) hsEl.addEventListener("scroll",()=>requestAnimationFrame(()=>{ const i=Math.round(hsEl.scrollLeft/Math.max(1,hsEl.clientWidth)); posOverlays(); if(i!==insEl._ci){ insEl._ci=i; setCur(i); } }));
+    if(hsEl) hsEl.addEventListener("scroll",()=>requestAnimationFrame(()=>{ const i=Math.round(hsEl.scrollLeft/Math.max(1,hsEl.clientWidth)); posOverlays(); if(i!==insEl._ci){ insEl._ci=i; setCur(i); if(insEl._refit) insEl._refit(); } }));   // swiping to another photo resets any zoom back to the default fit
   } else if(hsEl&&sub2) hsEl.addEventListener("scroll",()=>requestAnimationFrame(posOverlays));
   if(sub2){
     /* the card is THE sub-action editor: tick via the box, tap text to edit, Enter in the input
