@@ -3835,15 +3835,19 @@ function mShowDetail(ai,keepScroll){
         th.style.left=hsEl.offsetLeft+"px"; th.style.right=(hsEl.offsetLeft)+"px";
         th.style.top=Math.round(hsEl.offsetTop+gc.h)+"px";
         th.style.bottom=Math.max(0,secH-(hsEl.offsetTop+hsEl.offsetHeight))+"px";
-        /* tiles SCALE to consume the whole spare area: pick the col/row split with the biggest balanced cells */
-        const n=Math.max(1,th.querySelectorAll("img:not(.cur)").length);
+        /* the gap should read as IMAGES: pick the col/row split that lets the previews (at their
+           true aspect ratios) cover the most of the area — black only absorbs the remainder */
+        const imgs=Array.from(th.querySelectorAll("img:not(.cur)"));
+        const n=Math.max(1,imgs.length);
+        const asp=imgs.map(im=>(im.naturalWidth&&im.naturalHeight)?im.naturalWidth/im.naturalHeight:4/3);
         const W2=W-16, H2=spare-16;
-        let best={cols:1,rows:n,score:-1};
+        let best={cols:1,rows:n,fill:-1};
         for(let cols=1;cols<=n;cols++){ const rows=Math.ceil(n/cols);
           const cw=(W2-(cols-1)*8)/cols, chh=(H2-(rows-1)*8)/rows;
-          if(cw<=0||chh<=0) continue;
-          const score=Math.min(cw,chh);
-          if(score>best.score) best={cols,rows,score};
+          if(cw<=20||chh<=20) continue;
+          let shown=0;
+          for(const a2 of asp){ const s3=Math.min(cw/a2,chh); shown+=Math.min(cw,s3*a2)*Math.min(chh,s3); }
+          if(shown>best.fill) best={cols,rows,fill:shown};
         }
         th.style.gridTemplateColumns="repeat("+best.cols+",1fr)";
         th.style.gridTemplateRows="repeat("+best.rows+",1fr)";
@@ -3927,8 +3931,11 @@ function mShowDetail(ai,keepScroll){
   if(th&&hsEl){
     th.innerHTML=photos.map((p,i)=>'<img data-i="'+i+'" src="'+(p.img||"")+'" alt="" loading="lazy" />').join("");
     ["touchstart","touchmove"].forEach(ev=>th.addEventListener(ev,e=>e.stopPropagation(),{passive:true}));
-    th.querySelectorAll("img").forEach(im=>im.addEventListener("click",e=>{ e.stopPropagation();
-      hsEl.scrollTo({left:Number(im.dataset.i)*hsEl.clientWidth,behavior:"smooth"}); }));
+    th.querySelectorAll("img").forEach(im=>{
+      im.addEventListener("load",posOverlays);   // aspect ratios feed the grid fit
+      im.addEventListener("click",e=>{ e.stopPropagation();
+        hsEl.scrollTo({left:Number(im.dataset.i)*hsEl.clientWidth,behavior:"smooth"}); });
+    });
     const updTh=i=>th.querySelectorAll("img").forEach(im=>im.classList.toggle("cur",Number(im.dataset.i)===i));
     updTh(0); swapHooks.push(updTh);
   }
