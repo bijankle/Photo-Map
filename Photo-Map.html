@@ -242,6 +242,10 @@
   @keyframes clpulse{0%,100%{box-shadow:0 0 0 6px rgba(88,101,242,.85),0 2px 8px #1e1f2233;}50%{box-shadow:0 0 0 6px rgba(88,101,242,.15),0 2px 8px #1e1f2233;}}
   .leaflet-interactive.photo-dot{cursor:pointer;}
 
+  /* action "relevant area" previews: hover-preview-sized mini-maps floating above each photo group */
+  .areaprev{position:absolute;z-index:1500;background:#fff;border:1px solid var(--accent);border-radius:10px;padding:5px;box-shadow:0 14px 40px #1e1f2233;pointer-events:none;}
+  .areaprev .ap-map{width:min(270px,40vh);height:min(270px,40vh);border-radius:6px;overflow:hidden;background:#ECEEF1;}
+  .areaprev .ap-tail{position:absolute;left:50%;bottom:-9px;transform:translateX(-50%);width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-top:9px solid var(--accent);}
   .hoverview{position:fixed;z-index:1600;display:none;background:#fff;border:1px solid var(--accent);border-radius:10px;padding:5px;box-shadow:0 14px 40px #1e1f2233;pointer-events:none;}
   .hoverview.show{display:block;}
   .hoverview img{display:block;width:min(270px,40vh);height:min(270px,40vh);object-fit:cover;border-radius:6px;background:#ECEEF1;}
@@ -1172,7 +1176,7 @@ function migrateActNotes(){   // notes live on PHOTOS now: any old action-level 
 }
 function rebuildActionFilter(){ actionFilter=selActs.size?new Set([...selActs].flatMap(id=>actPhotos(actById(id)).map(p=>p.id))):null; }
 function drawActionRings(){ buildCluster(); renderClusters(); }   // highlights are rendered with the clusters (bubbles flash when they contain selected photos)
-function clearActSel(){ if(!selActs.size) return; selActs.clear(); actionFilter=null; renderActions(); drawActionRings(); updateGallery(); }
+function clearActSel(){ if(!selActs.size) return; selActs.clear(); actionFilter=null; if(typeof clearAreaPreviews==="function") clearAreaPreviews(); renderActions(); drawActionRings(); updateGallery(); }
 function createAction(text,pids){
   text=(text||"").trim(); if(!text) return null;
   const a={id:nextActId++,text,done:false,created:Date.now(),doneAt:null,steps:[]};
@@ -1376,6 +1380,51 @@ function clickAction(a,ev,deferNav){
   if(!selActs.has(a.id)||ctrl||shift) return;   // multi-select gestures only change the selection — no navigation
   if(!deferNav) actNavigate(a);
 }
+/* "Relevant area" previews: on a plain action click, each spatial group of the action's photos
+   gets a hover-preview-sized mini-map floating above it, zoomed to just that group's photos.
+   They stay until the map is touched (pan / zoom / any click) or the selection changes. */
+let areaPrevs=[];
+function clearAreaPreviews(){
+  if(!areaPrevs.length) return;
+  for(const ap of areaPrevs){ try{ ap.map.remove(); }catch(e){} try{ ap.el.remove(); }catch(e){} }
+  areaPrevs=[];
+  map.off("movestart",clearAreaPreviews); map.off("zoomstart",clearAreaPreviews);
+  map.getContainer().removeEventListener("mousedown",clearAreaPreviews,true);
+}
+function showAreaPreviews(a){
+  clearAreaPreviews();
+  if(!selActs.has(a.id)) return;
+  const pts=actPhotos(a).filter(p=>p.lat!=null);
+  if(!pts.length) return;
+  const groups=[];   // group by on-screen proximity at the settled view
+  for(const p of pts){
+    const cp=map.latLngToContainerPoint([p.lat,p.lng]);
+    const g=groups.find(g2=>Math.hypot(g2.cx-cp.x,g2.cy-cp.y)<150);
+    if(g){ g.ps.push(p); g.cx=(g.cx*(g.ps.length-1)+cp.x)/g.ps.length; g.cy=(g.cy*(g.ps.length-1)+cp.y)/g.ps.length; }
+    else groups.push({ps:[p],cx:cp.x,cy:cp.y});
+  }
+  const cont=map.getContainer();
+  for(const g of groups.slice(0,4)){   // cap the mini-map instances
+    const el=document.createElement("div"); el.className="areaprev";
+    el.innerHTML='<div class="ap-map"></div><div class="ap-tail"></div>';
+    cont.appendChild(el);
+    const topY=Math.min.apply(null,g.ps.map(p=>map.latLngToContainerPoint([p.lat,p.lng]).y));
+    const w=el.offsetWidth||282, h=el.offsetHeight||282;
+    const x=Math.max(6,Math.min(Math.round(g.cx-w/2),cont.clientWidth-w-6));
+    const y=Math.max(6,Math.min(Math.round(topY-h-16),cont.clientHeight-h-6));
+    el.style.left=x+"px"; el.style.top=y+"px";
+    const mm=L.map(el.querySelector(".ap-map"),{zoomControl:false,attributionControl:false,dragging:false,touchZoom:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false});
+    L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",{subdomains:["mt0","mt1","mt2","mt3"],maxZoom:22,maxNativeZoom:21}).addTo(mm);
+    for(const p of g.ps) L.circleMarker([p.lat,p.lng],{radius:8,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.95,className:"hl-dot",interactive:false}).addTo(mm);
+    const bb=L.latLngBounds(g.ps.map(p=>[p.lat,p.lng]));
+    setTimeout(()=>{ try{ mm.invalidateSize(); if(g.ps.length>1) mm.fitBounds(bb,{padding:[26,26],maxZoom:19}); else mm.setView([g.ps[0].lat,g.ps[0].lng],18); }catch(e){} },60);
+    areaPrevs.push({el,map:mm});
+  }
+  if(areaPrevs.length) setTimeout(()=>{ if(!areaPrevs.length) return;   // arm dismissal once our own flight has settled
+    map.on("movestart",clearAreaPreviews); map.on("zoomstart",clearAreaPreviews);
+    map.getContainer().addEventListener("mousedown",clearAreaPreviews,true);
+  },100);
+}
 function actNavigate(a){
   if(!selActs.has(a.id)) return;   // selection moved on before a deferred zoom fired — the newest click wins
   const ps=actPhotos(a);
@@ -1394,7 +1443,9 @@ function actNavigate(a){
     try{ const tgt=map._getBoundsCenterZoom(bb,{padding:[70,70],maxZoom:19});
       skip=Math.abs(map.getZoom()-tgt.zoom)<0.5 && map.latLngToContainerPoint(tgt.center).distanceTo(map.latLngToContainerPoint(map.getCenter()))<40;
     }catch(e){}
-    if(!skip) map.flyToBounds(bb,{padding:[70,70],maxZoom:19,duration:.45});
+    clearAreaPreviews();
+    if(!skip){ map.once("moveend",()=>setTimeout(()=>showAreaPreviews(a),40)); map.flyToBounds(bb,{padding:[70,70],maxZoom:19,duration:.45}); }
+    else setTimeout(()=>showAreaPreviews(a),40);
   }
   if(ps.length) setTab("gallery");   // always the gallery, even for one photo — its thumbnail carries the unassign X
 }
