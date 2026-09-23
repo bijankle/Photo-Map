@@ -596,6 +596,18 @@
   .m-sub2 .s2row.s2ins{box-shadow:0 -2px 0 var(--accent);}
   .m-sub2 .s2row.s2insb{box-shadow:0 2px 0 var(--accent);}
   .m-sub2 .s2new{margin-top:5px;background:var(--panel);border-color:var(--line2);color:var(--ink);font-size:15px;}
+  .s2x{border:none;background:none;color:var(--faint);font-size:19px;line-height:1;padding:0 6px;margin-left:auto;flex-shrink:0;cursor:pointer;}
+  .s2x:active{color:var(--bad);}
+  /* accent demarcation: every segregated app window carries the theme blue */
+  .m-inset,.m-nin,.m-sub2,.m-sec,.m-ur .m-chip,.m-in,.m-card{border-color:var(--accent);}
+  .m-hpage img{box-shadow:0 0 0 1.5px var(--accent);}
+  .m-head{border-bottom:1px solid var(--accent);}
+  /* the desktop's segregated windows carry the same accent demarcation */
+  header{border-bottom:1.5px solid var(--accent);}
+  .actpanel{border-right:1.5px solid var(--accent);}
+  .rtabs{border-left:1.5px solid var(--accent);border-bottom:1.5px solid var(--accent);}
+  .gallery,.imgpanel{border-left:1.5px solid var(--accent);}
+  .datebar{border-color:var(--accent);}
   .m-ub{min-width:38px;padding:7px 8px;font-size:14px;line-height:1;flex-shrink:0;}
   .m-ub.off{opacity:.3;pointer-events:none;}
   .m-sted{border:none;background:none;color:var(--faint);font-size:14px;padding:4px 6px;flex-shrink:0;cursor:pointer;}
@@ -3525,10 +3537,11 @@ function mNewActs(){ return mPend().newActs||[]; }
 function mIsNew(k){ return typeof k==="string"&&k.charAt(0)==="n"; }
 function mActAt(ai){ if(mIsNew(ai)){ const x=mNewActs()[+ai.slice(1)]; return x?{id:ai,_new:true,_ni:+ai.slice(1),text:x.text,steps:x.steps||[],photos:[],done:!!x.done}:null; } return (mPack.actions||[])[ai]; }
 function mTitle(a){ if(a._new) return a.text; const c=mCh(a.id); return (c.title&&c.title.trim())?c.title:a.text; }
-function mSteps(a){   // pack sub-actions (with pending text edits) + phone-added ones, in pending order
+function mSteps(a){   // pack sub-actions (with pending text edits, minus pending deletions) + phone-added ones, in pending order
   if(a._new) return (a.steps||[]).map((s,i)=>({t:s.t,d:!!s.d,kind:"new",i}));
   const c=mCh(a.id);
-  const base=(a.steps||[]).map((s,i)=>({t:(c.stepEdits&&c.stepEdits[String(i)]!=null)?c.stepEdits[String(i)]:s.t,d:mStepDone(a,i),kind:"pack",i}))
+  const del=new Set((c.delSteps||[]).map(Number));
+  const base=(a.steps||[]).map((s,i)=>({t:(c.stepEdits&&c.stepEdits[String(i)]!=null)?c.stepEdits[String(i)]:s.t,d:mStepDone(a,i),kind:"pack",i})).filter(s=>!del.has(s.i))
     .concat((c.newSteps||[]).map((s,i)=>({t:s.t,d:!!s.d,kind:"new",i})));
   if(Array.isArray(c.stepOrder)){
     const used=new Set(), out=[];
@@ -3537,6 +3550,13 @@ function mSteps(a){   // pack sub-actions (with pending text edits) + phone-adde
     return out;
   }
   return base;
+}
+function mDeleteStep(a,s){
+  if(a._new){ mEditNewAct(a._ni,x=>{ x.steps.splice(s.i,1); }); return; }
+  if(s.kind==="pack"){ mMutate(()=>mSetCh(a.id,{delSteps:(mCh(a.id).delSteps||[]).concat([s.i])})); return; }
+  mMutate(()=>{ const c=mCh(a.id); const ns=(c.newSteps||[]).slice(); ns.splice(s.i,1);   // phone-added: remove it and remap any order tokens
+    const ord=Array.isArray(c.stepOrder)?c.stepOrder.filter(t=>!(t&&t.k==="new"&&t.i===s.i)).map(t=>(t&&t.k==="new"&&t.i>s.i)?{k:"new",i:t.i-1}:t):undefined;
+    mSetCh(a.id,{newSteps:ns,stepOrder:ord}); });
 }
 function mReorderStep(a,from,to){
   if(from===to||from<0||to<0) return;
@@ -3710,14 +3730,14 @@ function mShowDetail(ai,keepScroll){
     +(hasMap?'<section class="m-page"><div id="mMap" style="position:absolute;inset:0;"></div><div class="m-cue">▾ swipe up for photos · tap a dot to jump to its photo</div></section>':'')
     +(photos.length?'<section class="m-page m-pphoto"><div class="m-hsnap" id="mHsnap">'
       +photos.map((p,i)=>'<div class="m-hpage">'+(p.img?'<img src="'+p.img+'" alt="'+esc(p.name||"photo")+'" />':'')
-        +'<input class="m-nin" data-pi="'+i+'" placeholder="Image note" autocomplete="off" />'
         +'<div class="m-pcap">'+esc(p.name||"")+' · '+(i+1)+'/'+photos.length+' ▸ · details ▴</div></div>').join('')
       +'</div>'+(hasMap?'<div class="m-inset" id="mInset"></div>':'')
+      +'<input class="m-nin" id="mNin" placeholder="Image note" autocomplete="off" />'
       +'<div class="m-ur" id="mUR">'+mUndoHtml()+'</div>'
       +'<div class="m-sub2" id="mSub2"></div></section>':'')
     +'<section class="m-page m-pdet"><div class="m-body" style="height:100%;box-sizing:border-box;padding-top:70px;">'
     +(!photos.length?'<div class="m-sec"><div class="m-lab">SUB-ACTIONS</div>'+mSteps(a).map((s,i)=>
-        '<div class="m-strow'+(s.d?' done':'')+'" data-si="'+i+'"><div class="m-chk'+(s.d?' on':'')+'">'+(s.d?'✓':'')+'</div><div class="t"><span style="color:var(--accent2);font-family:var(--mono);font-size:11px;">'+(i+1)+'.</span> <span class="m-stt">'+esc(s.t)+'</span></div><button class="m-sted" type="button" aria-label="Edit sub-action">✎</button></div>'
+        '<div class="m-strow'+(s.d?' done':'')+'" data-si="'+i+'"><div class="m-chk'+(s.d?' on':'')+'">'+(s.d?'✓':'')+'</div><div class="t"><span style="color:var(--accent2);font-family:var(--mono);font-size:11px;">'+(i+1)+'.</span> <span class="m-stt">'+esc(s.t)+'</span></div><button class="m-sted" type="button" aria-label="Edit sub-action">✎</button><button class="s2x" type="button" aria-label="Delete sub-action">&times;</button></div>'
       ).join('')
     +'<input class="m-in" id="mStNew" placeholder="+ sub-action" autocomplete="off" style="margin-top:4px;" /></div>':'')
     +'<button class="m-btn '+(done?'ghost':'green')+'" id="mDoneBtn">'+(done?'Reopen action':'Mark action complete')+'</button>'
@@ -3732,14 +3752,28 @@ function mShowDetail(ai,keepScroll){
     if(a._new) mEditNewAct(a._ni,x=>{ x.done=!done; x.doneAt=Date.now(); });
     else mMutate(()=>mSetCh(a.id,{done:!done,doneAt:Date.now()}));
     rer(); });
-  /* image note: a single-row inline input ON the photo — desktop-style edit-in-place, dark theme */
-  mNoteWire(document,photos);
+  /* image note: ONE input anchored above the sub-actions (it doesn't ride the zoomable image);
+     it follows the photo being viewed, committing any edit before swapping to the next photo */
+  const nin=document.getElementById("mNin");
+  let ninPi=0;
+  const ninLoad=()=>{ if(!nin) return; const p=photos[ninPi]; const pend=p?mPn(p.id):null; nin.value=p?((pend!=null)?pend:(p.note||"")):""; };
+  const ninCommit=()=>{ if(!nin) return; const p=photos[ninPi]; if(!p) return; const v=nin.value.trim();
+    const base=(mPn(p.id)!=null?mPn(p.id):(p.note||"")); if(v===base) return; if(!v&&mPn(p.id)==null) return;
+    mMutate(()=>mSetPn(p.id,p.name||"",v)); };
+  if(nin){
+    ["click","touchstart","pointerdown"].forEach(ev=>nin.addEventListener(ev,e=>e.stopPropagation()));
+    nin.addEventListener("keydown",e=>{ e.stopPropagation(); if(e.key==="Enter"){ e.preventDefault(); nin.blur(); } });
+    nin.addEventListener("blur",ninCommit);
+    ninLoad();
+  }
+  const onPhotoSwap=i=>{ if(i===ninPi) return; ninCommit(); ninPi=i; ninLoad(); };
   const rows=mSteps(a);
   document.querySelectorAll(".m-strow").forEach(el=>{
     const s=rows[Number(el.dataset.si)]; if(!s) return;
     el.addEventListener("click",()=>{ mToggleStep(a,s); rer(); });
     el.querySelector(".m-sted").addEventListener("click",e=>{ e.stopPropagation();
       mInline(el.querySelector(".m-stt"),s.t,v=>{ if(v!=null&&v.trim()&&v.trim()!==s.t) mEditStep(a,s,v.trim()); rer(); }); });
+    const sx=el.querySelector(".s2x"); if(sx) sx.addEventListener("click",e=>{ e.stopPropagation(); mDeleteStep(a,s); rer(); });
   });
   const stNew=document.getElementById("mStNew");
   if(stNew){   // photo-less actions manage sub-actions from the details page
@@ -3773,23 +3807,21 @@ function mShowDetail(ai,keepScroll){
      the Image note input on its bottom edge and the caption just underneath. */
   if(!insEl&&hsEl) hsEl.style.top="0";   // no map in the pack: the image band starts at the top
   const posOverlays=()=>{ if(!hsEl) return;
-    const W=hsEl.clientWidth,H=hsEl.clientHeight,ROW=44;   // reserved row under the image: Image note + undo/redo
-    const ur=document.getElementById("mUR");
-    const urW=(ur&&ur.offsetWidth)||90;
-    const geom=img=>{ if(img&&img.naturalWidth&&img.naturalHeight){ const sc=Math.min(W/img.naturalWidth,Math.max(60,H-ROW)/img.naturalHeight);
-      return {w:img.naturalWidth*sc,h:img.naturalHeight*sc}; } return {w:W,h:Math.max(60,H-ROW)}; };
+    const W=hsEl.clientWidth,H=hsEl.clientHeight;
+    const geom=img=>{ if(img&&img.naturalWidth&&img.naturalHeight){ const sc=Math.min(W/img.naturalWidth,H/img.naturalHeight);
+      return {w:img.naturalWidth*sc,h:img.naturalHeight*sc}; } return {w:W,h:H}; };
     Array.from(hsEl.children).forEach(pg=>{
       const img=pg.querySelector("img"); const gm=geom(img); const lbX=(W-gm.w)/2;
       if(img){ img.style.position="absolute"; img.style.top="0"; img.style.left=Math.round(lbX)+"px";
         img.style.width=Math.round(gm.w)+"px"; img.style.height=Math.round(gm.h)+"px"; img.style.objectFit="fill"; }
-      const nb=pg.querySelector(".m-nin");   // note input: under the image, sharing the row with undo/redo
-      if(nb){ nb.style.left="8px"; nb.style.right="auto"; nb.style.width=Math.round(W-8-urW-16)+"px";
-        nb.style.top=Math.round(gm.h+5)+"px"; nb.style.bottom="auto"; }
       const cap=pg.querySelector(".m-pcap"); if(cap){ cap.style.top=Math.round(Math.max(4,gm.h-20))+"px"; cap.style.bottom="auto"; }   // caption overlays the image's bottom edge
     });
-    if(ur){ const i=Math.round(hsEl.scrollLeft/Math.max(1,hsEl.clientWidth));
-      const gc=geom(hsEl.children[i]&&hsEl.children[i].querySelector("img"));
-      ur.style.top=Math.round(hsEl.offsetTop+gc.h+7)+"px"; } };
+    /* the Image note + undo/redo row anchors ABOVE the sub-actions card — it never rides the zoomable image */
+    const ur=document.getElementById("mUR"), nin2=document.getElementById("mNin");
+    const rowBottom=((sub2&&sub2.offsetHeight)||0)+14;
+    if(ur){ ur.style.top="auto"; ur.style.bottom=rowBottom+"px"; }
+    if(nin2){ nin2.style.left="8px"; nin2.style.top="auto"; nin2.style.bottom=rowBottom+"px";
+      nin2.style.width=Math.round(W-8-((ur&&ur.offsetWidth)||90)-16)+"px"; } };
   if(hsEl){ hsEl.querySelectorAll("img").forEach(im=>im.addEventListener("load",posOverlays));
     requestAnimationFrame(posOverlays); setTimeout(posOverlays,120); setTimeout(posOverlays,450); }   // data-URL images can be complete before the load listeners attach
   if(insEl){
@@ -3820,22 +3852,23 @@ function mShowDetail(ai,keepScroll){
       if(p.lat!=null){ insEl.style.opacity="1"; mInsetCur.setLatLng([p.lat,p.lng]); }
       else insEl.style.opacity="0.25"; };   // photo without GPS: dim the inset instead of pointing at nothing
     setCur(0);
-    if(hsEl) hsEl.addEventListener("scroll",()=>requestAnimationFrame(()=>{ const i=Math.round(hsEl.scrollLeft/Math.max(1,hsEl.clientWidth)); posOverlays(); if(i!==insEl._ci){ insEl._ci=i; setCur(i); if(insEl._refit) insEl._refit(); } }));   // swiping to another photo resets any zoom back to the default fit
-  } else if(hsEl&&sub2) hsEl.addEventListener("scroll",()=>requestAnimationFrame(posOverlays));
+    if(hsEl) hsEl.addEventListener("scroll",()=>requestAnimationFrame(()=>{ const i=Math.round(hsEl.scrollLeft/Math.max(1,hsEl.clientWidth)); posOverlays(); if(i!==insEl._ci){ insEl._ci=i; setCur(i); onPhotoSwap(i); if(insEl._refit) insEl._refit(); } }));   // swiping to another photo resets any zoom back to the default fit
+  } else if(hsEl) hsEl.addEventListener("scroll",()=>requestAnimationFrame(()=>{ posOverlays(); onPhotoSwap(Math.round(hsEl.scrollLeft/Math.max(1,hsEl.clientWidth))); }));
   if(sub2){
     /* the card is THE sub-action editor: tick via the box, tap text to edit, Enter in the input
        to keep adding, drag the number badge to reorder. All refreshes stay local to the card.
        The card is content-sized — the image band shrinks to whatever the list leaves it. */
     let s2drag=null;
-    const syncBands=()=>{ if(!hsEl) return; hsEl.style.bottom=(sub2.offsetHeight+12)+"px"; posOverlays(); };
+    const syncBands=()=>{ if(!hsEl) return; hsEl.style.bottom=(sub2.offsetHeight+62)+"px"; posOverlays(); };   // card + the note/undo row above it
     const fill=(focusNew)=>{ const rows2=mSteps(a);
-      sub2.innerHTML=rows2.map((s,i)=>'<div class="s2row'+(s.d?' done':'')+'" data-si="'+i+'"><span class="k2'+(s.d?' on':'')+'">'+(s.d?'✓':'')+'</span><span class="n" title="Drag to reorder">'+(i+1)+'.</span><span class="t">'+esc(s.t)+'</span></div>').join('')
+      sub2.innerHTML=rows2.map((s,i)=>'<div class="s2row'+(s.d?' done':'')+'" data-si="'+i+'"><span class="k2'+(s.d?' on':'')+'">'+(s.d?'✓':'')+'</span><span class="n" title="Drag to reorder">'+(i+1)+'.</span><span class="t">'+esc(s.t)+'</span><button class="s2x" type="button" aria-label="Delete sub-action">&times;</button></div>').join('')
         +'<input class="m-in s2new" placeholder="+ sub-action" autocomplete="off" />';
       sub2.querySelectorAll(".s2row").forEach(el2=>{
         const si=Number(el2.dataset.si);
         el2.querySelector(".k2").addEventListener("click",e=>{ e.stopPropagation(); const s=mSteps(a)[si]; if(s){ mToggleStep(a,s); fill(); } });   // ticking is the box's job alone
         el2.querySelector(".t").addEventListener("click",e=>{ e.stopPropagation(); const s=mSteps(a)[si]; if(!s) return;
           mInline(el2.querySelector(".t"),s.t,v=>{ if(v!=null&&v.trim()&&v.trim()!==s.t) mEditStep(a,s,v.trim()); fill(); }); });   // tapping the text edits it
+        el2.querySelector(".s2x").addEventListener("click",e=>{ e.stopPropagation(); const s=mSteps(a)[si]; if(s){ mDeleteStep(a,s); fill(); } });   // × DELETES (undoable)
         el2.querySelector(".n").addEventListener("touchstart",e=>{ e.preventDefault(); e.stopPropagation();
           s2drag={si,rows:Array.from(sub2.querySelectorAll(".s2row")),to:null}; el2.classList.add("s2drag"); },{passive:false});
       });
@@ -3963,18 +3996,6 @@ function mWirePager(snap){
 /* Fullscreen image viewer: tap a photo in the band to open it edge-to-edge; swipe left/right
    between the action's images, pinch to zoom, and the Image note stays snug in the bottom-left.
    Tapping the image (or ‹) drops back to the detail view at the same photo. */
-function mNoteWire(scope,photos){
-  scope.querySelectorAll(".m-nin").forEach(inp=>{
-    const p=photos[Number(inp.dataset.pi)]; if(!p) return;
-    const pend=mPn(p.id); inp.value=(pend!=null?pend:(p.note||""));
-    ["click","touchstart","pointerdown"].forEach(ev=>inp.addEventListener(ev,e=>e.stopPropagation()));
-    const commit=()=>{ const v=inp.value.trim(); const base=(mPn(p.id)!=null?mPn(p.id):(p.note||""));
-      if(v===base) return; if(!v&&mPn(p.id)==null) return;
-      mMutate(()=>mSetPn(p.id,p.name||"",v)); };
-    inp.addEventListener("keydown",e=>{ e.stopPropagation(); if(e.key==="Enter"){ e.preventDefault(); inp.blur(); } });
-    inp.addEventListener("blur",commit);
-  });
-}
 /* The mobile UI has no update pill, so a stale cached copy could linger forever: on boot,
    compare this file's timestamp with the server's and force ONE clean reload when behind. */
 async function mCheckFresh(){
@@ -4012,17 +4033,23 @@ async function checkFieldChanges(){
         if(c.stepEdits) for(const k of Object.keys(c.stepEdits)){ const i=+k, t=String(c.stepEdits[k]||"").trim(); if(t&&a.steps&&a.steps[i]) a.steps[i].t=t; }
         if(c.steps) for(const k of Object.keys(c.steps)){ const i=+k; if(a.steps&&a.steps[i]) a.steps[i].d=!!c.steps[k]; }
         if(Array.isArray(c.newSteps)) for(const s of c.newSteps){ const t=String(s&&s.t||"").trim(); if(t){ if(!Array.isArray(a.steps)) a.steps=[]; a.steps.push({t,d:!!s.d}); } }
-        if(Array.isArray(c.stepOrder)&&Array.isArray(a.steps)&&a.steps.length){   // phone drag-reorder of sub-actions
+        if(Array.isArray(a.steps)&&a.steps.length&&(Array.isArray(c.stepOrder)||Array.isArray(c.delSteps))){
           const newLen=Array.isArray(c.newSteps)?c.newSteps.filter(s=>String(s&&s.t||"").trim()).length:0;
           const origLen=a.steps.length-newLen;
           const packArr=a.steps.slice(0,origLen), newArr=a.steps.slice(origLen);
-          const used=new Set(), out=[];
-          for(const t of c.stepOrder){ if(!t) continue;
-            if(t.k==="pack"&&packArr[t.i]!=null&&!used.has("p"+t.i)){ used.add("p"+t.i); out.push(packArr[t.i]); }
-            else if(t.k==="new"&&newArr[t.i]!=null&&!used.has("n"+t.i)){ used.add("n"+t.i); out.push(newArr[t.i]); } }
-          packArr.forEach((s,i)=>{ if(!used.has("p"+i)) out.push(s); });
-          newArr.forEach((s,i)=>{ if(!used.has("n"+i)) out.push(s); });
-          a.steps=out;
+          if(Array.isArray(c.stepOrder)){   // phone drag-reorder of sub-actions
+            const used=new Set(), out=[];
+            for(const t of c.stepOrder){ if(!t) continue;
+              if(t.k==="pack"&&packArr[t.i]!=null&&!used.has("p"+t.i)){ used.add("p"+t.i); out.push(packArr[t.i]); }
+              else if(t.k==="new"&&newArr[t.i]!=null&&!used.has("n"+t.i)){ used.add("n"+t.i); out.push(newArr[t.i]); } }
+            packArr.forEach((s,i)=>{ if(!used.has("p"+i)) out.push(s); });
+            newArr.forEach((s,i)=>{ if(!used.has("n"+i)) out.push(s); });
+            a.steps=out;
+          }
+          if(Array.isArray(c.delSteps)&&c.delSteps.length){   // phone deletions of pack sub-actions, by original index
+            const delObjs=new Set(); for(const di of c.delSteps){ const o=packArr[+di]; if(o) delObjs.add(o); }
+            if(delObjs.size) a.steps=a.steps.filter(s=>!delObjs.has(s));
+          }
         }
         if(c.done===true&&!a.done){ a.done=true; a.doneAt=c.doneAt||Date.now(); }
         if(c.done===false&&a.done){ a.done=false; a.doneAt=null; }
