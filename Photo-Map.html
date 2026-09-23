@@ -2043,6 +2043,7 @@ function updateGallery(keepLimit){
       openViewer(p); });
     const gx=el.querySelector(".gal-x");
     if(gx) gx.addEventListener("click",e=>{ e.stopPropagation(); e.preventDefault(); unassignFromSelActs(p); });
+    el.addEventListener("contextmenu",e=>{ e.preventDefault(); e.stopPropagation(); openDotMenu(p,e); });   // same menu as the map dots
     el.addEventListener("mouseenter",()=>highlightDot(p)); el.addEventListener("mouseleave",highlightCurrent); });
   const more=body.querySelector("#galMore"); if(more) more.addEventListener("click",()=>{ galleryLimit+=GALLERY_CHUNK*2; updateGallery(true); });
   const anx=body.querySelector("#actNoteX"); if(anx) anx.addEventListener("click",clearActSel);
