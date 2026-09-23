@@ -482,7 +482,7 @@
   /* settings (cog) modal */
   .cogbtn{border:none;background:none;color:var(--muted);cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;}
   .cogbtn svg{width:20px;height:20px;fill:currentColor;}
-  .cogbtn:hover{color:var(--accent);background:var(--panel2);}
+  .cogbtn:hover{background:var(--panel2);}   /* the gear stays grey — the blue centre dot is the accent */
   .setmodal{position:fixed;inset:0;z-index:8000;background:#1E1F2255;backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;}
   .setmodal.show{display:flex;}
   .set-win{display:flex;width:min(640px,92vw);height:min(440px,84vh);background:var(--panel);border:1px solid var(--line2);border-radius:14px;box-shadow:0 24px 64px #1e1f2244;overflow:hidden;}
@@ -655,7 +655,7 @@
   </div>
   <div class="spacer"></div>
   <label class="toggle"><input type="checkbox" id="showNoGeo" /><span class="switch"></span><span class="lbl">Show photos without location</span></label>
-  <button class="cogbtn" id="btnSettings" title="Settings"><svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm8.6 3.5c0-.6-.05-1.1-.15-1.6l2-1.55-2-3.4-2.35.95a8 8 0 0 0-2.75-1.6L14.95 2h-4l-.4 2.8a8 8 0 0 0-2.75 1.6L5.45 5.45l-2 3.4 2 1.55c-.1.5-.15 1-.15 1.6s.05 1.1.15 1.6l-2 1.55 2 3.4 2.35-.95a8 8 0 0 0 2.75 1.6l.4 2.8h4l.4-2.8a8 8 0 0 0 2.75-1.6l2.35.95 2-3.4-2-1.55c.1-.5.15-1 .15-1.6z"/></svg></button>
+  <button class="cogbtn" id="btnSettings" title="Settings"><svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm8.6 3.5c0-.6-.05-1.1-.15-1.6l2-1.55-2-3.4-2.35.95a8 8 0 0 0-2.75-1.6L14.95 2h-4l-.4 2.8a8 8 0 0 0-2.75 1.6L5.45 5.45l-2 3.4 2 1.55c-.1.5-.15 1-.15 1.6s.05 1.1.15 1.6l-2 1.55 2 3.4 2.35-.95a8 8 0 0 0 2.75 1.6l.4 2.8h4l.4-2.8a8 8 0 0 0 2.75-1.6l2.35.95 2-3.4-2-1.55c.1-.5.15-1 .15-1.6z"/><circle cx="12" cy="12" r="4.4" fill="#fff"/><circle cx="12" cy="12" r="2.6" fill="var(--accent)"/></svg></button>
 </header>
 
 <div class="setmodal" id="setModal">
