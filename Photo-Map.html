@@ -355,7 +355,9 @@
   .nt-new{box-sizing:border-box;font:inherit;font-size:12px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:4px 8px;outline:none;margin-top:2px;}
   .nt-new:focus{border-color:var(--accent);}
   .act-steps{display:flex;flex-direction:column;gap:4px;margin:4px 0 2px;}
-  .st-row{display:flex;align-items:center;gap:7px;}
+  .st-row{display:flex;align-items:flex-start;gap:7px;}
+  .st-row .st-num{margin-top:3px;}
+  .st-row .st-x{margin-top:2px;}
   .st-chk{width:18px;height:18px;flex-shrink:0;box-sizing:border-box;border:2px solid var(--line2);border-radius:6px;background:var(--panel);cursor:pointer;padding:0;font-size:11px;line-height:1;color:#fff;}
   .st-chk:hover{border-color:var(--good);}
   .st-chk.on{background:var(--good);border-color:var(--good);}
@@ -1255,7 +1257,9 @@ function wireSteps(el,a){
     e.stopPropagation();
     if(e.key!=="Enter") return; const v=inp.value.trim(); if(!v) return;
     const b=actState(a); if(!Array.isArray(a.steps)) a.steps=[]; a.steps.push({t:v,d:false}); recordActEdit(a,b); afterFolderChange();
-    const row2=document.querySelector('.act-row[data-aid="'+a.id+'"] .st-new'); if(row2) row2.focus();   // keep typing the next step
+    // keep typing the next one — refocus the SAME view's input (left panel or under-photo strip)
+    const sel=(el.classList.contains("ipa-row")?".ipa-row":".act-row")+'[data-aid="'+a.id+'"] .st-new';
+    const row2=document.querySelector(sel); if(row2) row2.focus();
   });
 }
 function wireActRowCommon(el,a){
