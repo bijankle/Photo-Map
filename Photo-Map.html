@@ -338,6 +338,17 @@
   .act-exp.on{transform:rotate(180deg);}
   .act-body .d,.ipa-body .d{font-size:12px;color:var(--muted);line-height:1.45;white-space:pre-wrap;word-wrap:break-word;margin:2px 0;}
   .act-body .d.empty,.ipa-body .d.empty{color:var(--faint);font-style:italic;}
+  .asec{display:flex;flex-direction:column;gap:4px;margin-top:7px;}
+  .asec .al{font-family:var(--mono);font-size:9px;letter-spacing:.8px;color:var(--faint);}
+  .asec .d{margin:0;}
+  .act-notes{display:flex;flex-direction:column;gap:4px;}
+  .nt-row{display:flex;align-items:flex-start;gap:6px;}
+  .nt-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
+  .nt-t{font-size:12.5px;color:var(--ink);line-height:1.4;white-space:pre-wrap;word-wrap:break-word;}
+  .nt-m{font-family:var(--mono);font-size:9px;color:var(--faint);}
+  .nt-x{font-size:14px;margin-top:1px;}
+  .nt-new{box-sizing:border-box;font:inherit;font-size:12px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:4px 8px;outline:none;margin-top:2px;}
+  .nt-new:focus{border-color:var(--accent);}
   .act-steps{display:flex;flex-direction:column;gap:4px;margin:4px 0 2px;}
   .st-row{display:flex;align-items:center;gap:7px;}
   .st-chk{width:18px;height:18px;flex-shrink:0;box-sizing:border-box;border:2px solid var(--line2);border-radius:6px;background:var(--panel);cursor:pointer;padding:0;font-size:11px;line-height:1;color:#fff;}
@@ -1085,13 +1096,14 @@ function actPhotos(a){ return a?photos.filter(p=>Array.isArray(p.acts)&&p.acts.i
 function hasOpenAct(p){ return Array.isArray(p.acts)&&p.acts.some(id=>{ const a=actById(id); return a&&!a.done; }); }
 function passActs(p){ return !actOnlyMap||hasOpenAct(p); }
 function normActs(list){ let mx=0; const out=(list||[]).map(a=>({id:+a.id||0,text:String(a.text||""),desc:String(a.desc||""),done:!!a.done,created:a.created||null,doneAt:a.doneAt||null,
-  steps:Array.isArray(a.steps)?a.steps.map(s=>({t:String(s.t||""),d:!!s.d})).filter(s=>s.t):[]})).filter(a=>a.id>0&&a.text); out.forEach(a=>{ if(a.id>mx)mx=a.id; }); nextActId=mx+1; return out; }
+  steps:Array.isArray(a.steps)?a.steps.map(s=>({t:String(s.t||""),d:!!s.d})).filter(s=>s.t):[],
+  notes:Array.isArray(a.notes)?a.notes.map(n=>({t:String(n.t||""),at:n.at||null,src:n.src||"desk"})).filter(n=>n.t):[]})).filter(a=>a.id>0&&a.text); out.forEach(a=>{ if(a.id>mx)mx=a.id; }); nextActId=mx+1; return out; }
 function rebuildActionFilter(){ actionFilter=selActs.size?new Set([...selActs].flatMap(id=>actPhotos(actById(id)).map(p=>p.id))):null; }
 function drawActionRings(){ buildCluster(); renderClusters(); }   // highlights are rendered with the clusters (bubbles flash when they contain selected photos)
 function clearActSel(){ if(!selActs.size) return; selActs.clear(); actionFilter=null; renderActions(); drawActionRings(); updateGallery(); }
 function createAction(text,pids){
   text=(text||"").trim(); if(!text) return null;
-  const a={id:nextActId++,text,desc:"",done:false,created:Date.now(),doneAt:null,steps:[]};
+  const a={id:nextActId++,text,desc:"",done:false,created:Date.now(),doneAt:null,steps:[],notes:[]};
   actions.unshift(a);
   const items=(pids&&pids.length)?buildAssign([a.id],pids.map(photoById).filter(Boolean)):[];
   pushUndo({actCreate:{data:Object.assign({},a),index:0},items});   // creation (incl. its links) is one undo step
@@ -1138,6 +1150,31 @@ function descHtml(a,set){
   return '<div class="d'+(a.desc?'':' empty')+'" title="Double-click to edit the description">'+(a.desc?esc(a.desc):'Double-click to add a description…')+'</div>';
 }
 function expBtnHtml(a,set){ return '<button class="act-exp'+(set.has(a.id)?' on':'')+'" type="button" title="'+(set.has(a.id)?'Hide':'Show')+' details">▾</button>'; }
+function notesHtml(a){
+  const rows=(a.notes||[]).map((n,i)=>'<div class="nt-row" data-ni="'+i+'">'
+    +'<div class="nt-b"><span class="nt-t" title="Double-click to edit">'+esc(n.t)+'</span>'
+    +'<span class="nt-m">'+(n.src==="field"?"field · ":"")+(n.at?fmtDay(n.at):"")+'</span></div>'
+    +'<button class="st-x nt-x" type="button" title="Remove note">&times;</button></div>').join("");
+  return '<div class="act-notes">'+rows+'<input class="nt-new" type="text" placeholder="+ note" autocomplete="off" /></div>';
+}
+function wireNotes(el,a){
+  const box=el.querySelector(".act-notes"); if(!box) return;
+  ["click","dblclick","mousedown"].forEach(ev=>box.addEventListener(ev,e=>{ e.stopPropagation(); clearTimeout(el._ct); }));
+  box.querySelectorAll(".nt-row").forEach(row=>{
+    const i=Number(row.dataset.ni), n=(a.notes||[])[i]; if(!n) return;
+    row.querySelector(".nt-x").addEventListener("click",()=>{ const b=actState(a); a.notes.splice(i,1); recordActEdit(a,b); afterFolderChange(); });
+    row.querySelector(".nt-t").addEventListener("dblclick",()=>{
+      inlineEdit(row.querySelector(".nt-t"),n.t,true,v=>{ const t=(v==null?"":v.trim()); if(t&&t!==n.t){ const b=actState(a); n.t=t; recordActEdit(a,b); afterFolderChange(); } else refreshActUI(); });
+    });
+  });
+  const inp=box.querySelector(".nt-new");
+  inp.addEventListener("keydown",e=>{
+    e.stopPropagation();
+    if(e.key!=="Enter") return; const v=inp.value.trim(); if(!v) return;
+    const b=actState(a); if(!Array.isArray(a.notes)) a.notes=[]; a.notes.push({t:v,at:Date.now(),src:"desk"}); recordActEdit(a,b); afterFolderChange();
+    const n2=document.querySelector('.act-row[data-aid="'+a.id+'"] .nt-new'); if(n2) n2.focus();
+  });
+}
 function stepsHtml(a,set){
   if(!set.has(a.id)) return "";
   const rows=(a.steps||[]).map((s,i)=>'<div class="st-row" data-si="'+i+'">'
@@ -1267,12 +1304,17 @@ function renderActions(){
   const cp=lb.classList.contains("open")?curPhoto():null;   // the open photo's actions get a marker in this list
   list.innerHTML=shown.map(a=>{ const n=actPhotos(a).length;
     const isCur=!!(cp&&Array.isArray(cp.acts)&&cp.acts.includes(a.id));
+    const exp=expActs.has(a.id);
     return '<div class="act-row'+(a.done?' done':'')+(selActs.has(a.id)?' sel':'')+(isCur?' cur':'')+'" data-aid="'+a.id+'">'
       +'<label class="act-chk" title="'+(a.done?'Reopen this action':'Mark completed')+'"><input type="checkbox"'+(a.done?' checked':'')+'/></label>'
-      +'<div class="act-body"><div class="t">'+esc(a.text)+'</div>'+descHtml(a,expActs)+stepsHtml(a,expActs)
-      +'<div class="m">'+n+' photo'+(n===1?'':'s')
-      +((a.steps&&a.steps.length)?' · steps '+a.steps.filter(s=>s.d).length+'/'+a.steps.length:'')
-      +(a.done&&a.doneAt?' · done '+fmtDate(a.doneAt):'')+'</div></div>'
+      +'<div class="act-body"><div class="t">'+esc(a.text)+'</div>'
+      +(exp?('<div class="asec"><div class="al">DESCRIPTION</div>'+descHtml(a,expActs)+'</div>'
+        +'<div class="asec"><div class="al">ACTIONS</div>'+stepsHtml(a,expActs)+'</div>'
+        +'<div class="asec"><div class="al">NOTES</div>'+notesHtml(a)+'</div>'
+        +'<div class="m">'+n+' photo'+(n===1?'':'s')
+        +((a.steps&&a.steps.length)?' · steps '+a.steps.filter(s=>s.d).length+'/'+a.steps.length:'')
+        +(a.done&&a.doneAt?' · done '+fmtDate(a.doneAt):'')+'</div>'):'')
+      +'</div>'
       +expBtnHtml(a,expActs)+'<button class="ipa-x act-del" type="button" title="'+(isCur?'Remove this action from the open photo':'Delete this action')+'">&times;</button></div>'; }).join("");
   list.querySelectorAll(".act-row").forEach(el=>{
     const a=actById(Number(el.dataset.aid)); if(!a) return;
@@ -1282,10 +1324,11 @@ function renderActions(){
       if(cp2&&Array.isArray(cp2.acts)&&cp2.acts.includes(a.id)) unassignAct(a,cp2);   // open photo is linked: X just removes that link
       else deleteAction(a); });
     wireSteps(el,a);
+    wireNotes(el,a);
     wireActRowCommon(el,a,expActs);
     /* single click selects/navigates (slightly delayed so a double-click can win); double click edits in place */
-    el.addEventListener("click",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); el._ct=setTimeout(()=>clickAction(a,e),260); });
-    el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); if(e.target.closest(".d")) startActDescEdit(a,el); else startActEdit(a,el); });
+    el.addEventListener("click",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); el._ct=setTimeout(()=>clickAction(a,e),260); });
+    el.addEventListener("dblclick",e=>{ if(e.target.closest(".act-chk,.act-exp,.act-del,.act-steps,.act-notes")||el.querySelector(".act-edit")) return; clearTimeout(el._ct); if(e.target.closest(".d")) startActDescEdit(a,el); else startActEdit(a,el); });
     el.addEventListener("contextmenu",e=>{ e.preventDefault(); e.stopPropagation(); openActMenu(a,e); });
   });
 }
@@ -1445,6 +1488,7 @@ function buildMobilePack(){
   return {
     v:1, exportedAt:new Date().toISOString(), project:loadedJsonName||folderName||"PhotoMap",
     actions: open.map(a=>({ id:a.id, text:a.text, desc:a.desc||"", steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d})),
+      notes:(a.notes||[]).map(n=>({t:n.t,at:n.at||null,src:n.src||"desk"})),
       photos: actPhotos(a).map(p=>({ id:p.id, name:p.name, lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null),
         img:(p.preview||p.thumb||null) })) }))
   };
@@ -2664,7 +2708,7 @@ function pushTagAction(items){   // one undo step, possibly touching many photos
   pushUndo({items});
 }
 function recordTagChange(p,before){ pushTagAction([{id:p.id,before,after:snapshotTags(p)}]); }
-function actState(a){ return {text:a.text,desc:a.desc||"",done:!!a.done,doneAt:a.doneAt||null,steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d}))}; }
+function actState(a){ return {text:a.text,desc:a.desc||"",done:!!a.done,doneAt:a.doneAt||null,steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d})),notes:(a.notes||[]).map(n=>({t:n.t,at:n.at||null,src:n.src||"desk"}))}; }
 function recordActEdit(a,before){ const after=actState(a); if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({actEdit:{id:a.id,before,after}}); }
 function cpMarks(ms){ return JSON.parse(JSON.stringify(ms||[])); }
 function pushMarksSnap(p,before,after){ if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({marksSnap:{id:p.id,before,after}}); }
@@ -2680,7 +2724,7 @@ function applyUndoEntry(a,dir){   // dir: "before" (undo) or "after" (redo)
     if(undo){ actions=actions.filter(x=>x.id!==a.actCreate.data.id); selActs.delete(a.actCreate.data.id); }
     else { const d=a.actCreate.data; if(!actById(d.id)){ actions.splice(Math.min(a.actCreate.index,actions.length),0,Object.assign({},d)); if(nextActId<=d.id) nextActId=d.id+1; } }
   }
-  if(a.actEdit){ const x=actById(a.actEdit.id); if(x){ const src=undo?a.actEdit.before:a.actEdit.after; x.text=src.text; x.desc=src.desc; x.done=src.done; x.doneAt=src.doneAt; if(src.steps) x.steps=src.steps.map(s=>({t:s.t,d:!!s.d})); } }
+  if(a.actEdit){ const x=actById(a.actEdit.id); if(x){ const src=undo?a.actEdit.before:a.actEdit.after; x.text=src.text; x.desc=src.desc; x.done=src.done; x.doneAt=src.doneAt; if(src.steps) x.steps=src.steps.map(s=>({t:s.t,d:!!s.d})); if(src.notes) x.notes=src.notes.map(n=>({t:n.t,at:n.at||null,src:n.src||"desk"})); } }
   if(a.marksSnap){ const p=photoById(a.marksSnap.id); if(p){ p.marks=cpMarks(undo?a.marksSnap.before:a.marksSnap.after); if(selObj&&!p.marks.includes(selObj)) selObj=null; if(curPhoto()===p&&lb.classList.contains("open")) redrawMarks(); } }
   if(a.sizeSnap){ const p=photoById(a.sizeSnap.id); if(p){ const s=undo?a.sizeSnap.before:a.sizeSnap.after; p.mkw=(s.mkw==null?null:s.mkw); p.mth=(s.mth==null?null:s.mth); if(curPhoto()===p&&lb.classList.contains("open")){ redrawMarks(); syncSizeBars(); if(selMark) positionEditor(); } } }
   if(a.rot){ const p=photoById(a.rot.id); if(p){ const d=((a.rot.delta%360)+360)%360; applyRotation(p,undo?(360-d)%360:d).catch(()=>{}); } }
@@ -2952,7 +2996,7 @@ document.getElementById("jsonInput").addEventListener("change",async e=>{ const 
 function serializeState(includeImages){
   return {
     version:3, folderName, savedAt:new Date().toISOString(),
-    actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.desc)o.desc=a.desc; if(a.steps&&a.steps.length)o.steps=a.steps.map(s=>({t:s.t,d:!!s.d})); return o; }),
+    actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.desc)o.desc=a.desc; if(a.steps&&a.steps.length)o.steps=a.steps.map(s=>({t:s.t,d:!!s.d})); if(a.notes&&a.notes.length)o.notes=a.notes.map(n=>({t:n.t,at:n.at||null,src:n.src||"desk"})); return o; }),
     settings:{ baseLayer: map.hasLayer(google)?"google":map.hasLayer(esri)?"esri":"none", showNoGeo, sortBy:currentSort,
       thumb:getComputedStyle(document.documentElement).getPropertyValue("--thumb").trim(),
       sideW:getComputedStyle(document.documentElement).getPropertyValue("--side-w").trim(),
@@ -3219,13 +3263,14 @@ function mShowDetail(ai){
     +'<div class="m-body">'
     +((a.photos||[]).some(p=>p.lat!=null)?'<div class="m-map" id="mMap"></div>':'')
     +(a.desc?'<div class="m-sec"><div class="m-lab">DESCRIPTION</div><div style="font-size:14px;color:var(--ink);line-height:1.5;white-space:pre-wrap;">'+esc(a.desc)+'</div></div>':'')
+    +((a.notes||[]).length?'<div class="m-sec"><div class="m-lab">NOTES</div>'+(a.notes||[]).map(n=>'<div style="font-size:13px;color:var(--ink);line-height:1.5;">'+esc(n.t)+'<span style="color:var(--faint);font-size:10px;font-family:var(--mono);"> · '+(n.src==="field"?"field ":"")+(n.at?new Date(n.at).toLocaleDateString(undefined,{day:"numeric",month:"short"}):"")+'</span></div>').join('')+'</div>':'')
     +((a.steps||[]).length?'<div class="m-sec"><div class="m-lab">STEPS</div>'+(a.steps||[]).map((s,i)=>{
         const sd=mStepDone(a,i);
         return '<div class="m-strow'+(sd?' done':'')+'" data-si="'+i+'"><div class="m-chk'+(sd?' on':'')+'">'+(sd?'✓':'')+'</div><div class="t">'+esc(s.t)+'</div></div>';
       }).join('')+'</div>':'')
     +((a.photos||[]).length?'<div class="m-sec" style="padding:12px 10px;"><div class="m-lab" style="padding:0 4px;">PHOTOS — TAP TO VIEW</div><div class="m-ph">'
       +(a.photos||[]).map((p,i)=>p.img?'<img src="'+p.img+'" data-pi="'+i+'" alt="'+esc(p.name||"photo")+'" />':'').join('')+'</div></div>':'')
-    +'<div class="m-sec"><div class="m-lab">FIELD NOTE</div><textarea class="m-ta" id="mNote" placeholder="Add a note for the desktop…">'+esc(c.note||"")+'</textarea></div>'
+    +'<div class="m-sec"><div class="m-lab">FIELD NOTE</div><textarea class="m-ta" id="mNote" placeholder="Syncs into this action’s notes on the desktop…">'+esc(c.note||"")+'</textarea></div>'
     +'</div>'
     +'<div class="m-foot"><button class="m-btn '+(done?'ghost':'green')+'" id="mDoneBtn">'+(done?'Reopen action':'Mark action complete')+'</button></div>');
   document.getElementById("mBack").addEventListener("click",mShowList);
@@ -3277,7 +3322,7 @@ async function checkFieldChanges(){
         if(c.steps) for(const k of Object.keys(c.steps)){ const i=+k; if(a.steps&&a.steps[i]) a.steps[i].d=!!c.steps[k]; }
         if(c.done===true&&!a.done){ a.done=true; a.doneAt=c.doneAt||Date.now(); }
         if(c.done===false&&a.done){ a.done=false; a.doneAt=null; }
-        if(c.note) a.desc=(a.desc?a.desc+"\n":"")+"[Field "+new Date(data.updatedAt||Date.now()).toLocaleDateString(undefined,{day:"numeric",month:"short"})+"] "+c.note;
+        if(c.note){ if(!Array.isArray(a.notes)) a.notes=[]; a.notes.push({t:c.note,at:Date.parse(data.updatedAt||"")||Date.now(),src:"field"}); }   // field notes land in the NOTES section
         recordActEdit(a,before);
       }
       afterFolderChange();
