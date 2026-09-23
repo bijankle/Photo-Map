@@ -575,7 +575,7 @@
   .m-nbar{position:absolute;left:14px;right:14px;bottom:34px;z-index:3;box-sizing:border-box;border:1px solid #4a4a48;border-radius:10px;background:#141413cc;color:#E3E5E8;
     font:inherit;font-size:12px;padding:8px 10px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
   .m-cue{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:10px;color:#fff;text-shadow:0 1px 4px #000;pointer-events:none;z-index:500;}
-  .m-inset{position:absolute;top:68px;right:10px;width:118px;height:118px;z-index:4;border-radius:14px;overflow:hidden;border:2px solid rgba(255,255,255,.85);box-shadow:0 2px 12px rgba(0,0,0,.55);pointer-events:none;background:#141413;transition:opacity .2s;}
+  .m-inset{position:absolute;top:10px;right:10px;width:118px;height:118px;z-index:4;border-radius:14px;overflow:hidden;border:2px solid rgba(255,255,255,.85);box-shadow:0 2px 12px rgba(0,0,0,.55);pointer-events:none;background:#141413;transition:opacity .2s;}
   .m-nedit{position:absolute;left:14px;right:14px;bottom:34px;z-index:6;display:flex;flex-direction:column;gap:8px;box-sizing:border-box;background:#141413ee;border:1px solid #4a4a48;border-radius:12px;padding:10px;}
   .m-nprev{max-height:80px;overflow-y:auto;font-size:12px;color:#C8CAD0;line-height:1.45;white-space:pre-wrap;}
   .m-nta{box-sizing:border-box;width:100%;min-height:56px;font:inherit;font-size:14px;color:#E3E5E8;background:#232322;border:1px solid #4a4a48;border-radius:10px;padding:8px 10px;outline:none;resize:none;}
@@ -3600,11 +3600,24 @@ function mShowDetail(ai,keepScroll){
     const ifit=()=>{ try{ mInsetMap.invalidateSize(); if(pts.length>1) mInsetMap.fitBounds(ibb,{padding:[12,12],maxZoom:19}); else mInsetMap.setView([pts[0].lat,pts[0].lng],18); }catch(e){} };
     setTimeout(ifit,150);
     const hs=document.getElementById("mHsnap");
+    /* pin the inset to the TOP-RIGHT OF THE IMAGE itself (contain-fit leaves letterbox bars) */
+    const posInset=()=>{ if(!hs) return;
+      const i=Math.round(hs.scrollLeft/Math.max(1,hs.clientWidth));
+      const img=hs.children[i]&&hs.children[i].querySelector("img");
+      const W=hs.clientWidth,H=hs.clientHeight;
+      let top=10,right=10;
+      if(img&&img.naturalWidth&&img.naturalHeight){
+        const sc=Math.min(W/img.naturalWidth,H/img.naturalHeight);
+        top=Math.max(8,(H-img.naturalHeight*sc)/2+8);
+        right=Math.max(8,(W-img.naturalWidth*sc)/2+8);
+      }
+      insEl.style.top=Math.round(top)+"px"; insEl.style.right=Math.round(right)+"px"; };
+    if(hs) hs.querySelectorAll("img").forEach(im=>im.addEventListener("load",posInset));
     const setCur=i=>{ const p=photos[i]; if(!p) return;
       if(p.lat!=null){ insEl.style.opacity="1"; mInsetCur.setLatLng([p.lat,p.lng]); }
       else insEl.style.opacity="0.25"; };   // photo without GPS: dim the inset instead of pointing at nothing
-    setCur(0);
-    if(hs) hs.addEventListener("scroll",()=>requestAnimationFrame(()=>{ const i=Math.round(hs.scrollLeft/Math.max(1,hs.clientWidth)); if(i!==insEl._ci){ insEl._ci=i; setCur(i); } }));
+    setCur(0); requestAnimationFrame(posInset);
+    if(hs) hs.addEventListener("scroll",()=>requestAnimationFrame(()=>{ const i=Math.round(hs.scrollLeft/Math.max(1,hs.clientWidth)); posInset(); if(i!==insEl._ci){ insEl._ci=i; setCur(i); } }));
   }
   requestAnimationFrame(()=>{   // land on the first photo; the map waits one swipe down
     if(keepScroll!=null){ snap.scrollTop=keepScroll; }
