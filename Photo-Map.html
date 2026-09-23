@@ -1426,6 +1426,14 @@ function showAreaPreviews(a){
     map.getContainer().addEventListener("mousedown",clearAreaPreviews,true);
   },100);
 }
+/* Resizing a side panel changes the map viewport: re-run the fit for the selected action so the
+   view rescales to suit and every preview re-anchors centred on its dot. */
+let _actRzT=null;
+map.on("resize",()=>{ clearTimeout(_actRzT); _actRzT=setTimeout(()=>{
+  if(selActs.size!==1) return;
+  const a=actById([...selActs][0]);
+  if(a&&actPhotos(a).some(p=>p.lat!=null)) actNavigate(a);
+},220); });
 function actNavigate(a){
   if(!selActs.has(a.id)) return;   // selection moved on before a deferred zoom fired — the newest click wins
   const ps=actPhotos(a);
