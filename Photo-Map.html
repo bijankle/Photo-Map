@@ -1358,7 +1358,7 @@ function renderActions(){
   document.getElementById("actOpenOnly").classList.toggle("on",actShowOpenOnly);
   document.getElementById("actMapOnly").classList.toggle("on",actOnlyMap);
   document.getElementById("actExpAll").textContent=actions.some(a=>!collActs.has(a.id))?"Collapse all":"Expand all";
-  const shown=actShowOpenOnly?actions.filter(a=>!a.done):actions;
+  const shown=(actShowOpenOnly?actions.filter(a=>!a.done):actions.slice()).sort((x,y)=>(x.done?1:0)-(y.done?1:0));   // completed actions sink to the bottom (display only — stored order unchanged)
   if(!shown.length){ list.innerHTML=""; return; }
   const cp=lb.classList.contains("open")?curPhoto():null;   // the open photo's actions get a marker in this list
   list.innerHTML=shown.map(a=>{ const n=actPhotos(a).length;
