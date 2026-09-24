@@ -1142,8 +1142,20 @@ function openDotMenu(p,ev){
   const moved=targets.filter(t=>t.glat!=null);
   if(moved.length) mkCtxItem("Restore original GPS"+(many?" ("+moved.length+" photo"+(moved.length>1?"s":"")+")":""),()=>restoreGps(moved));
   else mkCtxItem(many?"Original GPS (none moved)":"Original GPS (not moved)",null,true);
+  mkCtxItem("Remove "+(many?targets.length+" photos":"this photo")+" from the project",()=>removePhotos(targets));   /* metadata only — the image files are never touched; Ctrl+Z restores */
   if(selSet.size) mkCtxItem("Deselect all",clearSel);
   showCtxAt(ev.clientX,ev.clientY);
+}
+function removePhotos(list){
+  const items=[];
+  for(const p of list){ const i=photos.indexOf(p); if(i>=0) items.push({photo:p,index:i}); }
+  if(!items.length) return;
+  if(lb.classList.contains("open")&&curPhoto()&&items.some(x=>x.photo===curPhoto())) closeViewer();
+  const ids=new Set(items.map(x=>x.photo.id));
+  photos=photos.filter(p=>!ids.has(p.id));
+  for(const id of ids) selSet.delete(id);
+  pushUndo({delPhotos:{items}});
+  rebuildSizeIndex(); buildDateFilter(); updateStats(); setAreaBtn(); afterFolderChange();
 }
 function restoreGps(list){
   const items=[];
@@ -3186,6 +3198,13 @@ function applyUndoEntry(a,dir){   // dir: "before" (undo) or "after" (redo)
       photos=photos.filter(p=>!ids.has(p.id));
       for(const id of ids) selSet.delete(id);
     } else { for(const p of (a._stash||[])){ if(!photoById(p.id)) photos.push(p); } }
+    rebuildSizeIndex(); buildDateFilter(); updateStats();
+  }
+  if(a.delPhotos){   // right-click removed photos: undo re-inserts them at their old spots, redo removes again
+    if(undo){ for(const it of a.delPhotos.items.slice().sort((x,y)=>x.index-y.index)){ if(!photoById(it.photo.id)) photos.splice(Math.min(it.index,photos.length),0,it.photo); } }
+    else{ const ids=new Set(a.delPhotos.items.map(x=>x.photo.id));
+      if(lb.classList.contains("open")&&curPhoto()&&ids.has(curPhoto().id)) closeViewer();
+      photos=photos.filter(p=>!ids.has(p.id)); for(const id of ids) selSet.delete(id); }
     rebuildSizeIndex(); buildDateFilter(); updateStats();
   }
   if(a.order){ const want=undo?a.order.before:a.order.after; actions.sort((x,y)=>{ let ix=want.indexOf(x.id), iy=want.indexOf(y.id); if(ix<0)ix=1e9; if(iy<0)iy=1e9; return ix-iy; }); }
