@@ -739,9 +739,9 @@
           <div class="set-ctl"><input type="password" id="setGhToken" placeholder="github_pat_&hellip;" style="width:200px;font:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--line2);border-radius:8px;" /></div>
         </div>
         <div class="set-row">
-          <div class="set-lbl">Export to mobile<span class="set-sub">Pushes the OPEN actions, their steps and preview photos to the data repo. The phone loads the latest automatically.</span></div>
+          <div class="set-lbl">Phone sync<span class="set-sub">Automatic: the OPEN actions, their steps and preview photos are pushed to the data repo a few seconds after any change, and the phone picks them up by itself. The button forces a push now.</span></div>
           <div class="set-ctl" style="flex-direction:column;align-items:flex-start;gap:6px;">
-            <button class="btn primary" id="btnMobileExport" style="font-size:13px;">Export now</button>
+            <button class="btn primary" id="btnMobileExport" style="font-size:13px;">Push now</button>
             <span id="mobExpStatus" style="font-family:var(--mono);font-size:10px;color:var(--dim);"></span>
           </div>
         </div>
@@ -1875,26 +1875,46 @@ async function buildMobilePack(){
   }
   return pk;
 }
-async function exportMobile(){
+/* The phone's pack is exported AUTOMATICALLY: every edit schedules a check, and the pack is
+   rebuilt + pushed only when its content actually changed (a cheap signature, no images).
+   A tiny pack-stamp.json lets the phone notice a new pack without downloading megabytes. */
+function packSig(){
+  const open=actions.filter(a=>!a.done);
+  for(const a of open) for(const st of (a.steps||[])) if(!st.id) st.id=newSid();
+  return JSON.stringify([loadedJsonName||folderName||"PhotoMap",open.map(a=>[a.id,a.text,!!a.hold,a.fu||null,(a.steps||[]).map(st=>[st.id,st.t,!!st.d]),
+    actPhotos(a).map(ph=>[ph.id,metaKey(ph),ph.note||"",ph.lat,ph.lng,annotKey(ph)||""])])]);
+}
+let _expBusy=false,_expAgain=false,_expT=null;
+function scheduleAutoExport(delay){ clearTimeout(_expT); _expT=setTimeout(()=>exportMobile(false),delay==null?8000:delay); }
+async function exportMobile(manual){
   const st=document.getElementById("mobExpStatus"), btn=document.getElementById("btnMobileExport");
   const cfg=ghCfg();
-  if(!cfg.token){ st.textContent="Paste your GitHub token above first."; return; }
+  if(!cfg.token){ if(manual) st.textContent="Paste your GitHub token above first."; return; }
+  if(!projectReady()||!photos.length&&!actions.length) return;   // never publish an empty pre-load session over the real pack
+  if(_expBusy){ _expAgain=true; return; }
+  let sig; try{ sig=packSig(); }catch(e){ return; }
+  const key="pmPackSig:"+cfg.repo;
+  let last=""; try{ last=localStorage.getItem(key)||""; }catch(e){}
+  if(!manual&&sig===last) return;   // nothing the phone would see has changed
+  _expBusy=true; if(btn) btn.disabled=true;
   const openN=actions.filter(a=>!a.done).length;
-  if(!openN){ st.textContent="No open actions to export."; return; }
-  btn.disabled=true; st.textContent="Building pack…";
   try{
+    st.textContent="Building pack…";
     const pack=await buildMobilePack(); persistState();   // newly minted sub-action ids must be saved with the project
     const text=JSON.stringify(pack);
     st.textContent="Pushing "+(text.length/1048576).toFixed(1)+" MB to "+cfg.repo+"…";
     await ghPutFile(cfg,"pack.json",text,"PhotoMap mobile pack — "+openN+" open action"+(openN===1?"":"s"));
-    try{ localStorage.setItem("pmLastExport",String(Date.now())); }catch(e){}
-    st.textContent="✓ Live for the phone — "+openN+" action"+(openN===1?"":"s")+", "+new Date().toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"});
+    await ghPutFile(cfg,"pack-stamp.json",JSON.stringify({exportedAt:pack.exportedAt,project:pack.project,n:openN}),"Pack stamp");
+    try{ localStorage.setItem("pmLastExport",String(Date.now())); localStorage.setItem(key,sig); }catch(e){}
+    st.textContent="✓ Phone up to date — "+openN+" action"+(openN===1?"":"s")+", "+new Date().toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"});
   }catch(err){
-    st.textContent="Failed: "+(err&&err.message||err);
+    st.textContent="Auto-sync to phone failed: "+(err&&err.message||err)+" — retrying";
+    scheduleAutoExport(60000);
   }
-  btn.disabled=false;
+  _expBusy=false; if(btn) btn.disabled=false;
+  if(_expAgain){ _expAgain=false; scheduleAutoExport(1500); }
 }
-document.getElementById("btnMobileExport").addEventListener("click",exportMobile);
+document.getElementById("btnMobileExport").addEventListener("click",()=>exportMobile(true));
 /* ---- Excel export: every action as a row, annotated photos embedded alongside ---- */
 let _exceljsP=null;
 function loadExcelJS(){ if(window.ExcelJS) return Promise.resolve();
@@ -3676,7 +3696,7 @@ async function idbSet(k,v){ const db=await idbOpen(); return new Promise((res,re
 async function idbGet(k){ const db=await idbOpen(); return new Promise((res,rej)=>{ const t=db.transaction("kv","readonly"); const r=t.objectStore("kv").get(k); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 async function idbDel(k){ const db=await idbOpen(); return new Promise((res,rej)=>{ const t=db.transaction("kv","readwrite"); t.objectStore("kv").delete(k); t.oncomplete=()=>res(); t.onerror=()=>rej(t.error); }); }
 let persistTimer=null;
-function persistState(){ clearTimeout(persistTimer); persistTimer=setTimeout(()=>{ idbSet("lastState",serializeState(false)).catch(()=>{}); scheduleAutoSave(); },400); }
+function persistState(){ clearTimeout(persistTimer); persistTimer=setTimeout(()=>{ idbSet("lastState",serializeState(false)).catch(()=>{}); scheduleAutoSave(); scheduleAutoExport(); },400); }   // every change funnels here — the phone pack follows (change-detected)
 // Cache the image-bearing session to IndexedDB (browser-local, no .crswap) so reopen shows photos
 // instantly without reconnecting the folder. The .json file itself stays small (metadata only).
 let fullCacheTimer=null;
@@ -3768,7 +3788,8 @@ function mPend(){   // parsed once per actual change (renders used to re-parse i
   let raw; try{ raw=localStorage.getItem("pmField")||"{}"; }catch(e){ return {}; }
   if(raw===_mpRaw&&_mpObj) return _mpObj;
   try{ _mpObj=JSON.parse(raw)||{}; }catch(e){ _mpObj={}; } _mpRaw=raw; return _mpObj; }
-function mPendSave(o){ try{ const raw=JSON.stringify(o); localStorage.setItem("pmField",raw); _mpRaw=raw; _mpObj=o; }catch(e){} }
+let _mpQuiet=false;
+function mPendSave(o){ try{ const raw=JSON.stringify(o); localStorage.setItem("pmField",raw); _mpRaw=raw; _mpObj=o; }catch(e){} if(!_mpQuiet&&typeof mAutoSendSoon==="function") mAutoSendSoon(); }   // every edit auto-syncs
 function mUid(){ return "u"+Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
 function mCh(id){ const p=mPend(); return (p.changes||{})[id]||{}; }
 function mSetCh(id,patch){ const p=mPend(); p.changes=p.changes||{}; const c=Object.assign({},p.changes[id]||{},patch);
@@ -3806,8 +3827,8 @@ function mUpdUndoUI(){ const u=document.getElementById("mUndoB"),r=document.getE
   if(r) r.classList.toggle("off",!mRedoStack.length); }
 function mMutate(fn){ const before=localStorage.getItem("pmField")||"{}"; fn(); mUndoStack.push(before); if(mUndoStack.length>100) mUndoStack.shift(); mRedoStack.length=0; mUpdUndoUI(); }
 let mSoftRefresh=null;   // detail screens register an in-place refresher so undo/ticks skip full rebuilds (and map reloads)
-function mUndo(){ if(!mUndoStack.length) return; mRedoStack.push(localStorage.getItem("pmField")||"{}"); try{ localStorage.setItem("pmField",mUndoStack.pop()); }catch(e){} if(!(mSoftRefresh&&mSoftRefresh())&&mRerender) mRerender(); }
-function mRedo(){ if(!mRedoStack.length) return; mUndoStack.push(localStorage.getItem("pmField")||"{}"); try{ localStorage.setItem("pmField",mRedoStack.pop()); }catch(e){} if(!(mSoftRefresh&&mSoftRefresh())&&mRerender) mRerender(); }
+function mUndo(){ if(!mUndoStack.length) return; mRedoStack.push(localStorage.getItem("pmField")||"{}"); try{ localStorage.setItem("pmField",mUndoStack.pop()); }catch(e){} mAutoSendSoon(); if(!(mSoftRefresh&&mSoftRefresh())&&mRerender) mRerender(); }
+function mRedo(){ if(!mRedoStack.length) return; mUndoStack.push(localStorage.getItem("pmField")||"{}"); try{ localStorage.setItem("pmField",mRedoStack.pop()); }catch(e){} mAutoSendSoon(); if(!(mSoftRefresh&&mSoftRefresh())&&mRerender) mRerender(); }
 function mUndoHtml(){ return '<button class="m-chip m-ub'+(mUndoStack.length?'':' off')+'" id="mUndoB" type="button" aria-label="Undo">↺</button><button class="m-chip m-ub'+(mRedoStack.length?'':' off')+'" id="mRedoB" type="button" aria-label="Redo">↻</button>'; }
 function mWireUndo(){ const u=document.getElementById("mUndoB"),r=document.getElementById("mRedoB");
   if(u) u.addEventListener("click",e=>{ e.stopPropagation(); mUndo(); });
@@ -3907,21 +3928,25 @@ function mShowSetup(msg){
     mLoadPack();
   });
 }
-async function mLoadPack(){
+async function mLoadPack(silent){
   const cfg=ghCfg();
   if(!cfg.token){ mShowSetup(); return; }
-  mScr('<div class="m-head"><div class="m-brand">Photo<span>Map</span> Field</div></div><div class="m-body"><div class="m-note" style="padding-top:40px">Loading the latest pack…</div></div>');
+  const lst=document.getElementById("mList"), keepScroll=(silent&&lst)?lst.scrollTop:null;
+  if(!silent) mScr('<div class="m-head"><div class="m-brand">Photo<span>Map</span> Field</div></div><div class="m-body"><div class="m-note" style="padding-top:40px">Loading the latest pack…</div></div>');
   try{
     const text=await ghGetRaw(cfg,"pack.json");
-    if(!text){ mShowSetup("No pack.json in "+cfg.repo+" yet — click Export to mobile on the desktop first."); return; }
-    mPack=JSON.parse(text);
+    if(!text){ if(!silent) mShowSetup("No pack.json in "+cfg.repo+" yet — open the project on the desktop once (it syncs to the phone automatically)."); return; }
+    mPack=JSON.parse(text); mPackStale=false;
     const p=mPend();
     if(p.sentAt&&mPack.exportedAt&&Date.parse(mPack.exportedAt)>p.sentAt){   // the desktop re-exported after our send: its pack holds what we sent
       mPendSave(mDropSent(p)); mUndoStack.length=0; mRedoStack.length=0;   // undo must not resurrect already-merged edits
     }
     mStartGeo();
     mShowList();
-  }catch(err){ mShowSetup("Could not load: "+(err&&err.message||err)); }
+    if(keepScroll!=null){ const l2=document.getElementById("mList"); if(l2) l2.scrollTop=keepScroll; }
+    if(silent) mToast("\u21bb Updated from the desktop");
+    if(mChCount()) mAutoSendSoon(800);   // anything still unsent goes straight out
+  }catch(err){ if(!silent) mShowSetup("Could not load: "+(err&&err.message||err)); }
 }
 /* Live location: a continuous watch (not a one-shot). Fixes that arrive AFTER a screen was
    built are fed straight into any open maps — pin added or moved, and the site view refitted
@@ -3966,11 +3991,11 @@ window.addEventListener("popstate",()=>{ if(!document.body.classList.contains("m
   if(mNavDepth){ mNavDepth=false; mShowList(); } });
 function mShowList(){
   if(!mPack){ mLoadPack(); return; }
+  if(mPackStale){ mPackStale=false; setTimeout(()=>mLoadPack(true),0); }
   mRerender=mShowList;
   const packActs=mActOrder().map(i=>(mPack.actions||[])[i]).filter(Boolean);   /* priority order: pack order with the phone's pending reorder applied */
   const news=mNewActs().map((x,i)=>({id:"n"+i,_new:true,_ni:i,text:x.text,steps:x.steps||[],photos:[],done:!!x.done}));
   const acts=news.concat(packActs);   // phone-created actions sit on top until they're merged on desktop
-  const n=mChCount();
   mScr('<div class="m-head"><div style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0;"><div class="m-brand">Photo<span>Map</span> Field</div>'
     +'<div class="m-sub">'+esc(mPack.project||"")+' · exported '+(mPack.exportedAt?new Date(mPack.exportedAt).toLocaleString(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"")+' · app '+new Date(document.lastModified).toLocaleString(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})+'</div></div>'
     +mUndoHtml()+'<button class="m-chip" id="mRefresh" type="button">REFRESH</button></div>'
@@ -3990,14 +4015,12 @@ function mShowList(){
     +'</div>'
     +'<div class="m-foot"><button class="m-btn" id="mCamBtn">\ud83d\udcf7 Take photo \u2014 pinned at your position</button>'
     +'<button class="m-btn ghost" id="mUpBtn">Upload photos to the map</button>'
-    +((window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches)?'':'<div class="m-note">For photos with location: install this app (Chrome \u22ee \u2192 Add to Home screen), then share pictures to PhotoMap from your gallery.</div>')
-    +'<button class="m-btn" id="mSend"'+(n?'':' disabled')+'>Send changes back ('+n+')</button>'
-    +'<div class="m-note" id="mSendNote">'+(n?'edits waiting to sync':'no unsent changes')+'</div></div>'
+    +'<div class="m-note m-sync" id="mSendNote">'+mSyncText()+'</div></div>'
     +'<div class="m-homemap" id="mHomeMap"></div>');
   document.getElementById("mRefresh").addEventListener("click",()=>{ mCheckFresh(true); mLoadPack(); });   // one tap: newest app build + newest pack
   document.getElementById("mUpBtn").addEventListener("click",()=>{ mUpInput().click(); window.mPickT=Date.now(); });
   document.getElementById("mCamBtn").addEventListener("click",()=>{ mCamInput().click(); window.mPickT=Date.now(); });
-  document.getElementById("mSend").addEventListener("click",mSendChanges);
+  document.getElementById("mSendNote").addEventListener("click",()=>{ mSendChanges(); mPackPoll(true); });   // tap = sync now
   mWireUndo();
   document.getElementById("mNewAct").addEventListener("keydown",e=>{
     e.stopPropagation(); if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return;
@@ -4200,19 +4223,50 @@ function mBuildHomeMap(acts){
     requestAnimationFrame(fit); setTimeout(fit,180);
   }catch(e){}
 }
+/* Two-way AUTO sync. Phone -> desktop: every edit is pushed a few seconds after it's made (and
+   retried until it lands). Desktop -> phone: a tiny pack-stamp.json is watched and a new pack is
+   pulled in as soon as the desktop publishes one. No buttons, no manual merges. */
+let mSyncState="idle", mSyncErr="", _msT=null, _msBusy=false, _msAgain=false, mPackStale=false;
+function mSyncText(){ const n=mChCount();
+  if(mSyncState==="sending") return "\u21bb Syncing with the desktop\u2026";
+  if(n&&mSyncState==="error") return "\u26a0 "+n+" change"+(n===1?"":"s")+" waiting \u2014 "+(navigator.onLine===false?"offline, ":"")+"will retry automatically (tap to retry now)";
+  if(n) return "\u21bb "+n+" change"+(n===1?"":"s")+" syncing\u2026";
+  return "\u2713 All changes synced to the desktop";
+}
+function mSyncUI(){ const el=document.getElementById("mSendNote"); if(el) el.textContent=mSyncText(); }
+function mAutoSendSoon(ms){ clearTimeout(_msT); _msT=setTimeout(()=>mSendChanges(),ms==null?2500:ms); mSyncUI(); }
 async function mSendChanges(){
-  const cfg=ghCfg(), note=document.getElementById("mSendNote"), btn=document.getElementById("mSend");
-  const p=mPend(); if(!mChCount()) return;
-  btn.disabled=true; note.textContent="Sending…";
+  const cfg=ghCfg();
+  if(!cfg.token||!mPack) return;
+  if(_msBusy){ _msAgain=true; return; }
+  const p=mPend(); if(!mChCount()){ mSyncState="idle"; mSyncUI(); return; }
+  _msBusy=true; mSyncState="sending"; mSyncUI();
+  const payloadSrc=JSON.parse(JSON.stringify(p));
   try{
-    const payload={v:2,updatedAt:new Date().toISOString(),project:mPack.project||null,packAt:mPack.exportedAt||null,changes:p.changes||{},photoNotes:p.pnotes||{},
-      newActs:(p.newActs||[]).map(x=>({u:x.u||null,text:x.text,steps:(x.steps||[]).map(s=>({t:s.t,d:!!s.d})),done:!!x.done,doneAt:x.doneAt||null,hold:!!x.hold})),
-      actOrder:(Array.isArray(p.actOrder)&&p.actOrder.length)?mActOrder().map(i=>(mPack.actions[i]||{}).id).filter(x=>x!=null):[]};
+    const payload={v:2,updatedAt:new Date().toISOString(),project:mPack.project||null,packAt:mPack.exportedAt||null,changes:payloadSrc.changes||{},photoNotes:payloadSrc.pnotes||{},
+      newActs:(payloadSrc.newActs||[]).map(x=>({u:x.u||null,text:x.text,steps:(x.steps||[]).map(s=>({t:s.t,d:!!s.d})),done:!!x.done,doneAt:x.doneAt||null,hold:!!x.hold})),
+      actOrder:(Array.isArray(payloadSrc.actOrder)&&payloadSrc.actOrder.length)?mActOrder().map(i=>(mPack.actions[i]||{}).id).filter(x=>x!=null):[]};
     await ghUpdateJson(cfg,"changes.json",()=>payload,"Field changes from phone");   // resends are idempotent on the desktop
-    p.sentAt=Date.now(); p.sentSnap=mPendSnap(p); mPendSave(p);
-    note.textContent="✓ Sent — the desktop merges it automatically";
-    btn.textContent="Send changes back (0)"; btn.disabled=true;
-  }catch(err){ note.textContent="Failed: "+(err&&err.message||err); btn.disabled=false; }
+    const p2=mPend(); p2.sentAt=Date.now(); p2.sentSnap=mPendSnap(payloadSrc); _mpQuiet=true; mPendSave(p2); _mpQuiet=false;   // snapshot what WAS sent (edits made mid-send stay unsent)
+    mSyncState="idle"; mSyncErr="";
+  }catch(err){ mSyncState="error"; mSyncErr=String(err&&err.message||err); mAutoSendSoon(30000); }
+  _msBusy=false; mSyncUI();
+  if(_msAgain){ _msAgain=false; mAutoSendSoon(500); }
+}
+/* desktop -> phone: watch the tiny stamp; pull the pack when it moves */
+let _mppBusy=false;
+async function mPackPoll(force){
+  const cfg=ghCfg(); if(!cfg.token||!mPack||_mppBusy) return;
+  _mppBusy=true;
+  try{
+    const raw=await ghGetRaw(cfg,"pack-stamp.json"); const st=raw?JSON.parse(raw):null;
+    if(st&&st.exportedAt&&st.exportedAt!==mPack.exportedAt){
+      const onList=!!document.getElementById("mList"), typing=(()=>{ const i=document.getElementById("mNewAct"); return !!(i&&(i===document.activeElement||i.value)); })();
+      if(onList&&!typing&&!mUpBusy&&!document.querySelector(".m-card.mdrag")) await mLoadPack(true);
+      else mPackStale=true;   // mid-edit / on an action: picked up when you're back on the list
+    }
+  }catch(e){}
+  _mppBusy=false;
 }
 function mShowDetail(ai,keepScroll){
   const a=mActAt(ai); if(!a){ mShowList(); return; }
@@ -4565,6 +4619,9 @@ async function mCheckFresh(force){
 }
 function mobileBoot(){
   document.body.classList.add("mobile");
+  setInterval(()=>{ mPackPoll(); if(mChCount()) mSendChanges(); },30000);   // two-way auto sync heartbeat
+  document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"){ mPackPoll(); mSendChanges(); } });
+  window.addEventListener("online",()=>{ mPackPoll(); mSendChanges(); });
   const sharedIn=/[?&]shared=/.test(location.search);
   if(!sharedIn) mCheckFresh();   // never self-reload while shared photos are waiting to upload
   mSetupShare();
@@ -4784,9 +4841,10 @@ async function checkFieldChanges(){
   if(dirHandle){ try{ if((await dirHandle.queryPermission({mode:"read"}))!=="granted") armFolderPermission(); }catch(e){} }
   renderProjHead();
   setTimeout(checkFieldChanges,1500);   // merge any field changes the phone has pushed…
-  setInterval(checkFieldChanges,45000);   // …and keep watching, like photo dumps
+  setInterval(checkFieldChanges,20000);   // …and keep watching, like photo dumps
+  setTimeout(()=>scheduleAutoExport(0),6000);   // bring the phone up to date with this session
   setTimeout(checkPhotoUploads,2600);   // …then keep watching: phone photo dumps auto-merge as they arrive
-  setInterval(checkPhotoUploads,45000);
+  setInterval(checkPhotoUploads,20000);
   window.addEventListener("focus",()=>{ checkPhotoUploads(); checkFieldChanges(); });
 })();
 
