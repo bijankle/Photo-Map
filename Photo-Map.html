@@ -3180,7 +3180,7 @@ function openFolderPop(){
    undo by timestamp so "undo" always reverts whichever edit happened most recently. */
 let tagUndoStack=[], tagRedoStack=[], recentTags=[];   // recentTags: last folders assigned via the UI, newest first (speeds up bulk tagging)
 function noteRecentTag(f){ if(!f) return; recentTags=[f].concat(recentTags.filter(x=>x!==f)).slice(0,10); }
-function snapshotTags(p){ return {paths:physPaths(p).slice(), vpaths:virtPaths(p).slice(), acts:(Array.isArray(p.acts)?p.acts.slice():[]), note:(p.note||""), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null)}; }
+function snapshotTags(p){ return {paths:physPaths(p).slice(), vpaths:virtPaths(p).slice(), acts:(Array.isArray(p.acts)?p.acts.slice():[]), note:(p.note||""), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null), noGps:!!p.noGps}; }
 /* EVERY data change goes through pushUndo so Ctrl+Z always works — keep it that way for new features.
    Entry fields (any combination): items (photo snapshots), act (deleted action), actCreate (new action),
    actEdit (title/description/done change), marksSnap (a photo's whole markup array), rot (rotation). */
@@ -3195,7 +3195,7 @@ function actState(a){ return {text:a.text,done:!!a.done,doneAt:a.doneAt||null,ho
 function recordActEdit(a,before){ const after=actState(a); if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({actEdit:{id:a.id,before,after}}); }
 function cpMarks(ms){ return JSON.parse(JSON.stringify(ms||[])); }
 function pushMarksSnap(p,before,after){ if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({marksSnap:{id:p.id,before,after}}); }
-function applySnapRaw(id,snap){ const p=photoById(id); if(!p) return; p.paths=snap.paths.slice(); p.vpaths=snap.vpaths.slice(); if(snap.acts) p.acts=snap.acts.slice(); if("note" in snap) p.note=snap.note; if(snap.lat!=null){ p.lat=snap.lat; p.lng=snap.lng; } if("glat" in snap){ p.glat=snap.glat; p.glng=snap.glng; } }
+function applySnapRaw(id,snap){ const p=photoById(id); if(!p) return; p.paths=snap.paths.slice(); p.vpaths=snap.vpaths.slice(); if(snap.acts) p.acts=snap.acts.slice(); if("note" in snap) p.note=snap.note; if(snap.lat!=null){ p.lat=snap.lat; p.lng=snap.lng; } if("glat" in snap){ p.glat=snap.glat; p.glng=snap.glng; } if("noGps" in snap) p.noGps=!!snap.noGps; }
 function applyTagSnapshot(id,snap){ applySnapRaw(id,snap); afterFolderChange(); if(folderPopShown) openFolderPop(); }
 function applyUndoEntry(a,dir){   // dir: "before" (undo) or "after" (redo)
   const undo=dir==="before";
@@ -4372,7 +4372,8 @@ async function checkPhotoUploads(){
     let merged=""; try{ merged=localStorage.getItem("pmMergedUploads")||""; }catch(e){}
     if(man.updatedAt&&man.updatedAt===merged) return;
     if(document.getElementById("reconnect").classList.contains("show")){ setTimeout(checkPhotoUploads,60000); return; }   // another banner is up
-    showBanner("Photo dump from the phone \u2014 <b>"+items.length+" photo"+(items.length===1?"":"s")+"</b>. Click to add them to the map.",async()=>{
+    const withLoc=items.filter(it=>typeof it.lat==="number").length;
+    showBanner("Photo dump from the phone \u2014 <b>"+items.length+" photo"+(items.length===1?"":"s")+"</b> ("+withLoc+" with location). Click to add them to the map.",async()=>{
       hideBanner(); loadNote("Downloading "+items.length+" phone photo"+(items.length===1?"":"s")+"\u2026");
       try{
         const metaByName=new Map(), fitems=[];
@@ -4387,17 +4388,31 @@ async function checkPhotoUploads(){
         await ingest(fitems,true);
         const added=photos.filter(ph=>ph.id>=startId);
         for(const ph of added){ const m2=metaByName.get(ph.name); if(m2){   // the resized JPEG lost its EXIF; the manifest carried it
-          if(typeof m2.lat==="number"&&typeof m2.lng==="number"){ ph.lat=m2.lat; ph.lng=m2.lng; }
+          if(typeof m2.lat==="number"&&typeof m2.lng==="number"){ ph.lat=m2.lat; ph.lng=m2.lng; ph.noGps=false; }
           if(m2.t) ph.time=m2.t; if(typeof m2.alt==="number") ph.alt=m2.alt; } }
+        /* re-uploads of photos already in the project get swallowed by the byte-size dedupe —
+           if THIS upload carries a location for one that sits as a placed no-GPS dot, move it home */
+        const healed=[]; const addedSet=new Set(added.map(ph=>ph.id));
+        for(const [nm,m2] of metaByName){
+          if(!(typeof m2.lat==="number"&&typeof m2.lng==="number")) continue;
+          const ph=photos.find(x=>!addedSet.has(x.id)&&(x.name===nm||(Array.isArray(x.paths)&&x.paths.includes("phone-uploads/"+nm))));
+          if(!ph||!ph.noGps) continue;
+          const before=snapshotTags(ph);
+          ph.lat=m2.lat; ph.lng=m2.lng; ph.noGps=false; ph.glat=null; ph.glng=null;
+          if(m2.t&&ph.time==null) ph.time=m2.t; if(typeof m2.alt==="number"&&ph.alt==null) ph.alt=m2.alt;
+          healed.push({id:ph.id,before,after:snapshotTags(ph)});
+        }
+        if(healed.length) pushTagAction(healed);
         const c=map.getCenter();
         for(const ph of added){ if(ph.lat==null){ ph.noGps=true; ph.lat=c.lat; ph.lng=c.lng; } }
         if(added.length) pushUndo({addPhotos:added.map(ph=>ph.id)});
         rebuildSizeIndex(); buildDateFilter(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); cacheFullSession();
-        const geo=added.filter(ph=>ph.lat!=null);
+        const geo=added.filter(ph=>ph.lat!=null).concat(healed.map(h=>photoById(h.id)).filter(Boolean));
         if(geo.length>1) map.fitBounds(L.latLngBounds(geo.map(ph=>[ph.lat,ph.lng])),{padding:[60,60],maxZoom:18});
         else if(geo.length===1) map.flyTo([geo[0].lat,geo[0].lng],Math.max(map.getZoom(),17));
         try{ localStorage.setItem("pmMergedUploads",man.updatedAt||String(Date.now())); }catch(e){}
-        loadNote(added.length?("Added "+added.length+" phone photo"+(added.length===1?"":"s")+" \u2014 assign actions as usual"):"Nothing new \u2014 those photos were already here");
+        const gotN=added.length+healed.length;
+        loadNote(gotN?("Added "+added.length+" phone photo"+(added.length===1?"":"s")+(healed.length?(" \u00b7 moved "+healed.length+" earlier upload"+(healed.length===1?"":"s")+" to their real spot"):"")+" \u2014 assign actions as usual"):"Nothing new \u2014 those photos were already here (and none carried a location)");
         setTimeout(()=>loadNote(""),3500);
         ghPutFile(cfg,"uploads.json",JSON.stringify({v:1,items:[],clearedAt:new Date().toISOString()}),"Phone uploads merged on desktop").catch(()=>{});
         for(const it of items) ghDeleteFile(cfg,it.f);
