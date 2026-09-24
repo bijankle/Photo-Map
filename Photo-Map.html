@@ -3875,14 +3875,17 @@ function mShowList(){
     }).join(''):'<div class="m-note" style="padding-top:40px">No open actions in the pack.</div>')
     +'</div>'
     +'<div class="m-foot"><button class="m-btn ghost" id="mUpBtn">Upload photos to the map</button>'
-    +'<input type="file" id="mUpFile" accept="image/*" multiple style="display:none" />'
+    +'<input type="file" id="mUpFile" multiple style="display:none" />'
     +'<button class="m-btn" id="mSend"'+(n?'':' disabled')+'>Send changes back ('+n+')</button>'
     +'<div class="m-note" id="mSendNote">'+(n?'edits waiting to sync':'no unsent changes')+'</div></div>'
     +'<div class="m-homemap" id="mHomeMap"></div>');
   document.getElementById("mRefresh").addEventListener("click",mLoadPack);
   const upBtn=document.getElementById("mUpBtn"), upIn=document.getElementById("mUpFile");
   upBtn.addEventListener("click",()=>upIn.click());
-  upIn.addEventListener("change",e=>{ const fs=Array.from(e.target.files||[]); e.target.value=""; if(fs.length) mUploadPhotos(fs,upBtn); });
+  upIn.addEventListener("change",e=>{ const all=Array.from(e.target.files||[]); e.target.value="";
+    const fs=all.filter(f=>/^image\//i.test(f.type||"")||IMG_RE.test(f.name||""));
+    if(!fs.length){ if(all.length){ upBtn.textContent="Those weren't images \u2014 try again"; setTimeout(()=>{ upBtn.textContent="Upload photos to the map"; },2500); } return; }
+    mUploadPhotos(fs,upBtn); });
   document.getElementById("mSend").addEventListener("click",mSendChanges);
   mWireUndo();
   document.getElementById("mNewAct").addEventListener("keydown",e=>{
@@ -3970,7 +3973,7 @@ async function mUploadPhotos(files,btn){
     const withGps=entries.filter(en=>en.lat!=null).length;
     btn.textContent="\u2713 Uploaded "+entries.length+" ("+withGps+" with location) \u2014 merge on the desktop";
     const note=document.getElementById("mSendNote");
-    if(note&&withGps<entries.length) note.textContent="No location on "+(entries.length-withGps)+" photo"+(entries.length-withGps===1?"":"s")+": the gallery picker strips GPS \u2014 pick via the Files app (DCIM/Camera) to keep it.";
+    if(note&&withGps<entries.length) note.textContent="No location on "+(entries.length-withGps)+" photo"+(entries.length-withGps===1?"":"s")+": browse to DCIM/Camera in the picker (\u2630 menu) \u2014 Google Photos entries arrive with GPS stripped.";
     setTimeout(()=>{ btn.textContent=orig; btn.disabled=false; },5000);
   }catch(err){
     btn.textContent="Upload failed \u2014 tap to retry"; btn.disabled=false;
