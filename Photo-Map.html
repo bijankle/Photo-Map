@@ -1245,6 +1245,7 @@ function normActs(list){ let mx=0; const out=(list||[]).map(a=>{
   const o={id:+a.id||0,text:String(a.text||""),done:!!a.done,hold:!!a.hold,created:a.created||null,doneAt:a.doneAt||null,
     steps:Array.isArray(a.steps)?a.steps.map(s=>({t:String(s.t||""),d:!!s.d})).filter(s=>s.t):[]};
   if(Array.isArray(a.porder)){ const po=a.porder.map(Number).filter(x=>x>0); if(po.length) o.porder=po; }
+  if(Array.isArray(a.porderK)&&a.porderK.length) o.porderK=a.porderK.map(String);
   if(parts.length) o._n=parts.join("\n");
   return o;
 }).filter(a=>a.id>0&&a.text); out.forEach(a=>{ if(a.id>mx)mx=a.id; }); nextActId=mx+1; return out; }
@@ -3501,7 +3502,7 @@ document.getElementById("jsonInput").addEventListener("change",async e=>{ const 
 function serializeState(includeImages){
   return {
     version:3, folderName, savedAt:new Date().toISOString(),
-    actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.hold)o.hold=true; if(a.steps&&a.steps.length)o.steps=a.steps.map(s=>({t:s.t,d:!!s.d})); if(Array.isArray(a.porder)&&a.porder.length)o.porder=a.porder; return o; }),
+    actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.hold)o.hold=true; if(a.steps&&a.steps.length)o.steps=a.steps.map(s=>({t:s.t,d:!!s.d})); if(Array.isArray(a.porder)&&a.porder.length){o.porder=a.porder; o.porderK=a.porder.map(id=>{const ph=photoById(id);return ph?metaKey(ph):null;}).filter(Boolean);} return o; }),
     settings:{ baseLayer: map.hasLayer(google)?"google":map.hasLayer(esri)?"esri":"none", showNoGeo, sortBy:currentSort,
       thumb:getComputedStyle(document.documentElement).getPropertyValue("--thumb").trim(),
       sideW:getComputedStyle(document.documentElement).getPropertyValue("--side-w").trim(),
@@ -3546,6 +3547,7 @@ function applyState(st){
     }
     photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,rot:m.rot||0,lat:m.lat,lng:m.lng,glat:(m.glat!=null?m.glat:null),glng:(m.glng!=null?m.glng:null),time:m.time,dir:m.dir,alt:(m.alt!=null?m.alt:null),mkw:(m.mkw!=null?m.mkw:null),mth:(m.mth!=null?m.mth:null),acts:Array.isArray(m.acts)?m.acts.slice():[],note:(typeof m.note==="string"?m.note:""),noGps:!!m.noGps,marks:Array.isArray(m.marks)?m.marks:[]});
   });   // baked full-quality renditions from old files are intentionally dropped
+  rebuildPorders();   // ids were just renumbered — restore each action's photo order from the key form
   migrateActNotes();
   if(lastFullCache) overlayImagesFromCache(lastFullCache);   // the .json is metadata-only — fill thumbs/previews back in from the browser image cache
   const s=st.settings||{};
@@ -3580,6 +3582,15 @@ function metaKey(p){ if(p.noGps) return (p.name||"")+"|"+(p.size!=null?p.size:""
   const la=(p.glat!=null?p.glat:p.lat), ln=(p.glng!=null?p.glng:p.lng);   // identity uses the ORIGINAL GPS so in-app dot corrections never orphan a photo's cache/metadata
   return (p.name||"")+"|"+(p.size!=null?p.size:"")+"|"+(la!=null?Number(la).toFixed(5):"")+"|"+(ln!=null?Number(ln).toFixed(5):""); }
 function snapshotMeta(list){ const m=new Map(); for(const p of (list||[])){ const k=metaKey(p); if(!m.has(k)) m.set(k,{paths:Array.isArray(p.paths)?p.paths.slice():null, vpaths:Array.isArray(p.vpaths)?p.vpaths.slice():null, acts:(Array.isArray(p.acts)&&p.acts.length)?p.acts.slice():null, note:(p.note||null), alt:(p.alt!=null?p.alt:null), rot:p.rot||0, marks:Array.isArray(p.marks)&&p.marks.length?p.marks:null, lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null)}); } return m; }
+function rebuildPorders(){   // photo ids shift between sessions; the saved key order restores each action's drag order and cover
+  let byKey=null;
+  for(const a of actions){
+    if(!Array.isArray(a.porderK)||!a.porderK.length) continue;
+    if(!byKey){ byKey=new Map(); for(const ph of photos){ const k=metaKey(ph); if(!byKey.has(k)) byKey.set(k,ph.id); } }
+    const ids=a.porderK.map(k=>byKey.get(k)).filter(id=>id!=null);
+    if(ids.length){ a.porder=ids; delete a.porderK; }   // consumed: later drags own the order again
+  }
+}
 function applyMetaMap(m){ if(!m||!m.size) return; for(const p of photos){ const meta=m.get(metaKey(p)); if(!meta) continue; if(meta.paths&&meta.paths.length) p.paths=meta.paths.slice(); if(meta.vpaths&&meta.vpaths.length) p.vpaths=meta.vpaths.slice(); if(meta.acts) p.acts=meta.acts.slice(); if(meta.note) p.note=meta.note; if(meta.alt!=null&&p.alt==null) p.alt=meta.alt; if(meta.marks) p.marks=meta.marks;
   if(meta.glat!=null){ p.glat=meta.glat; p.glng=meta.glng; if(meta.lat!=null){ p.lat=meta.lat; p.lng=meta.lng; } }   // newer session moved this dot — carry the correction over
   if(meta.rot&&!p.rot){ p.rot=meta.rot; const d=rotDelta(p.rot); (async()=>{ if(p.thumb)p.thumb=await rotateDataURL(p.thumb,d,THUMB_Q); if(p.preview)p.preview=await rotateDataURL(p.preview,d,PREVIEW_Q); cacheFullSession(); })(); } } }
@@ -3611,7 +3622,7 @@ function maybeOfferReconnect(){
 async function reconnectFolder(){ if(!dirHandle)return; if(!(await ensurePermission(dirHandle))){ alert("Permission to read the folder was not granted."); return; } folderName=dirHandle.name; hideBanner();
   const keep=snapshotMeta(photos);   // preserve folder additions + markup across the reload
   await loadFromHandle(dirHandle);
-  applyMetaMap(keep); buildCluster(); renderClusters(); updateGallery(); persistState();
+  applyMetaMap(keep); rebuildPorders(); buildCluster(); renderClusters(); updateGallery(); persistState();
 }
 async function reopenLastJson(){
   if(!jsonHandle){ try{ jsonHandle=await idbGet("jsonHandle"); }catch(e){} }
@@ -4654,7 +4665,7 @@ async function checkFieldChanges(){
       // lastState (image-free autosave) is written on every change; if newer than the cached full snapshot, overlay its fresh folders.
       if(last && Array.isArray(last.photos) && last.savedAt && (!full.savedAt || last.savedAt>full.savedAt)){
         if(Array.isArray(last.actions)){ actions=normActs(last.actions); migrateActNotes(); }   // actions list travels with the newer metadata
-        applyMetaMap(snapshotMeta(last.photos)); buildCluster(); renderClusters(); updateGallery(); renderActions(); persistState();
+        applyMetaMap(snapshotMeta(last.photos)); rebuildPorders(); buildCluster(); renderClusters(); updateGallery(); renderActions(); persistState();
       }
     }
     else if(last && last.photos && last.photos.length){ applyState(last); }
