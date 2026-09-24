@@ -1769,6 +1769,24 @@ async function ghPutFile(cfg,path,text,msg,retried){
   if(r.status===409&&!retried){ await new Promise(res=>setTimeout(res,800)); return ghPutFile(cfg,path,text,msg,true); }   // sha raced/staled: re-read it once and retry
   if(!r.ok){ let d=""; try{ d=(await r.json()).message||""; }catch(e){} throw new Error("GitHub says "+r.status+(d?" — "+d:"")); }
 }
+async function ghPutB64(cfg,path,b64,msg,retried){   // binary upload: content is already base64
+  const sha=await ghFileSha(cfg,path);
+  const body={message:msg,content:b64}; if(sha) body.sha=sha;
+  const r=await fetch("https://api.github.com/repos/"+cfg.repo+"/contents/"+path,{method:"PUT",headers:ghHeaders(cfg.token),body:JSON.stringify(body)});
+  if(r.status===409&&!retried){ await new Promise(res=>setTimeout(res,800)); return ghPutB64(cfg,path,b64,msg,true); }
+  if(!r.ok){ let d=""; try{ d=(await r.json()).message||""; }catch(e){} throw new Error("GitHub says "+r.status+(d?" \u2014 "+d:"")); }
+}
+async function ghGetBin(cfg,path){
+  const r=await fetch("https://api.github.com/repos/"+cfg.repo+"/contents/"+path+"?t="+Date.now(),{headers:Object.assign(ghHeaders(cfg.token),{Accept:"application/vnd.github.raw+json"})});
+  if(r.status===404) return null;
+  if(!r.ok) throw new Error("GitHub says "+r.status);
+  return new Uint8Array(await r.arrayBuffer());
+}
+async function ghDeleteFile(cfg,path){   // best-effort cleanup of merged uploads
+  try{ const sha=await ghFileSha(cfg,path); if(!sha) return;
+    await fetch("https://api.github.com/repos/"+cfg.repo+"/contents/"+path,{method:"DELETE",headers:ghHeaders(cfg.token),body:JSON.stringify({message:"Merged phone upload",sha})});
+  }catch(e){}
+}
 /* The pack carries the photo previews WITH their annotations baked in (marks are vector data,
    invisible to the phone otherwise). Composited once per photo and cached until marks change. */
 async function annotatedPreview(p){
@@ -3856,10 +3874,15 @@ function mShowList(){
         +'<div style="align-self:center;color:var(--line2);font-size:22px;">›</div></div>';
     }).join(''):'<div class="m-note" style="padding-top:40px">No open actions in the pack.</div>')
     +'</div>'
-    +'<div class="m-foot"><button class="m-btn" id="mSend"'+(n?'':' disabled')+'>Send changes back ('+n+')</button>'
+    +'<div class="m-foot"><button class="m-btn ghost" id="mUpBtn">Upload photos to the map</button>'
+    +'<input type="file" id="mUpFile" accept="image/*" multiple style="display:none" />'
+    +'<button class="m-btn" id="mSend"'+(n?'':' disabled')+'>Send changes back ('+n+')</button>'
     +'<div class="m-note" id="mSendNote">'+(n?'edits waiting to sync':'no unsent changes')+'</div></div>'
     +'<div class="m-homemap" id="mHomeMap"></div>');
   document.getElementById("mRefresh").addEventListener("click",mLoadPack);
+  const upBtn=document.getElementById("mUpBtn"), upIn=document.getElementById("mUpFile");
+  upBtn.addEventListener("click",()=>upIn.click());
+  upIn.addEventListener("change",e=>{ const fs=Array.from(e.target.files||[]); e.target.value=""; if(fs.length) mUploadPhotos(fs,upBtn); });
   document.getElementById("mSend").addEventListener("click",mSendChanges);
   mWireUndo();
   document.getElementById("mNewAct").addEventListener("keydown",e=>{
@@ -3904,6 +3927,51 @@ function mWireCardDrag(){
       mShowList(); };
     el.addEventListener("touchend",end); el.addEventListener("touchcancel",end);
   });
+}
+/* Photo dump: pick or take photos on the phone; each is resized to a 2048px JPEG and pushed to
+   the private data repo with its GPS/time carried in uploads.json. Assigning to actions stays a
+   desktop job — these arrive there as ordinary unassigned photos. */
+async function mUploadPhotos(files,btn){
+  const cfg=ghCfg(); const orig="Upload photos to the map";
+  if(!cfg.token){ btn.textContent="Set the repo + token first (REFRESH screen)"; setTimeout(()=>{ btn.textContent=orig; },3000); return; }
+  btn.disabled=true;
+  const d0=new Date(), pd=n2=>String(n2).padStart(2,"0");
+  const batch=""+d0.getFullYear()+pd(d0.getMonth()+1)+pd(d0.getDate())+"-"+pd(d0.getHours())+pd(d0.getMinutes())+pd(d0.getSeconds());
+  const entries=[];
+  try{
+    for(let i=0;i<files.length;i++){
+      btn.textContent="Uploading "+(i+1)+" / "+files.length+"\u2026";
+      const f=files[i];
+      let lat=null,lng=null,alt=null,t=null;
+      try{ const ex=await exifr.parse(f,{tiff:true,ifd0:true,exif:true,gps:true});
+        if(ex){ if(typeof ex.latitude==="number"&&typeof ex.longitude==="number"){ lat=ex.latitude; lng=ex.longitude; }
+          const dt=ex.DateTimeOriginal||ex.CreateDate||ex.ModifyDate; if(dt instanceof Date&&!isNaN(dt)) t=dt.getTime();
+          alt=altFromExif(ex); } }catch(e){}
+      let disp=f; if(isHeic(f)){ try{ disp=await heicToJpegBlob(f,0.85); }catch(e){} }
+      const url=URL.createObjectURL(disp);
+      let im; try{ im=await loadImg(url); }catch(e){ URL.revokeObjectURL(url); continue; }
+      const sc=Math.min(1,2048/Math.max(im.width,im.height));
+      const c=document.createElement("canvas"); c.width=Math.max(1,Math.round(im.width*sc)); c.height=Math.max(1,Math.round(im.height*sc));
+      c.getContext("2d").drawImage(im,0,0,c.width,c.height);
+      URL.revokeObjectURL(url);
+      const b64=c.toDataURL("image/jpeg",0.85).split(",")[1];
+      const base=String(f.name||("photo"+(i+1))).replace(/\.[^.]+$/,"").replace(/[^\w\- ]+/g,"").slice(0,40)||("photo"+(i+1));
+      const path="uploads/"+batch+"-"+(i+1)+"-"+base+".jpg";
+      await ghPutB64(cfg,path,b64,"Photo upload from phone");
+      entries.push({f:path,n:batch+"-"+(i+1)+"-"+base+".jpg",lat,lng,alt,t});
+    }
+    if(!entries.length) throw new Error("no readable images");
+    btn.textContent="Registering\u2026";
+    let man={v:1,items:[]};
+    try{ const cur=await ghGetRaw(cfg,"uploads.json"); if(cur){ const j=JSON.parse(cur); if(j&&Array.isArray(j.items)) man=j; } }catch(e){}
+    man.v=1; man.items=(man.items||[]).concat(entries); man.updatedAt=new Date().toISOString();
+    await ghPutFile(cfg,"uploads.json",JSON.stringify(man),"Photo uploads from phone");
+    btn.textContent="\u2713 Uploaded "+entries.length+" \u2014 merge on the desktop";
+    setTimeout(()=>{ btn.textContent=orig; btn.disabled=false; },3500);
+  }catch(err){
+    btn.textContent="Upload failed \u2014 tap to retry"; btn.disabled=false;
+    try{ console.warn("upload",err); }catch(e){}
+  }
 }
 /* Home-screen map: the bottom half of the actions list. Dots = photos of ACTIVE actions
    (not done, not on hold); the view fits those dots plus your live location. */
@@ -4288,6 +4356,48 @@ async function mCheckFresh(){
 function mobileBoot(){ document.body.classList.add("mobile"); mCheckFresh(); mLoadPack(); }
 
 /* Desktop side of the loop: offer to merge field changes pushed by the phone. */
+async function checkPhotoUploads(){
+  const cfg=ghCfg(); if(!cfg.token) return;
+  try{
+    const text=await ghGetRaw(cfg,"uploads.json"); if(!text) return;
+    const man=JSON.parse(text); const items=Array.isArray(man&&man.items)?man.items:[];
+    if(!items.length) return;
+    let merged=""; try{ merged=localStorage.getItem("pmMergedUploads")||""; }catch(e){}
+    if(man.updatedAt&&man.updatedAt===merged) return;
+    if(document.getElementById("reconnect").classList.contains("show")){ setTimeout(checkPhotoUploads,60000); return; }   // another banner is up
+    showBanner("Photo dump from the phone \u2014 <b>"+items.length+" photo"+(items.length===1?"":"s")+"</b>. Click to add them to the map.",async()=>{
+      hideBanner(); loadNote("Downloading "+items.length+" phone photo"+(items.length===1?"":"s")+"\u2026");
+      try{
+        const metaByName=new Map(), fitems=[];
+        for(const it of items){
+          const bytes=await ghGetBin(cfg,it.f); if(!bytes) continue;
+          const nm=it.n||it.f.split("/").pop();
+          const file=new File([bytes],nm,{type:"image/jpeg"});
+          metaByName.set(nm,it);
+          fitems.push({name:nm,path:"phone-uploads/"+nm,getFile:async()=>file});
+        }
+        const startId=nextId;
+        await ingest(fitems,true);
+        const added=photos.filter(ph=>ph.id>=startId);
+        for(const ph of added){ const m2=metaByName.get(ph.name); if(m2){   // the resized JPEG lost its EXIF; the manifest carried it
+          if(typeof m2.lat==="number"&&typeof m2.lng==="number"){ ph.lat=m2.lat; ph.lng=m2.lng; }
+          if(m2.t) ph.time=m2.t; if(typeof m2.alt==="number") ph.alt=m2.alt; } }
+        const c=map.getCenter();
+        for(const ph of added){ if(ph.lat==null){ ph.noGps=true; ph.lat=c.lat; ph.lng=c.lng; } }
+        if(added.length) pushUndo({addPhotos:added.map(ph=>ph.id)});
+        rebuildSizeIndex(); buildDateFilter(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); cacheFullSession();
+        const geo=added.filter(ph=>ph.lat!=null);
+        if(geo.length>1) map.fitBounds(L.latLngBounds(geo.map(ph=>[ph.lat,ph.lng])),{padding:[60,60],maxZoom:18});
+        else if(geo.length===1) map.flyTo([geo[0].lat,geo[0].lng],Math.max(map.getZoom(),17));
+        try{ localStorage.setItem("pmMergedUploads",man.updatedAt||String(Date.now())); }catch(e){}
+        loadNote(added.length?("Added "+added.length+" phone photo"+(added.length===1?"":"s")+" \u2014 assign actions as usual"):"Nothing new \u2014 those photos were already here");
+        setTimeout(()=>loadNote(""),3500);
+        ghPutFile(cfg,"uploads.json",JSON.stringify({v:1,items:[],clearedAt:new Date().toISOString()}),"Phone uploads merged on desktop").catch(()=>{});
+        for(const it of items) ghDeleteFile(cfg,it.f);
+      }catch(err){ loadNote("Merge failed: "+(err&&err.message||err)); setTimeout(()=>loadNote(""),5000); }
+    });
+  }catch(e){}
+}
 async function checkFieldChanges(){
   const cfg=ghCfg(); if(!cfg.token) return;
   try{
@@ -4407,6 +4517,7 @@ async function checkFieldChanges(){
   if(dirHandle){ try{ if((await dirHandle.queryPermission({mode:"read"}))!=="granted") armFolderPermission(); }catch(e){} }
   renderProjHead();
   setTimeout(checkFieldChanges,1500);   // offer to merge any field changes the phone has pushed
+  setTimeout(checkPhotoUploads,2600);   // …and any photo dump uploaded from the phone
 })();
 
 /* ---- app self-update check (active only when served from the web, e.g. GitHub Pages) ----
