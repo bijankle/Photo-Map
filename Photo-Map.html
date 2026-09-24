@@ -30,6 +30,9 @@
   .brand .mark::after{content:"";position:absolute;inset:0;margin:auto;width:6px;height:6px;border-radius:50%;background:#fff;}
   .brand h1{font-family:var(--font);font-weight:700;font-size:17px;margin:0;color:var(--ink);}
   .brand h1 span{color:var(--accent);}
+  .savestat{font-family:var(--mono);font-size:9px;color:var(--faint);margin-left:8px;align-self:flex-end;padding-bottom:2px;white-space:nowrap;}
+  .savestat.busy{color:var(--dim);}
+  .savestat.bad{color:#fff;background:var(--bad);padding:1px 6px;border-radius:4px;font-weight:700;}   /* a failed save must be impossible to miss */
   .brand .build{font-family:var(--mono);font-size:9px;color:var(--faint);margin-left:8px;align-self:flex-end;padding-bottom:2px;}
 
   .toolbar{display:flex;gap:6px;align-items:center;}
@@ -650,7 +653,7 @@
 <body>
 
 <header>
-  <div class="brand"><div class="mark"></div><h1>Photo<span>Map</span></h1><span class="build" id="buildStamp" title="When this copy of the app was published — if it's older than the latest change, you're running a stale copy"></span></div>
+  <div class="brand"><div class="mark"></div><h1>Photo<span>Map</span></h1><span class="build" id="buildStamp" title="When this copy of the app was published — if it's older than the latest change, you're running a stale copy"></span><span class="savestat" id="saveStatus" title="Auto-save status of the project .json"></span></div>
   <div class="toolbar">
     <button class="btn grpL" id="btnFolder">Open Folder</button>
     <button class="btn grpL" id="btnOpenJson">Open .JSON</button>
@@ -967,7 +970,7 @@ function clearHighlight(){ if(hlMarker){ highlightLayer.removeLayer(hlMarker); h
 function highlightCurrent(){ if(lb.classList.contains("open")&&lightboxList[lightboxIndex]) highlightDot(lightboxList[lightboxIndex]); else clearHighlight(); }
 // Dots re-cluster immediately when the map settles on a new view (responsive, as originally);
 // only the heavy gallery rebuild + state persistence wait for 1 full second of no map motion.
-map.on("moveend zoomend",()=>renderClusters());
+map.on("moveend",()=>renderClusters());   // a zoom also fires moveend — listening to both rendered every dot twice
 let mapIdleTimer=null;
 const onMapMotion=()=>{ clearTimeout(mapIdleTimer); mapIdleTimer=setTimeout(()=>{ updateGallery(); persistState(); },1000); };
 map.on("move zoom movestart zoomstart moveend zoomend",onMapMotion);
@@ -1101,7 +1104,7 @@ map.on("mousemove",e=>{
 });
 window.addEventListener("mouseup",()=>{
   if(!dotDrag) return; const d=dotDrag; dotDrag=null;
-  map.getContainer().style.cursor=""; try{ map.dragging.enable(); }catch(e){}
+  map.getContainer().style.cursor=""; if(!drawing&&!measuring){ try{ map.dragging.enable(); }catch(e){} }
   if(!d.moved) return;
   dotDropT=Date.now();   // swallow the click that follows the drop so it doesn't re-open the viewer
   const ll=d.dot.getLatLng(), dLat=ll.lat-d.start.lat, dLng=ll.lng-d.start.lng;
@@ -1115,7 +1118,7 @@ window.addEventListener("mouseup",()=>{
   }
   pushTagAction(items); afterFolderChange();
 });
-window.addEventListener("keydown",e=>{ if(e.key==="Escape"&&dotDrag){ e.stopPropagation(); dotDrag=null; map.getContainer().style.cursor=""; try{ map.dragging.enable(); }catch(er){} renderClusters(); highlightCurrent(); } },true);
+window.addEventListener("keydown",e=>{ if(e.key==="Escape"&&dotDrag){ e.stopPropagation(); dotDrag=null; map.getContainer().style.cursor=""; if(!drawing&&!measuring){ try{ map.dragging.enable(); }catch(er){} } renderClusters(); highlightCurrent(); } },true);
 
 /* right-click menu on a dot: restore the original GPS of that photo (or the whole selection) */
 const ctxMenu=document.createElement("div"); ctxMenu.id="ctxmenu"; document.body.appendChild(ctxMenu);
@@ -1213,10 +1216,16 @@ map.on("click",e=>{
    many photos, or many actions to one photo). Stored in the .json like tags; photos untouched. */
 let actions=[], nextActId=1, selActs=new Set(), actionFilter=null;
 let actShowOpenOnly=false, actOnlyMap=false, rightTab="photo";
-function actById(id){ return actions.find(a=>a.id===id)||null; }
+let _aIdx=null,_aArr=null;
+function actById(id){
+  if(_aIdx&&_aArr===actions){ const i=_aIdx.get(id); if(i!=null){ const a=actions[i]; if(a&&a.id===id) return a; } }
+  _aArr=actions; _aIdx=new Map(); for(let i=0;i<actions.length;i++) _aIdx.set(actions[i].id,i);
+  const i=_aIdx.get(id); return i!=null?actions[i]:null; }
 function actPhotos(a){   // per-action photo order: a.porder ids first (stable), everything else in add order
   if(!a) return [];
-  const list=photos.filter(p=>Array.isArray(p.acts)&&p.acts.includes(a.id));
+  return orderActPhotos(a,photos.filter(p=>Array.isArray(p.acts)&&p.acts.includes(a.id)));
+}
+function orderActPhotos(a,list){
   if(Array.isArray(a.porder)&&a.porder.length){
     const idx=new Map(); a.porder.forEach((id,i)=>idx.set(id,i));
     list.sort((x,y)=>(idx.has(x.id)?idx.get(x.id):1e9)-(idx.has(y.id)?idx.get(y.id):1e9));
@@ -1235,7 +1244,7 @@ function reorderActPhoto(a,dragId,targetId,before){   // gallery drag: photo ord
 function hasOpenAct(p){ return Array.isArray(p.acts)&&p.acts.some(id=>{ const a=actById(id); return a&&!a.done&&!a.hold; }); }
 function heldHidden(p){ if(!Array.isArray(p.acts)||!p.acts.length) return false;   /* on-hold: photo leaves the map only when EVERY action it belongs to is held */
   let held=false; for(const id of p.acts){ const a=actById(id); if(!a) continue; if(a.hold&&!selActs.has(a.id)) held=true; else return false; } return held; }
-function passActs(p){ if(heldHidden(p)) return false; return !actOnlyMap||hasOpenAct(p); }
+function passActs(p){ if(heldHidden(p)) return false; if(!actOnlyMap) return true; if(selActs.size&&Array.isArray(p.acts)&&p.acts.some(id=>selActs.has(id))) return true; return hasOpenAct(p); }
 function normActs(list){ let mx=0; const out=(list||[]).map(a=>{
   const parts=[];   // retired fields (description, note lists, action-level note): stash for migration into a photo note
   if(a.desc&&String(a.desc).trim()) parts.push(String(a.desc).trim());
@@ -1451,12 +1460,20 @@ function unassignAct(a,p){
 let lastActClick=null;
 /* Selection paints instantly (class toggle, no list rebuild — a rebuild would eat pending
    double-clicks and make rapid clicks feel dead); the zoom is what can be deferred. */
+function refreshActCurClasses(){
+  const cp=lb.classList.contains("open")?curPhoto():null;
+  document.querySelectorAll("#actList .act-row").forEach(el=>{
+    const isCur=!!(cp&&Array.isArray(cp.acts)&&cp.acts.includes(Number(el.dataset.aid)));
+    el.classList.toggle("cur",isCur);
+    const x=el.querySelector(".act-del"); if(x) x.title=isCur?"Remove this action from the open photo":"Delete this action";
+  });
+}
 function refreshActSelClasses(){ document.querySelectorAll("#actList .act-row").forEach(el=>el.classList.toggle("sel",selActs.has(Number(el.dataset.aid)))); }
 function clickAction(a,ev,deferNav){
   if(pickMode) return;   // while picking photos, the panel stays put
   const ctrl=!!(ev&&(ev.ctrlKey||ev.metaKey)), shift=!!(ev&&ev.shiftKey);
   if(shift&&lastActClick!=null){
-    const shown=(actShowOpenOnly?actions.filter(x=>!x.done):actions).map(x=>x.id);
+    const shown=(actShowOpenOnly?actions.filter(x=>!x.done):actions.slice()).sort((x,y)=>(x.done?1:0)-(y.done?1:0)).map(x=>x.id);   // same order as the rendered list
     const i1=shown.indexOf(lastActClick), i2=shown.indexOf(a.id);
     if(i1>=0&&i2>=0) selActs=new Set(shown.slice(Math.min(i1,i2),Math.max(i1,i2)+1));
     else { selActs=new Set([a.id]); lastActClick=a.id; }
@@ -1523,9 +1540,9 @@ let _actRzT=null;
 map.on("resize",()=>{ clearTimeout(_actRzT); _actRzT=setTimeout(()=>{
   if(selActs.size!==1) return;
   const a=actById([...selActs][0]);
-  if(a&&actPhotos(a).some(p=>p.lat!=null)) actNavigate(a);
+  if(a&&actPhotos(a).some(p=>p.lat!=null)) actNavigate(a,true);
 },220); });
-function actNavigate(a){
+function actNavigate(a,refitOnly){
   if(!selActs.has(a.id)) return;   // selection moved on before a deferred zoom fired — the newest click wins
   const ps=actPhotos(a);
   const geo=ps.filter(p=>p.lat!=null);
@@ -1549,7 +1566,7 @@ function actNavigate(a){
     if(!skip){ map.once("moveend",()=>setTimeout(()=>showAreaPreviews(a),40)); map.flyToBounds(bb,Object.assign({duration:.45},fitOpts)); }
     else setTimeout(()=>showAreaPreviews(a),40);
   }
-  if(ps.length) setTab("gallery");   // always the gallery, even for one photo — its thumbnail carries the unassign X
+  if(ps.length&&!refitOnly) setTab("gallery");   // always the gallery (a resize refit leaves the tab alone), even for one photo — its thumbnail carries the unassign X
 }
 /* Current location on the desktop map: a blue you-are-here dot with a sonar ripple.
    The browser remembers the Allow per site (the app is served over https), so after the first
@@ -1592,7 +1609,9 @@ function renderActions(){
   const shown=(actShowOpenOnly?actions.filter(a=>!a.done):actions.slice()).sort((x,y)=>(x.done?1:0)-(y.done?1:0));   // completed actions sink to the bottom (display only — stored order unchanged)
   if(!shown.length){ list.innerHTML=""; return; }
   const cp=lb.classList.contains("open")?curPhoto():null;   // the open photo's actions get a marker in this list
-  list.innerHTML=shown.map(a=>{ const ap=actPhotos(a), n=ap.length;
+  const byAct=new Map();   // one pass over the photos for every row (actPhotos per row rescanned them all each time)
+  for(const ph of photos) if(Array.isArray(ph.acts)) for(const id of ph.acts){ let l=byAct.get(id); if(!l) byAct.set(id,l=[]); if(l[l.length-1]!==ph) l.push(ph); }
+  list.innerHTML=shown.map(a=>{ const ap=orderActPhotos(a,byAct.get(a.id)||[]), n=ap.length;
     if(n) ensureAnnotThumb(ap[0]);
     const cov='<div class="act-cover"><div class="cov-rs" title="Drag to resize all covers"></div>'
       +((n&&ap[0].thumb)?('<img data-cov="'+ap[0].id+'" src="'+thumbSrc(ap[0])+'" alt="" draggable="false"/>')
@@ -1741,7 +1760,7 @@ function syncSettingsUI(){
 document.getElementById("setClusterSens").addEventListener("input",e=>{
   clusterSens=Math.max(0,Math.min(100,+e.target.value||0));
   document.getElementById("setClusterVal").textContent=clusterSens+"%";
-  buildCluster(); renderClusters(); persistState();   // live preview behind the window
+  filterRefreshSoon();   // live preview behind the window, once per frame
 });
 setModal.querySelectorAll('input[name="setBase"]').forEach(r=>r.addEventListener("change",()=>{
   [google,esri,none].forEach(l=>{ if(map.hasLayer(l)) map.removeLayer(l); });
@@ -1861,6 +1880,7 @@ async function exportActionsXlsx(){
   const st={ set textContent(t){ say(t); } };   /* progress writes go straight onto the button */
   if(!actions.length){ done("Nothing to export",1800); return; }
   if(btn.disabled) return;
+  btn.title="Download every action \u2014 status, sub-actions, photo notes and annotated photos \u2014 as an .xlsx spreadsheet";
   btn.disabled=true; st.textContent="Loading\u2026";
   try{
     await loadExcelJS();
@@ -1884,10 +1904,12 @@ async function exportActionsXlsx(){
       const row=ws.addRow({n:actNo(a),t:a.text,s:status,st:subs,pn:notes});
       row.alignment={vertical:"top",wrapText:true};
       const imgs=[];
-      for(const ph of ps){ const im2=await xlsImage(ph); if(im2) imgs.push(im2); }
-      const rowH=imgs.length?Math.max(...imgs.map(x=>x.h)):0;
+      for(const ph of ps) imgs.push(await xlsImage(ph));   // null keeps the slot: column N is always Photo N
+      const got=imgs.filter(Boolean);
+      const rowH=got.length?Math.max(...got.map(x=>x.h)):0;
       const COLPX=187;   // ~26-char column in px; images centre inside their own cell
       imgs.forEach((im2,ci2)=>{
+        if(!im2){ ws.getCell(ri,6+ci2).value="(no image)"; return; }
         const id=wb.addImage({base64:im2.b64,extension:"jpeg"});
         ws.addImage(id,{tl:{col:5+ci2+Math.max(0,(COLPX-im2.w)/2)/COLPX,row:(ri-1)+Math.max(0,(rowH-im2.h)/2)/Math.max(rowH,1)},ext:{width:im2.w,height:im2.h}});
       });
@@ -1910,7 +1932,7 @@ async function exportActionsXlsx(){
 document.getElementById("actXlsx").addEventListener("click",e=>{ e.stopPropagation(); exportActionsXlsx(); });
 document.getElementById("setGhRepo").addEventListener("change",e=>{ try{ localStorage.setItem("pmGhRepo",e.target.value.trim()); }catch(err){} });
 document.getElementById("setGhToken").addEventListener("change",e=>{ try{ localStorage.setItem("pmGhToken",e.target.value.trim()); }catch(err){} });
-document.getElementById("setActMap").addEventListener("change",e=>{ actOnlyMap=e.target.checked; buildCluster(); renderClusters(); updateGallery(); renderMapTags(); persistState(); });
+document.getElementById("setActMap").addEventListener("change",e=>{ actOnlyMap=e.target.checked; buildCluster(); renderClusters(); updateGallery(); renderActions(); persistState(); });
 
 /* right-click: on/near a dot -> the DOT menu; only genuinely empty map gets the general commands */
 function dotAtPoint(pt){
@@ -2239,7 +2261,14 @@ function pctFromTime(t){ return dateMax===dateMin?0:(t-dateMin)/(dateMax-dateMin
 function timeFromPct(p){ return dateMin+(dateMax-dateMin)*(p/100); }
 function fmtDay(t){ try{ return new Date(t).toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"}); }catch(e){ return String(t); } }
 function syncSliderUI(){ const lo=pctFromTime(dateLo),hi=pctFromTime(dateHi); rMin.value=lo; rMax.value=hi; sliderFill.style.left=lo+"%"; sliderFill.style.width=(hi-lo)+"%"; document.getElementById("dStart").textContent=fmtDay(dateLo); document.getElementById("dEnd").textContent=fmtDay(dateHi); }
-function onSlider(){ let lo=parseFloat(rMin.value),hi=parseFloat(rMax.value); if(lo>hi){const t=lo;lo=hi;hi=t;} dateLo=timeFromPct(lo); dateHi=timeFromPct(hi); syncSliderUI(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); }
+/* Slider drags fire dozens of input events a second: dots re-cluster at most once per frame, the
+   gallery + save wait until the drag pauses. The slider's own readout stays instant. */
+let _frF=0,_frT=null;
+function filterRefreshSoon(){
+  if(!_frF) _frF=requestAnimationFrame(()=>{ _frF=0; buildCluster(); renderClusters(); updateStats(); });
+  clearTimeout(_frT); _frT=setTimeout(()=>{ updateGallery(); persistState(); },160);
+}
+function onSlider(){ let lo=parseFloat(rMin.value),hi=parseFloat(rMax.value); if(lo>hi){const t=lo;lo=hi;hi=t;} dateLo=timeFromPct(lo); dateHi=timeFromPct(hi); syncSliderUI(); filterRefreshSoon(); }
 rMin.addEventListener("input",onSlider); rMax.addEventListener("input",onSlider);
 let dateBlank=true;
 function passDate(p){ if(dateLo==null)return true; if(p.time==null)return dateBlank; return p.time>=dateLo&&p.time<=dateHi; }
@@ -2274,7 +2303,7 @@ function syncAltUI(){ if(altMinV==null) return; const lo=pctFromAlt(altLo),hi=pc
   aMin.value=lo; aMax.value=hi; altFillEl.style.left=lo+"%"; altFillEl.style.width=(hi-lo)+"%";
   document.getElementById("aStart").textContent=fmtAlt(altLo); document.getElementById("aEnd").textContent=fmtAlt(altHi); }
 function onAltSlider(){ if(altMinV==null) return; let lo=parseFloat(aMin.value),hi=parseFloat(aMax.value); if(lo>hi){const t=lo;lo=hi;hi=t;}
-  altLo=Math.round(altFromPct(lo)*10)/10; altHi=Math.round(altFromPct(hi)*10)/10; syncAltUI(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); }
+  altLo=Math.round(altFromPct(lo)*10)/10; altHi=Math.round(altFromPct(hi)*10)/10; syncAltUI(); filterRefreshSoon(); }
 aMin.addEventListener("input",onAltSlider); aMax.addEventListener("input",onAltSlider);
 document.getElementById("altBlank").addEventListener("change",e=>{ altBlank=e.target.checked; buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); });
 /* Altitude backfill is fully automatic: whenever the photo files are reachable, photos missing
@@ -2388,7 +2417,8 @@ setMeasureBtn();
 /* gallery */
 document.getElementById("showNoGeo").addEventListener("change",e=>{ showNoGeo=e.target.checked; updateGallery(); persistState(); });
 document.getElementById("sortSel").addEventListener("change",e=>{ currentSort=e.target.value; updateGallery(); persistState(); });
-document.getElementById("nameFilter").addEventListener("input",e=>{ nameFilter=e.target.value.trim().toLowerCase(); buildCluster(); renderClusters(); updateGallery(); renderPhotoTags(curPhoto()); });
+let _nfT=null;
+document.getElementById("nameFilter").addEventListener("input",e=>{ nameFilter=e.target.value.trim().toLowerCase(); clearTimeout(_nfT); _nfT=setTimeout(()=>{ buildCluster(); renderClusters(); updateGallery(); renderPhotoTags(curPhoto()); },140); });
 /* little × inside search inputs: click to clear (fires the input event so filtering resets) */
 function wireClearX(input){
   const wrap=input&&input.parentElement, x=wrap&&wrap.querySelector(".xclear"); if(!x) return;
@@ -2405,7 +2435,8 @@ const GALLERY_CHUNK=50;
 let galleryLimit=GALLERY_CHUNK;
 function updateGallery(keepLimit){
   if(!keepLimit) galleryLimit=GALLERY_CHUNK;
-  const body=document.getElementById("galleryBody"); if(!photos.length) return;
+  const body=document.getElementById("galleryBody");
+  if(!photos.length){ body.innerHTML='<div class="empty-msg"><b>No photos in this project.</b><br/>Open a folder, or paste / drop images onto the map.</div>'; document.getElementById("galCount").textContent="0 shown"; document.getElementById("stView").textContent="0"; renderMapTags(); return; }
   const bounds=map.getBounds(), center=map.getCenter();
   const spatial=boxBounds||bounds;
   const passName=p=>passSearch(p)&&passTags(p)&&passActs(p)&&passAlt(p)&&(!actionFilter||actionFilter.has(p.id));   // shared with the map so gallery + dots stay in sync; actionFilter narrows to the selected actions' photos
@@ -2424,7 +2455,7 @@ function updateGallery(keepLimit){
   const anyImg=photos.some(p=>p.thumb);
   if(!anyImg){
     body.innerHTML='<div class="empty-msg"><b>Locations loaded without images.</b><br/>Open the source folder or a saved .JSON to see thumbnails.</div>';
-    document.getElementById("galCount").textContent="0 shown"; document.getElementById("stView").textContent=inView.length; return;
+    document.getElementById("galCount").textContent="0 shown"; document.getElementById("stView").textContent=inView.length; renderMapTags(); return;
   }
   const inShow=inView.slice(0,galleryLimit);
   const geoShow=(showNoGeo||actionFilter)?noGeo.slice(0,Math.max(0,galleryLimit-inShow.length)):[];
@@ -2557,7 +2588,7 @@ function loadViewer(){
   showPreview(p);
   renderPhotoTags(p);
   renderIpActions();
-  renderActions();   // mark this photo's actions in the left panel
+  refreshActCurClasses();   // mark this photo's actions in the left panel (class toggle — a full rebuild per arrow press was slow and ate half-typed sub-actions)
   highlightCurrent();
   setTimeout(()=>{ if(curPhoto()===p) getOriginalFileSilent(p).catch(()=>{}); },60);   // warm the file handle in the background so a Full-quality tick starts instantly
 }
@@ -2758,7 +2789,7 @@ lbStage.addEventListener("wheel",e=>{ e.preventDefault(); const r=lbStage.getBou
 let panning=false,panX=0,panY=0;
 /* pointer handling consolidated in the markup engine below */
 function vStep(d){ if(!lightboxList.length)return; lightboxIndex=(lightboxIndex+d+lightboxList.length)%lightboxList.length; loadViewer(); }
-function closeViewer(){ if(!lb.classList.contains("open")) return; if(selMark) deselectText(); closeFileInfo(); if(typeof closeFolderPop==="function") closeFolderPop(); setMarkTool("none"); setEditOpen(false); draft=null; polyPrev=null; clearHighlight(); lb.classList.remove("open"); fullToken++; if(curUrl){URL.revokeObjectURL(curUrl);curUrl=null;} lbImg.src=""; renderMapTags(); renderActions(); setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); },30); }
+function closeViewer(){ if(!lb.classList.contains("open")) return; if(selMark) deselectText(); closeFileInfo(); if(typeof closeFolderPop==="function") closeFolderPop(); setMarkTool("none"); setEditOpen(false); draft=null; polyPrev=null; clearHighlight(); lb.classList.remove("open"); fullToken++; if(curUrl){URL.revokeObjectURL(curUrl);curUrl=null;} lbImg.src=""; renderMapTags(); refreshActCurClasses(); setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); },30); }
 document.getElementById("lbClose").addEventListener("click",closeViewer);
 document.getElementById("lbPrev").addEventListener("click",e=>{e.stopPropagation();vStep(-1);});
 document.getElementById("lbNext").addEventListener("click",e=>{e.stopPropagation();vStep(1);});
@@ -2775,7 +2806,7 @@ document.addEventListener("keydown",e=>{
     return;
   }
   if(e.key==="Enter"){ if(markTool==="poly"&&draft&&draft.t==="poly"&&draft.p.length>=2){ curMarks().push({t:"poly",p:draft.p,c:draft.c,k:draft.k}); draft=null; polyPrev=null; afterMarkChange(); } return; }
-  const tag=((e.target&&e.target.tagName)||"").toLowerCase(); if(tag==="input") return;
+  const tag=((e.target&&e.target.tagName)||"").toLowerCase(); if(tag==="input"||tag==="select"||tag==="textarea"||(e.target&&e.target.isContentEditable)) return;
   if(e.key==="ArrowLeft"){ e.preventDefault(); vStep(-1); return; }
   if(e.key==="ArrowRight"){ e.preventDefault(); vStep(1); return; }
   if((e.key==="Delete"||e.key==="Backspace")&&selObj){ e.preventDefault(); const p=curPhoto();
@@ -3087,6 +3118,7 @@ document.addEventListener("keydown",e=>{
   if(tag==="input"||tag==="select"||tag==="textarea") return;
   if(document.activeElement===tbText) return;
   if(e.key==="Escape"){ if(drawing) stopDraw(); else if(measuring) stopMeasure(); else if(pickMode) endPickMode(false); else if(selSet.size) clearSel(); else if(selActs.size) clearActSel(); return; }
+  if(e.ctrlKey||e.metaKey||e.altKey||e.repeat||(e.target&&e.target.isContentEditable)) return;   // Ctrl+F is browser find, not the area filter
   if(e.key==="z"||e.key==="Z"){ toggleZoom(); }
   else if(e.key==="f"||e.key==="F"){ toggleFilter(); }
   else if(e.key==="m"||e.key==="M"){ toggleMeasure(); }
@@ -3244,7 +3276,7 @@ function redoLatest(open){
   else redoTag();
 }
 function afterFolderChange(){ if(typeof rebuildActionFilter==="function"&&actionFilter) rebuildActionFilter();
-  buildCluster(); renderClusters(); highlightCurrent(); updateGallery(); renderPhotoTags(curPhoto()); renderActions(); renderIpActions(); renderMapTags();
+  buildCluster(); renderClusters(); highlightCurrent(); updateGallery(true); renderPhotoTags(curPhoto()); renderActions(); renderIpActions();   // updateGallery renders the map tags too
   persistState();   // debounced: rapid tick/edit bursts serialize once, not per keystroke
   ensureJsonWrite(true);   // grant write inside the click gesture; the debounced save uses it
 }
@@ -3330,7 +3362,9 @@ async function resolveFileByPath(dir,path){
 /* actions panel resize */
 const actSplit=document.getElementById("actSplit"); let actResizing=false;
 actSplit.addEventListener("mousedown",e=>{ actResizing=true; e.preventDefault(); document.body.style.userSelect="none"; });
-window.addEventListener("mousemove",e=>{ if(!actResizing) return; const w=Math.max(170,Math.min(window.innerWidth*0.4,e.clientX)); document.documentElement.style.setProperty("--act-w",w+"px"); positionTools(); map.invalidateSize(); });
+let _mapRelayoutF=0;
+function mapRelayoutSoon(){ if(_mapRelayoutF) return; _mapRelayoutF=requestAnimationFrame(()=>{ _mapRelayoutF=0; positionTools(); map.invalidateSize({debounceMoveend:true}); }); }   // one relayout per frame while dragging a splitter
+window.addEventListener("mousemove",e=>{ if(!actResizing) return; const w=Math.max(170,Math.min(window.innerWidth*0.4,e.clientX)); document.documentElement.style.setProperty("--act-w",w+"px"); mapRelayoutSoon(); });
 window.addEventListener("mouseup",()=>{ if(actResizing){ actResizing=false; document.body.style.userSelect=""; persistState(); } });
 
 /* sidebar resize */
@@ -3339,7 +3373,7 @@ splitter.addEventListener("mousedown",e=>{ resizing=true; e.preventDefault(); do
 window.addEventListener("mousemove",e=>{ if(!resizing)return; let w=Math.max(240,Math.min(window.innerWidth*0.75,window.innerWidth-e.clientX-3));
   document.documentElement.style.setProperty("--side-w",w+"px");   // ONE width for the whole right sidebar — both tabs share it
   if(rightTab==="photo"&&lb.classList.contains("open")) refit();
-  positionTools(); map.invalidateSize(); });
+  mapRelayoutSoon(); });
 window.addEventListener("mouseup",()=>{ if(resizing){resizing=false;document.body.style.userSelect="";persistState();} });
 
 /* file ops */
@@ -3593,7 +3627,8 @@ function applyMetaMap(m){ if(!m||!m.size) return; for(const p of photos){ const 
   if(meta.rot&&!p.rot){ p.rot=meta.rot; const d=rotDelta(p.rot); (async()=>{ if(p.thumb)p.thumb=await rotateDataURL(p.thumb,d,THUMB_Q); if(p.preview)p.preview=await rotateDataURL(p.preview,d,PREVIEW_Q); cacheFullSession(); })(); } } }
 
 /* persistence (IndexedDB): metadata only, cheap */
-function idbOpen(){ return new Promise((res,rej)=>{ const o=indexedDB.open("photomap",1); o.onupgradeneeded=()=>o.result.createObjectStore("kv"); o.onsuccess=()=>res(o.result); o.onerror=()=>rej(o.error); }); }
+let _idbP=null;
+function idbOpen(){ if(!_idbP) _idbP=new Promise((res,rej)=>{ const o=indexedDB.open("photomap",1); o.onupgradeneeded=()=>o.result.createObjectStore("kv"); o.onsuccess=()=>{ const db=o.result; db.onclose=()=>{ _idbP=null; }; db.onversionchange=()=>{ try{ db.close(); }catch(e){} _idbP=null; }; res(db); }; o.onerror=()=>{ _idbP=null; rej(o.error); }; }); return _idbP; }   // one shared connection
 async function idbSet(k,v){ const db=await idbOpen(); return new Promise((res,rej)=>{ const t=db.transaction("kv","readwrite"); t.objectStore("kv").put(v,k); t.oncomplete=()=>res(); t.onerror=()=>rej(t.error); }); }
 async function idbGet(k){ const db=await idbOpen(); return new Promise((res,rej)=>{ const t=db.transaction("kv","readonly"); const r=t.objectStore("kv").get(k); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 async function idbDel(k){ const db=await idbOpen(); return new Promise((res,rej)=>{ const t=db.transaction("kv","readwrite"); t.objectStore("kv").delete(k); t.oncomplete=()=>res(); t.onerror=()=>rej(t.error); }); }
@@ -3652,7 +3687,11 @@ function armFolderPermission(){
 }
 
 /* helpers */
-function photoById(id){ for(const p of photos) if(p.id===id) return p; return null; }
+let _pIdx=null,_pArr=null;
+function photoById(id){   // O(1): index verified on every hit, rebuilt on any miss/array swap — always correct
+  if(_pIdx&&_pArr===photos){ const i=_pIdx.get(id); if(i!=null){ const p=photos[i]; if(p&&p.id===id) return p; } }
+  _pArr=photos; _pIdx=new Map(); for(let i=0;i<photos.length;i++) _pIdx.set(photos[i].id,i);
+  const i=_pIdx.get(id); return i!=null?photos[i]:null; }
 function updateStats(){ const total=photos.length,geo=photos.filter(p=>p.lat!=null).length; document.getElementById("stTotal").textContent=total; document.getElementById("stGeo").textContent=geo; document.getElementById("stNo").textContent=total-geo; }
 function fmtDate(ms){ const d=new Date(ms); return d.toLocaleString(undefined,{year:"numeric",month:"short",day:"2-digit",hour:"2-digit",minute:"2-digit"}); }
 function fmtCoord(lat,lng){ return lat.toFixed(5)+", "+lng.toFixed(5); }
