@@ -3997,7 +3997,7 @@ async function mUploadPhotos(files){
   const orig="Upload photos to the map";
   const setB=(t,dis)=>{ const b=document.getElementById("mUpBtn"); if(b){ b.textContent=t; b.disabled=!!dis; } };
   const cfg=ghCfg();
-  if(!cfg.token){ setB("Set the repo + token first (REFRESH screen)"); setTimeout(()=>setB(orig),3000); return; }
+  if(!cfg.token){ setB("Set the repo + token first (REFRESH screen)"); mToast("No repo token on this phone \u2014 open the app and set it up first"); setTimeout(()=>setB(orig),3000); return; }
   if(mUpBusy) return;
   mUpBusy=true; setB("Starting\u2026",true);
   const d0=new Date(), pd=n2=>String(n2).padStart(2,"0");
@@ -4451,15 +4451,20 @@ async function mSetupShare(){
   try{
     const q=new URLSearchParams(location.search);
     if(!q.has("shared")) return;
+    const n=q.get("shared");
     history.replaceState(null,"",location.pathname);
+    setTimeout(()=>mToast("Receiving shared photos\u2026",true),300);
+    if(n==="err"){ setTimeout(()=>mToast("The share receiver hit an error \u2014 try again"),600); return; }
     const cache=await caches.open("pm-shared");
-    const metaR=await cache.match("meta"); if(!metaR) return;
+    const metaR=await cache.match("meta");
+    if(!metaR){ setTimeout(()=>mToast("Share arrived empty. Remove the home-screen icon, then reinstall: Chrome \u22ee \u2192 Add to Home screen \u2192 INSTALL. Then share again."),600); return; }
     const meta=await metaR.json(); const files=[];
     for(let i=0;i<meta.length;i++){ const r=await cache.match("file-"+i);
       if(r){ const b=await r.blob(); files.push(new File([b],(meta[i]&&meta[i].n)||("shared-"+(i+1)+".jpg"),{type:(meta[i]&&meta[i].t)||"image/jpeg"})); } }
     try{ await caches.delete("pm-shared"); }catch(e){}
-    if(files.length) setTimeout(()=>mUploadPhotos(files),900);   // straight into the normal upload pipeline
-  }catch(e){}
+    if(!files.length){ setTimeout(()=>mToast("No usable files in that share \u2014 try again"),600); return; }
+    setTimeout(()=>mUploadPhotos(files),600);   // straight into the normal upload pipeline
+  }catch(e){ try{ mToast("Share intake failed: "+(e&&e.message||e)); }catch(e2){} }
 }
 
 /* Desktop side of the loop: offer to merge field changes pushed by the phone. */
