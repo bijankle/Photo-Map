@@ -2739,6 +2739,8 @@ async function getOriginalFileSilent(p){
   const idx=fromIndex(p); if(idx){ p.file=idx; return idx; }
   if(!dirHandle){ try{ dirHandle=await idbGet("dirHandle"); }catch(e){} }
   try{ if(dirHandle && (await dirHandle.queryPermission({mode:"read"}))==="granted"){ const f=await resolveFromHandle(p); if(f){ p.file=f; return f; } } }catch(e){}
+  if(p.repoPath){ try{ const cfg=ghCfg(); if(cfg.token){ const b=await ghGetBin(cfg,p.repoPath);   // phone original kept in the private repo
+    if(b){ p.file=new File([b],p.name||"photo.jpg",{type:/\.(heic|heif)$/i.test(p.name||"")?"image/heic":"image/jpeg"}); return p.file; } } }catch(e){} }
   return null;
 }
 async function originalToURL(p,file){
@@ -3604,7 +3606,7 @@ function serializeState(includeImages){
     photos: photos.map(p=>{ const o={path:p.path,name:p.name,lat:p.lat,lng:p.lng,time:p.time,dir:p.dir,size:p.size,isHeic:p.isHeic};
       if(Array.isArray(p.paths)&&(p.paths.length!==1||p.paths[0]!==p.path))o.paths=p.paths;   // physical locations (incl. empty when pruned from disk)
       o.vpaths=Array.isArray(p.vpaths)?p.vpaths:[];   // always written: a missing field means 'legacy file' to the loader, which would reclassify real copies as tags
-      if(p.adhoc)o.adhoc=1;
+      if(p.adhoc)o.adhoc=1; if(p.repoPath)o.repoPath=p.repoPath;
       if(p.rot)o.rot=p.rot;
       if(p.glat!=null){ o.glat=p.glat; o.glng=p.glng; }   // dot was repositioned in-app; lat/lng show it, glat/glng keep the photo's true GPS
       if(Array.isArray(p.acts)&&p.acts.length)o.acts=p.acts;
@@ -3637,7 +3639,7 @@ function applyState(st){
     if(vp===null){   // legacy file (mixed paths): keep the anchor path as physical, treat extras as virtual so tags can never be wrongly pruned
       vp=phys.filter(pa=>pa!==m.path); phys=m.path?[m.path]:phys.slice(0,1);
     }
-    photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,rot:m.rot||0,lat:m.lat,lng:m.lng,glat:(m.glat!=null?m.glat:null),glng:(m.glng!=null?m.glng:null),time:m.time,dir:m.dir,alt:(m.alt!=null?m.alt:null),mkw:(m.mkw!=null?m.mkw:null),mth:(m.mth!=null?m.mth:null),acts:Array.isArray(m.acts)?m.acts.slice():[],note:(typeof m.note==="string"?m.note:""),noGps:!!m.noGps,adhoc:!!m.adhoc,marks:Array.isArray(m.marks)?m.marks.map(mk=>{ if(mk&&mk._t!=null){ const c={...mk}; delete c._t; return c; } return mk; }):[]});
+    photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,rot:m.rot||0,lat:m.lat,lng:m.lng,glat:(m.glat!=null?m.glat:null),glng:(m.glng!=null?m.glng:null),time:m.time,dir:m.dir,alt:(m.alt!=null?m.alt:null),mkw:(m.mkw!=null?m.mkw:null),mth:(m.mth!=null?m.mth:null),acts:Array.isArray(m.acts)?m.acts.slice():[],note:(typeof m.note==="string"?m.note:""),noGps:!!m.noGps,adhoc:!!m.adhoc,repoPath:m.repoPath||null,marks:Array.isArray(m.marks)?m.marks.map(mk=>{ if(mk&&mk._t!=null){ const c={...mk}; delete c._t; return c; } return mk; }):[]});
   });   // baked full-quality renditions from old files are intentionally dropped
   rebuildPorders();   // ids were just renumbered — restore each action's photo order from the key form
   if(st.nextActId>nextActId) nextActId=st.nextActId;   // deleted action numbers are never reissued
@@ -3790,6 +3792,7 @@ function mPend(){   // parsed once per actual change (renders used to re-parse i
   try{ _mpObj=JSON.parse(raw)||{}; }catch(e){ _mpObj={}; } _mpRaw=raw; return _mpObj; }
 let _mpQuiet=false;
 function mPendSave(o){ try{ const raw=JSON.stringify(o); localStorage.setItem("pmField",raw); _mpRaw=raw; _mpObj=o; }catch(e){} if(!_mpQuiet&&typeof mAutoSendSoon==="function") mAutoSendSoon(); }   // every edit auto-syncs
+function mDeviceId(){ let d=null; try{ d=localStorage.getItem("pmDevice"); if(!d){ d="d"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); localStorage.setItem("pmDevice",d); } }catch(e){} return d||"d0"; }
 function mUid(){ return "u"+Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
 function mCh(id){ const p=mPend(); return (p.changes||{})[id]||{}; }
 function mSetCh(id,patch){ const p=mPend(); p.changes=p.changes||{}; const c=Object.assign({},p.changes[id]||{},patch);
@@ -4246,7 +4249,17 @@ async function mSendChanges(){
     const payload={v:2,updatedAt:new Date().toISOString(),project:mPack.project||null,packAt:mPack.exportedAt||null,changes:payloadSrc.changes||{},photoNotes:payloadSrc.pnotes||{},
       newActs:(payloadSrc.newActs||[]).map(x=>({u:x.u||null,text:x.text,steps:(x.steps||[]).map(s=>({t:s.t,d:!!s.d})),done:!!x.done,doneAt:x.doneAt||null,hold:!!x.hold})),
       actOrder:(Array.isArray(payloadSrc.actOrder)&&payloadSrc.actOrder.length)?mActOrder().map(i=>(mPack.actions[i]||{}).id).filter(x=>x!=null):[]};
-    await ghUpdateJson(cfg,"changes.json",()=>payload,"Field changes from phone");   // resends are idempotent on the desktop
+    payload.device=mDeviceId();
+    await ghUpdateJson(cfg,"changes.json",cur=>{   // another phone's batch the desktop hasn't merged yet is folded in, never overwritten
+      if(!cur||!cur.device||cur.device===payload.device||!cur.updatedAt) return payload;
+      const out=Object.assign({},payload), ch={};
+      for(const k of Object.keys(cur.changes||{})) ch[k]=cur.changes[k];
+      for(const k of Object.keys(payload.changes||{})) ch[k]=Object.assign({},ch[k]||{},payload.changes[k]);
+      out.changes=ch; out.photoNotes=Object.assign({},cur.photoNotes||{},payload.photoNotes||{});
+      const seenU=new Set((payload.newActs||[]).map(x=>x.u).filter(Boolean));
+      out.newActs=(payload.newActs||[]).concat((cur.newActs||[]).filter(x=>!(x&&x.u&&seenU.has(x.u))));
+      if(!(out.actOrder&&out.actOrder.length)) out.actOrder=cur.actOrder||[];
+      return out; },"Field changes from phone");   // resends are idempotent on the desktop
     const p2=mPend(); p2.sentAt=Date.now(); p2.sentSnap=mPendSnap(payloadSrc); _mpQuiet=true; mPendSave(p2); _mpQuiet=false;   // snapshot what WAS sent (edits made mid-send stay unsent)
     mSyncState="idle"; mSyncErr="";
   }catch(err){ mSyncState="error"; mSyncErr=String(err&&err.message||err); mAutoSendSoon(30000); }
@@ -4656,6 +4669,7 @@ async function mSetupShare(){
 
 /* Desktop side of the loop: offer to merge field changes pushed by the phone. */
 let _upMerging=false, _chMerging=false;
+function metaByNameHas(m,f){ for(const it of m.values()) if(it.f===f) return true; return false; }
 function projectReady(){ return fileLoadedOnce||!jsonHandle; }   // never merge into a session the .json load is about to replace
 function origBase(n){ return String(n||"").replace(/^\d{8}-\d{6}-\d+-/,"").replace(/\.[^.]+$/,"").toLowerCase(); }   // phone uploads carry a batch prefix; the camera name underneath is the identity
 function sameShot(t1,t2){ if(t1==null||t2==null) return true; const d=Math.abs(t1-t2); return d<=3000||(d<=14*3600e3&&Math.min(d%3600e3,3600e3-d%3600e3)<=3000); }   // equal times, or equal up to a timezone shift
@@ -4670,7 +4684,7 @@ async function checkPhotoUploads(){   // polled: phone uploads auto-merge as soo
     loadNote("Photo dump from the phone — downloading "+items.length+" photo"+(items.length===1?"":"s")+"…");
     const fin=x=>typeof x==="number"&&isFinite(x);
     const have=new Map(); for(const ph of photos){ const b=origBase(ph.name); if(!b) continue; if(!have.has(b)) have.set(b,[]); have.get(b).push(ph); }
-    const handled=new Set(), metaByName=new Map(), fitems=[], healed=[], queued=new Set();
+    const handled=new Set(), metaByName=new Map(), fitems=[], healed=[], queued=new Set(), adopt=new Set();
     for(const it of items){
       const nm=it.n||it.f.split("/").pop(), base=origBase(nm);
       /* the same shot already in the project (an earlier upload, an emailed copy, the folder):
@@ -4681,6 +4695,7 @@ async function checkPhotoUploads(){   // polled: phone uploads auto-merge as soo
           dupe.lat=it.lat; dupe.lng=it.lng; dupe.noGps=false; dupe.glat=null; dupe.glng=null;
           if(dupe.time==null&&fin(it.t)) dupe.time=it.t; if(dupe.alt==null&&fin(it.alt)) dupe.alt=it.alt;
           healed.push({id:dupe.id,before,after:snapshotTags(dupe)}); }
+        if(dupe&&isAdhoc(dupe)&&!dupe.repoPath&&!dupe.file){ dupe.repoPath=it.f; adopt.add(it.f); }   // an earlier phone photo lost its original: this upload becomes it
         handled.add(it.f); continue;
       }
       let bytes; try{ bytes=await ghGetBin(cfg,it.f); }catch(e){ continue; }   // transient failure: stays listed for the next poll
@@ -4691,11 +4706,20 @@ async function checkPhotoUploads(){   // polled: phone uploads auto-merge as soo
     }
     const added=fitems.length?((await ingest(fitems,true))||[]):[];
     for(const it of metaByName.values()) handled.add(it.f);
-    for(const ph of added){ ph.adhoc=true; const m2=metaByName.get(ph.name); if(m2){   // the file's own EXIF wins; the manifest only fills gaps (the phone's trail / live fix)
+    for(const ph of added){ ph.adhoc=true; const m2=metaByName.get(ph.name); if(m2) ph.repoPath=m2.f;   // the full-resolution original stays in the private repo — the viewer fetches it from there
+      if(m2){   // the file's own EXIF wins; the manifest only fills gaps (the phone's trail / live fix)
       if(ph.lat==null&&fin(m2.lat)&&fin(m2.lng)){ ph.lat=m2.lat; ph.lng=m2.lng; ph.noGps=false; }
       if(ph.time==null&&m2.t) ph.time=m2.t; if(ph.alt==null&&fin(m2.alt)) ph.alt=m2.alt; } }
     const c=map.getCenter();
     for(const ph of added){ if(ph.lat==null){ ph.noGps=true; ph.lat=c.lat; ph.lng=c.lng; } }
+    /* if the site folder is already writable, also keep a real copy next to the other photos
+       (new files only — nothing existing is touched); those no longer need the repo copy */
+    const onDisk=new Set();
+    try{ if(dirHandle&&added.length&&(await dirHandle.queryPermission({mode:"readwrite"}))==="granted"){
+      const sub=await dirHandle.getDirectoryHandle("Phone uploads",{create:true});
+      for(const ph of added){ if(!ph.file||!ph.repoPath) continue;
+        try{ const fh=await sub.getFileHandle(ph.name,{create:true}); const w=await fh.createWritable(); await w.write(ph.file); await w.close();
+          const pa="Phone uploads/"+ph.name; ph.path=pa; ph.paths=[pa]; ph.adhoc=false; onDisk.add(ph.repoPath); delete ph.repoPath; }catch(e){} } } }catch(e){}
     if(healed.length) pushTagAction(healed);
     if(added.length) pushUndo({addPhotos:added.map(ph=>ph.id)});
     if(added.length||healed.length){
@@ -4703,12 +4727,12 @@ async function checkPhotoUploads(){   // polled: phone uploads auto-merge as soo
       const geo=added.filter(ph=>ph.lat!=null&&!ph.noGps).concat(healed.map(h=>photoById(h.id)).filter(Boolean));
       if(geo.length>1) map.fitBounds(L.latLngBounds(geo.map(ph=>[ph.lat,ph.lng])),{padding:[60,60],maxZoom:18});
       else if(geo.length===1) map.flyTo([geo[0].lat,geo[0].lng],Math.max(map.getZoom(),17));
-    }
+    } else if(adopt.size) persistState();   // adopted originals must be remembered
     loadNote((added.length||healed.length)?("Added "+added.length+" phone photo"+(added.length===1?"":"s")+(healed.length?(" · moved "+healed.length+" earlier one"+(healed.length===1?"":"s")+" to its real spot"):"")+" — Ctrl+Z undoes"):(handled.size?"Phone upload: those photos are already on the map":""));
     setTimeout(()=>loadNote(""),4000);
     if(handled.size){   // remove ONLY what we handled — anything the phone appended meanwhile survives
       await ghUpdateJson(cfg,"uploads.json",cur=>{ const its=Array.isArray(cur&&cur.items)?cur.items:[]; const keep=its.filter(it=>!(it&&handled.has(it.f))); if(keep.length===its.length) return null; return {v:1,items:keep,updatedAt:new Date().toISOString()}; },"Phone uploads merged on desktop");   // the phone watches this to show ✓ received
-      ghDeleteMany(cfg,[...handled]).catch(()=>{});
+      ghDeleteMany(cfg,[...handled].filter(f=>!adopt.has(f)&&(!metaByNameHas(metaByName,f)||onDisk.has(f)))).catch(()=>{});   // originals without a disk copy STAY in the repo (they're the only full-res copy)
     }
   }catch(err){ loadNote("Phone photo merge failed: "+(err&&err.message||err)); setTimeout(()=>loadNote(""),5000); }
   finally{ _upMerging=false; }
