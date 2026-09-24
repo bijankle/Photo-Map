@@ -3886,13 +3886,15 @@ function mShowList(){
         +'<div style="align-self:center;color:var(--line2);font-size:22px;">›</div></div>';
     }).join(''):'<div class="m-note" style="padding-top:40px">No open actions in the pack.</div>')
     +'</div>'
-    +'<div class="m-foot"><button class="m-btn ghost" id="mUpBtn">Upload photos to the map</button>'
+    +'<div class="m-foot"><button class="m-btn" id="mCamBtn">\ud83d\udcf7 Take photo \u2014 pinned at your position</button>'
+    +'<button class="m-btn ghost" id="mUpBtn">Upload photos to the map</button>'
     +((window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches)?'':'<div class="m-note">For photos with location: install this app (Chrome \u22ee \u2192 Add to Home screen), then share pictures to PhotoMap from your gallery.</div>')
     +'<button class="m-btn" id="mSend"'+(n?'':' disabled')+'>Send changes back ('+n+')</button>'
     +'<div class="m-note" id="mSendNote">'+(n?'edits waiting to sync':'no unsent changes')+'</div></div>'
     +'<div class="m-homemap" id="mHomeMap"></div>');
   document.getElementById("mRefresh").addEventListener("click",()=>{ mCheckFresh(true); mLoadPack(); });   // one tap: newest app build + newest pack
   document.getElementById("mUpBtn").addEventListener("click",()=>{ mUpInput().click(); window.mPickT=Date.now(); });
+  document.getElementById("mCamBtn").addEventListener("click",()=>{ mCamInput().click(); window.mPickT=Date.now(); });
   document.getElementById("mSend").addEventListener("click",mSendChanges);
   mWireUndo();
   document.getElementById("mNewAct").addEventListener("keydown",e=>{
@@ -3940,6 +3942,20 @@ function mWireCardDrag(){
 }
 /* The picker input lives on <body>, outside the re-rendered screens: a GPS fix arriving while
    the system picker is open used to rebuild the screen and silently drop the selection. */
+function mCamInput(){
+  let el=document.getElementById("mCamG");
+  if(el) return el;
+  el=document.createElement("input"); el.type="file"; el.accept="image/*"; el.capture="environment"; el.id="mCamG"; el.style.display="none";
+  document.body.appendChild(el);
+  el.addEventListener("change",e=>{
+    const fs=Array.from(e.target.files||[]); e.target.value="";
+    if(!fs.length) return;
+    const fixed=mGeo?{lat:mGeo.lat,lng:mGeo.lng}:null;   // where you are standing right now = where the photo was taken
+    if(!fixed) mToast("No GPS fix yet \u2014 photo will place from your trail if possible",true);
+    mUploadPhotos(fs,fixed);
+  });
+  return el;
+}
 function mUpInput(){
   let el=document.getElementById("mUpFileG");
   if(el) return el;
@@ -3993,7 +4009,7 @@ function mWatchReceipt(paths,count){   // \u2713 only when the DESKTOP has actua
 /* Photo dump: pick or take photos on the phone; each is resized to a 2048px JPEG and pushed to
    the private data repo with its GPS/time carried in uploads.json. Assigning to actions stays a
    desktop job — these arrive there as ordinary unassigned photos. */
-async function mUploadPhotos(files){
+async function mUploadPhotos(files,fixed){
   const orig="Upload photos to the map";
   const setB=(t,dis)=>{ const b=document.getElementById("mUpBtn"); if(b){ b.textContent=t; b.disabled=!!dis; } };
   const cfg=ghCfg();
@@ -4026,6 +4042,7 @@ async function mUploadPhotos(files){
       }
       let src=lat!=null?"exif":null;
       if(!t&&f.lastModified) t=f.lastModified;   // camera files: file time \u2248 taken time
+      if(lat==null&&fixed){ lat=fixed.lat; lng=fixed.lng; src="live"; }   // camera-button shot: pinned where you stand
       if(lat==null&&t){ const cr=mCrumbAt(t); if(cr){ lat=cr.lat; lng=cr.lng; src="track"; } }
       /* ORIGINAL bytes, untouched: the EXIF GPS stays inside the file and the DESKTOP reads it —
          the same proven path as an emailed copy. No resizing, no phone-side parsing to trust. */
