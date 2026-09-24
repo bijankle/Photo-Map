@@ -892,7 +892,6 @@ let currentSort="date_desc", showNoGeo=false, nameFilter="";
 let tagFilters=new Set();   // active tag filters (folder paths) — photos must be in ALL of them (intersection)
 let dateMin=null,dateMax=null,dateLo=null,dateHi=null;
 let lightboxList=[], lightboxIndex=0;
-let undoStack=[];
 let cluster=null;
 let saveFileHandle=null, jsonHandle=null, dirHandle=null, loadedJsonName=null, lastSavedAt=null;
 let bannerAction=null;
@@ -1262,7 +1261,7 @@ function createAction(text,pids){
   const a={id:nextActId++,text,done:false,created:Date.now(),doneAt:null,steps:[]};
   actions.unshift(a);
   const items=(pids&&pids.length)?buildAssign([a.id],pids.map(photoById).filter(Boolean)):[];
-  pushUndo({actCreate:{data:Object.assign({},a),index:0},items});   // creation (incl. its links) is one undo step
+  pushUndo({actCreate:{data:JSON.parse(JSON.stringify(a)),index:0},items});   // creation (incl. its links) is one undo step
   afterFolderChange();
   return a;
 }
@@ -1415,7 +1414,7 @@ function deleteAction(a){   // no confirm needed: Ctrl+Z restores the action and
   for(const p of photos){ if(Array.isArray(p.acts)&&p.acts.includes(a.id)){ const before=snapshotTags(p); p.acts=p.acts.filter(x=>x!==a.id); items.push({id:p.id,before,after:snapshotTags(p)}); } }
   const idx=actions.indexOf(a);
   actions=actions.filter(x=>x!==a); selActs.delete(a.id);
-  pushUndo({act:{data:Object.assign({},a),index:idx},items});   // one undo step restores the action AND its photo links
+  pushUndo({act:{data:JSON.parse(JSON.stringify(a)),index:idx},items});   // one undo step restores the action AND its photo links
   afterFolderChange();
 }
 function buildAssign(actIds,phList){
@@ -1995,19 +1994,22 @@ function pruneMissing(root, seenRaw){
   const pref=(root||"")+"/";
   const norm=pa=>{ pa=String(pa||""); return pa.startsWith(pref)?pa.slice(pref.length):pa; };
   const seen=new Set(); for(const s of seenRaw) seen.add(norm(s));
-  let changed=false, removedPhotos=0;
+  let changed=false, removedPhotos=0; const removed=[];
   for(let i=photos.length-1;i>=0;i--){ const p=photos[i];
+    if(isAdhoc(p)) continue;   // pasted / dropped / phone photos never lived in this folder — the scan can't vouch for them
     const phys=physPaths(p); if(!phys.length) continue;
     const kept=phys.filter(pa=>seen.has(norm(pa)));
     if(kept.length===phys.length) continue;
     changed=true; p.paths=kept;
     if(kept.length){ if(!kept.includes(p.path)) p.path=kept[0]; }
-    else if(!virtPaths(p).length){ photos.splice(i,1); removedPhotos++; }
+    else if(!virtPaths(p).length){ removed.push({photo:photos.splice(i,1)[0],index:i}); removedPhotos++; }
   }
+  if(removed.length){ pushUndo({delPhotos:{items:removed}}); for(const r of removed) selSet.delete(r.photo.id); }
   if(changed){ rebuildSizeIndex(); buildDateFilter(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); cacheFullSession(); }
   return removedPhotos;
 }
 const progress=document.getElementById("progress");
+function isAdhoc(p){ return !!p.adhoc||physPaths(p).some(pa=>/^phone-uploads\//.test(pa)||/^Pasted /.test(pa)); }
 function rebuildSizeIndex(){ sizeIndex=new Map(); existingPaths=new Map(); for(const p of photos){ if(p.size!=null && !sizeIndex.has(p.size)) sizeIndex.set(p.size,p); for(const pa of physPaths(p)) existingPaths.set(pa,p); } }
 function addPath(p,path){ if(!path) return; if(!Array.isArray(p.paths)) p.paths=p.path?[p.path]:[]; if(!p.paths.includes(path)) p.paths.push(path); }
 /* Project header at the top of the map: the .json name this session is based on, its last-saved
@@ -2066,23 +2068,23 @@ async function ingest(items, append){
   rebuildSizeIndex();   // de-dupe new files against everything already loaded (appends, JSON sessions)
   let done=0, lastPct=-1; const total=items.length; progress.style.width="0%";
   let idx=0; const POOL=6;
-  async function worker(){ while(idx<items.length){ const it=items[idx++]; try{ await processOne(it); }catch(e){} done++; progress.style.width=(done/total*100).toFixed(1)+"%";
+  const created=[];
+  async function worker(){ while(idx<items.length){ const it=items[idx++]; try{ await processOne(it,created); }catch(e){} done++; progress.style.width=(done/total*100).toFixed(1)+"%";
     const pct=Math.round(done/total*100); if(pct!==lastPct){ lastPct=pct; loadNote("Loading ("+pct+"%) — checking files & adding new photos"); } } }
   await Promise.all(Array.from({length:POOL},worker));
   finishLoad(!append || wasEmpty); setTimeout(()=>progress.style.width="0%",600);
   loadNote("");
+  return created;
 }
 /* Pasted images and loose-file drops go through the same pipeline as a folder load, plus:
    GPS-less images land at the current map centre (flagged noGps — a placed dot, not a real fix),
    the view flies to the new dot so it's easy to find, and the add is Ctrl+Z-able. */
 async function ingestAdhoc(items){
   if(!items||!items.length) return;
-  const startId=nextId;
-  await ingest(items,true);
-  const added=photos.filter(p=>p.id>=startId);
+  const added=(await ingest(items,true))||[];
   if(!added.length){ loadNote("Already in this project — nothing new added"); setTimeout(()=>loadNote(""),2500); return; }
   const c=map.getCenter();
-  for(const p of added){ if(p.lat==null){ p.noGps=true; p.lat=c.lat; p.lng=c.lng; } }
+  for(const p of added){ p.adhoc=true; if(p.lat==null){ p.noGps=true; p.lat=c.lat; p.lng=c.lng; } }
   pushUndo({addPhotos:added.map(p=>p.id)});
   buildDateFilter(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); cacheFullSession();
   const geo=added.filter(p=>p.lat!=null);
@@ -2101,7 +2103,7 @@ async function healRenditions(owner,file){
     owner.preview=d?await rotateDataURL(imgs.preview,d,PREVIEW_Q):imgs.preview;
     owner.tv=THUMB_VER; }
 }
-async function processOne(it){
+async function processOne(it,created){
   // Incremental load: a file already present (same path) WITH imagery is skipped without even
   // reading it; a known photo missing its thumbnails gets them regenerated (heal).
   if(it.path){ const owner=existingPaths.get(it.path); if(owner){ if(owner.thumb) return; const f=await it.getFile(); await healRenditions(owner,f); return; } }
@@ -2111,11 +2113,11 @@ async function processOne(it){
   // just record the extra folder path so it stays searchable under either folder name.
   // The check-and-reserve below runs synchronously (no await between), so it is race-safe
   // across the concurrent worker pool.
-  if(sz!=null && sizeIndex.has(sz)){ const owner=sizeIndex.get(sz); addPath(owner,it.path); if(it.path) existingPaths.set(it.path,owner); if(!owner.thumb) await healRenditions(owner,file); return; }
+  if(sz!=null && sizeIndex.has(sz) && String(sizeIndex.get(sz).name||"").toLowerCase()===String(it.name||"").toLowerCase()){ const owner=sizeIndex.get(sz); addPath(owner,it.path); if(it.path) existingPaths.set(it.path,owner); if(!owner.thumb) await healRenditions(owner,file); return; }
   const p={id:nextId++,path:it.path,name:it.name,file,size:sz,isHeic:false,thumb:null,lat:null,lng:null,alt:null,time:null,dir:null,marks:[],paths:[it.path],vpaths:[],acts:[]};
   if(sz!=null) sizeIndex.set(sz,p);
   if(it.path) existingPaths.set(it.path,p);
-  photos.push(p);
+  photos.push(p); if(created) created.push(p);
   try{
     const ex=await exifr.parse(file,{tiff:true,ifd0:true,exif:true,gps:true});
     if(ex){
@@ -2396,18 +2398,6 @@ function wireClearX(input){
 }
 wireClearX(document.getElementById("nameFilter"));
 document.getElementById("thumbSize").addEventListener("input",e=>{ document.documentElement.style.setProperty("--thumb",e.target.value+"px"); persistState(); });
-function deletePhoto(id){
-  const i=photos.findIndex(p=>p.id===id); if(i<0) return;
-  const removed=photos.splice(i,1)[0];
-  undoStack.push({photo:removed,index:i});
-  buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState();
-}
-function undoDelete(){
-  if(!undoStack.length) return;
-  const last=undoStack.pop();
-  photos.splice(Math.min(last.index,photos.length),0,last.photo);
-  buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState();
-}
 /* The gallery renders at most `galleryLimit` cards (default 50) — rendering thousands of thumbs at
    once was the big filter-toggle/zoom lag. Scrolling near the bottom (or the Show more button)
    loads the next chunk. Viewer navigation still covers EVERY matching photo. */
@@ -2535,7 +2525,7 @@ function hideHover(){ hoverview.classList.remove("show"); }
 /* lightbox with scroll zoom + reference inset + enhance */
 const lb=document.getElementById("imgPanel"),lbStage=document.getElementById("lbStage"),lbImg=document.getElementById("lbImg");
 const lbRef=document.getElementById("lbRef"),lbRefImg=document.getElementById("lbRefImg"),lbRefBox=document.getElementById("lbRefBox");
-const lbZoom=document.getElementById("lbZoom"),lbFull=document.getElementById("lbFull"),lbFullWrap=document.getElementById("lbFullWrap");
+const lbFull=document.getElementById("lbFull"),lbFullWrap=document.getElementById("lbFullWrap");
 let fsMode=false, lastFsNav=0, markTool="none", draft=null, polyPrev=null, dragging=false, erasing=false, redoMarks=[], eraseSnap=null, erasePhoto=null;
 let vScale=1,vTx=0,vTy=0,fitW=0,fitH=0,curUrl=null;
 const REF_W=160,MAXS=8;
@@ -3184,7 +3174,7 @@ function openFolderPop(){
    undo by timestamp so "undo" always reverts whichever edit happened most recently. */
 let tagUndoStack=[], tagRedoStack=[], recentTags=[];   // recentTags: last folders assigned via the UI, newest first (speeds up bulk tagging)
 function noteRecentTag(f){ if(!f) return; recentTags=[f].concat(recentTags.filter(x=>x!==f)).slice(0,10); }
-function snapshotTags(p){ return {paths:physPaths(p).slice(), vpaths:virtPaths(p).slice(), acts:(Array.isArray(p.acts)?p.acts.slice():[]), note:(p.note||""), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null), noGps:!!p.noGps}; }
+function snapshotTags(p){ return {paths:physPaths(p).slice(), vpaths:virtPaths(p).slice(), acts:(Array.isArray(p.acts)?p.acts.slice():[]), note:(p.note||""), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), glat:(p.glat!=null?p.glat:null), glng:(p.glng!=null?p.glng:null), noGps:!!p.noGps, time:(p.time!=null?p.time:null), alt:(p.alt!=null?p.alt:null)}; }
 /* EVERY data change goes through pushUndo so Ctrl+Z always works — keep it that way for new features.
    Entry fields (any combination): items (photo snapshots), act (deleted action), actCreate (new action),
    actEdit (title/description/done change), marksSnap (a photo's whole markup array), rot (rotation). */
@@ -3199,17 +3189,16 @@ function actState(a){ return {text:a.text,done:!!a.done,doneAt:a.doneAt||null,ho
 function recordActEdit(a,before){ const after=actState(a); if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({actEdit:{id:a.id,before,after}}); }
 function cpMarks(ms){ return JSON.parse(JSON.stringify(ms||[])); }
 function pushMarksSnap(p,before,after){ if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({marksSnap:{id:p.id,before,after}}); }
-function applySnapRaw(id,snap){ const p=photoById(id); if(!p) return; p.paths=snap.paths.slice(); p.vpaths=snap.vpaths.slice(); if(snap.acts) p.acts=snap.acts.slice(); if("note" in snap) p.note=snap.note; if(snap.lat!=null){ p.lat=snap.lat; p.lng=snap.lng; } if("glat" in snap){ p.glat=snap.glat; p.glng=snap.glng; } if("noGps" in snap) p.noGps=!!snap.noGps; }
-function applyTagSnapshot(id,snap){ applySnapRaw(id,snap); afterFolderChange(); if(folderPopShown) openFolderPop(); }
+function applySnapRaw(id,snap){ const p=photoById(id); if(!p) return; p.paths=snap.paths.slice(); p.vpaths=snap.vpaths.slice(); if(snap.acts) p.acts=snap.acts.slice(); if("note" in snap) p.note=snap.note; if(snap.lat!=null){ p.lat=snap.lat; p.lng=snap.lng; } if("glat" in snap){ p.glat=snap.glat; p.glng=snap.glng; } if("noGps" in snap) p.noGps=!!snap.noGps; if("time" in snap) p.time=snap.time; if("alt" in snap) p.alt=snap.alt; }
 function applyUndoEntry(a,dir){   // dir: "before" (undo) or "after" (redo)
   const undo=dir==="before";
   if(a.act){   // deleted action: undo restores it, redo deletes again
-    if(undo){ const d=a.act.data; if(!actById(d.id)){ actions.splice(Math.min(a.act.index,actions.length),0,Object.assign({},d)); if(nextActId<=d.id) nextActId=d.id+1; } }
+    if(undo){ const d=a.act.data; if(!actById(d.id)){ actions.splice(Math.min(a.act.index,actions.length),0,JSON.parse(JSON.stringify(d))); if(nextActId<=d.id) nextActId=d.id+1; } }
     else { actions=actions.filter(x=>x.id!==a.act.data.id); selActs.delete(a.act.data.id); }
   }
   if(a.actCreate){   // created action: undo removes it, redo recreates it
     if(undo){ actions=actions.filter(x=>x.id!==a.actCreate.data.id); selActs.delete(a.actCreate.data.id); }
-    else { const d=a.actCreate.data; if(!actById(d.id)){ actions.splice(Math.min(a.actCreate.index,actions.length),0,Object.assign({},d)); if(nextActId<=d.id) nextActId=d.id+1; } }
+    else { const d=a.actCreate.data; if(!actById(d.id)){ actions.splice(Math.min(a.actCreate.index,actions.length),0,JSON.parse(JSON.stringify(d))); if(nextActId<=d.id) nextActId=d.id+1; } }
   }
   if(a.actEdit){ const x=actById(a.actEdit.id); if(x){ const src=undo?a.actEdit.before:a.actEdit.after; x.text=src.text; x.done=src.done; x.doneAt=src.doneAt; x.hold=!!src.hold; if(src.steps) x.steps=src.steps.map(s=>({t:s.t,d:!!s.d})); x.porder=(src.porder&&src.porder.slice())||undefined; } }
   if(a.addPhotos){   // pasted/dropped photos: undo removes them (kept aside), redo puts them back
@@ -3241,9 +3230,9 @@ function undoTag(){ const a=tagUndoStack.pop(); if(!a) return false; tagRedoStac
 function redoTag(){ const a=tagRedoStack.pop(); if(!a) return false; tagUndoStack.push(a); applyUndoEntry(a,"after"); return true; }
 function undoLatest(open){
   const ms=open?curMarks():null;
-  const markT=(ms&&ms.length)?(ms[ms.length-1]._t||0):null;
+  const markT=(ms&&ms.length&&ms[ms.length-1]._t!=null)?ms[ms.length-1]._t:null;   // marks loaded from disk have no _t: never undoable as 'recent'
   const tagT=tagUndoStack.length?tagUndoStack[tagUndoStack.length-1].t:null;
-  if(markT===null&&tagT===null){ undoDelete(); return; }
+  if(markT===null&&tagT===null) return;
   if(tagT===null||(markT!==null&&markT>=tagT)){ redoMarks.push(ms.pop()); redrawMarks(); persistState(); ensureAnnotThumb(curPhoto()); }   // markup was the most recent edit
   else undoTag();
 }
@@ -3368,8 +3357,12 @@ async function refreshFolder(){
   } else openFolder();   // no remembered folder yet -> pick one
 }
 function clearAll(redraw){
+  if(lb.classList.contains("open")) closeViewer();   // the viewer must never keep showing a photo from the old project
+  if(pickMode) endPickMode(false);
+  clearAreaPreviews(); clearHighlight();
   if(boxRect){map.removeLayer(boxRect);boxRect=null;} boxBounds=null; setAreaBtn();
-  photos=[]; nextId=1; cluster=null; markerLayer.clearLayers(); undoStack=[]; lightboxList=[]; lightboxIndex=0; sizeIndex=new Map();
+  photos=[]; nextId=1; cluster=null; markerLayer.clearLayers(); lightboxList=[]; lightboxIndex=0; sizeIndex=new Map();
+  tagUndoStack=[]; tagRedoStack=[];   // undo entries reference photo/action ids of the OLD project — replaying them here would corrupt the new one
   selSet.clear(); dotMarkers.clear(); setAreaBtn(); if(typeof closeCtx==="function") closeCtx();
   actions=[]; nextActId=1; selActs.clear(); actionFilter=null; renderActions(); renderIpActions();
   if(measuring) stopMeasure();
@@ -3501,7 +3494,7 @@ document.getElementById("jsonInput").addEventListener("change",async e=>{ const 
 
 function serializeState(includeImages){
   return {
-    version:3, folderName, savedAt:new Date().toISOString(),
+    version:3, folderName, savedAt:new Date().toISOString(), nextActId,
     actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.hold)o.hold=true; if(a.steps&&a.steps.length)o.steps=a.steps.map(s=>({t:s.t,d:!!s.d})); if(Array.isArray(a.porder)&&a.porder.length){o.porder=a.porder; o.porderK=a.porder.map(id=>{const ph=photoById(id);return ph?metaKey(ph):null;}).filter(Boolean);} return o; }),
     settings:{ baseLayer: map.hasLayer(google)?"google":map.hasLayer(esri)?"esri":"none", showNoGeo, sortBy:currentSort,
       thumb:getComputedStyle(document.documentElement).getPropertyValue("--thumb").trim(),
@@ -3513,7 +3506,8 @@ function serializeState(includeImages){
       view:{ center:[map.getCenter().lat, map.getCenter().lng], zoom:map.getZoom() } },
     photos: photos.map(p=>{ const o={path:p.path,name:p.name,lat:p.lat,lng:p.lng,time:p.time,dir:p.dir,size:p.size,isHeic:p.isHeic};
       if(Array.isArray(p.paths)&&(p.paths.length!==1||p.paths[0]!==p.path))o.paths=p.paths;   // physical locations (incl. empty when pruned from disk)
-      if(Array.isArray(p.vpaths)&&p.vpaths.length)o.vpaths=p.vpaths;   // in-app tag memberships — never pruned by disk syncs
+      o.vpaths=Array.isArray(p.vpaths)?p.vpaths:[];   // always written: a missing field means 'legacy file' to the loader, which would reclassify real copies as tags
+      if(p.adhoc)o.adhoc=1;
       if(p.rot)o.rot=p.rot;
       if(p.glat!=null){ o.glat=p.glat; o.glng=p.glng; }   // dot was repositioned in-app; lat/lng show it, glat/glng keep the photo's true GPS
       if(Array.isArray(p.acts)&&p.acts.length)o.acts=p.acts;
@@ -3521,7 +3515,7 @@ function serializeState(includeImages){
       if(p.mkw!=null)o.mkw=p.mkw; if(p.mth!=null)o.mth=p.mth;
       if(p.note)o.note=p.note;
       if(p.noGps)o.noGps=1;   // pasted/dropped without GPS: the dot is a placed position, not a real fix
-      if(p.marks&&p.marks.length)o.marks=p.marks;
+      if(p.marks&&p.marks.length)o.marks=p.marks.map(mk=>{ if(mk&&mk._t!=null){ const c={...mk}; delete c._t; return c; } return mk; });
       if(includeImages){ if(p.thumb){ o.thumb=p.thumb; if(p.tv)o.tv=p.tv; } if(p.preview)o.preview=p.preview; }   // thumb + screenshot-quality preview; full quality always comes from disk
       return o; })
   };
@@ -3542,12 +3536,15 @@ function applyState(st){
   if(st.savedAt){ const t=Date.parse(st.savedAt); if(!isNaN(t)) lastSavedAt=t; }
   (st.photos||[]).forEach(m=>{
     let phys=Array.isArray(m.paths)?m.paths:(m.path?[m.path]:[]), vp=Array.isArray(m.vpaths)?m.vpaths:null;
+    if(vp===null&&(st.version||0)>=3) vp=[];   // v3 simply omitted empty tag lists
     if(vp===null){   // legacy file (mixed paths): keep the anchor path as physical, treat extras as virtual so tags can never be wrongly pruned
       vp=phys.filter(pa=>pa!==m.path); phys=m.path?[m.path]:phys.slice(0,1);
     }
-    photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,rot:m.rot||0,lat:m.lat,lng:m.lng,glat:(m.glat!=null?m.glat:null),glng:(m.glng!=null?m.glng:null),time:m.time,dir:m.dir,alt:(m.alt!=null?m.alt:null),mkw:(m.mkw!=null?m.mkw:null),mth:(m.mth!=null?m.mth:null),acts:Array.isArray(m.acts)?m.acts.slice():[],note:(typeof m.note==="string"?m.note:""),noGps:!!m.noGps,marks:Array.isArray(m.marks)?m.marks:[]});
+    photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,rot:m.rot||0,lat:m.lat,lng:m.lng,glat:(m.glat!=null?m.glat:null),glng:(m.glng!=null?m.glng:null),time:m.time,dir:m.dir,alt:(m.alt!=null?m.alt:null),mkw:(m.mkw!=null?m.mkw:null),mth:(m.mth!=null?m.mth:null),acts:Array.isArray(m.acts)?m.acts.slice():[],note:(typeof m.note==="string"?m.note:""),noGps:!!m.noGps,adhoc:!!m.adhoc,marks:Array.isArray(m.marks)?m.marks.map(mk=>{ if(mk&&mk._t!=null){ const c={...mk}; delete c._t; return c; } return mk; }):[]});
   });   // baked full-quality renditions from old files are intentionally dropped
   rebuildPorders();   // ids were just renumbered — restore each action's photo order from the key form
+  if(st.nextActId>nextActId) nextActId=st.nextActId;   // deleted action numbers are never reissued
+  { const live=new Set(actions.map(a=>a.id)); for(const ph of photos) if(Array.isArray(ph.acts)&&ph.acts.some(id=>!live.has(id))) ph.acts=ph.acts.filter(id=>live.has(id)); }   // drop links to actions that no longer exist
   migrateActNotes();
   if(lastFullCache) overlayImagesFromCache(lastFullCache);   // the .json is metadata-only — fill thumbs/previews back in from the browser image cache
   const s=st.settings||{};
@@ -3620,19 +3617,8 @@ function maybeOfferReconnect(){
   else showBanner('Images live in the photos folder — connect <b>'+esc(folderName||"the photos folder")+'</b> to load them.',()=>{ hideBanner(); openFolder(); });
 }
 async function reconnectFolder(){ if(!dirHandle)return; if(!(await ensurePermission(dirHandle))){ alert("Permission to read the folder was not granted."); return; } folderName=dirHandle.name; hideBanner();
-  const keep=snapshotMeta(photos);   // preserve folder additions + markup across the reload
-  await loadFromHandle(dirHandle);
-  applyMetaMap(keep); rebuildPorders(); buildCluster(); renderClusters(); updateGallery(); persistState();
-}
-async function reopenLastJson(){
-  if(!jsonHandle){ try{ jsonHandle=await idbGet("jsonHandle"); }catch(e){} }
-  if(!jsonHandle)return;
-  try{
-    let perm=await jsonHandle.queryPermission({mode:"read"});
-    if(perm!=="granted"){ perm=await jsonHandle.requestPermission({mode:"read"}); releaseStuckDrag(); }
-    if(perm!=="granted") return;
-    saveFileHandle=jsonHandle; loadedJsonName=jsonHandle.name||loadedJsonName; const f=await jsonHandle.getFile(); loadStateText(await f.text()); hideBanner();
-  }catch(e){ console.warn(e); }
+  await loadFromHandle(dirHandle,true,{prune:true});   // append: heals images onto the existing photos, keeps actions/notes/pasted photos intact
+  buildCluster(); renderClusters(); updateGallery(); renderActions(); persistState();
 }
 async function ensurePermission(handle){ try{ const o={mode:"read"}; if((await handle.queryPermission(o))==="granted")return true; const g=(await handle.requestPermission(o))==="granted"; releaseStuckDrag(); if(g)return true; }catch(e){ releaseStuckDrag(); } return false; }
 let permArmed=false;
@@ -3677,7 +3663,7 @@ function esc(s){ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;"
 function applyShared(P){
   if(!P||!Array.isArray(P.p))return false;
   if(boxRect){map.removeLayer(boxRect);boxRect=null;} boxBounds=null; setAreaBtn();
-  photos=[]; nextId=1; undoStack=[];
+  photos=[]; nextId=1; tagUndoStack=[]; tagRedoStack=[];
   P.p.forEach(m=>photos.push({id:nextId++,path:m[2]||"",name:m[2]||"",paths:m[2]?[m[2]]:[],vpaths:[],file:null,size:null,isHeic:false,thumb:null,lat:(m[0]!=null?m[0]:null),lng:(m[1]!=null?m[1]:null),time:m[3]||null,dir:null,marks:[]}));
   buildDateFilter(); buildCluster(); renderClusters(); updateStats();
   if(P.vw){ try{ map.setView([P.vw[0],P.vw[1]],P.vw[2]); }catch(e){} }
@@ -4664,8 +4650,8 @@ async function checkFieldChanges(){
       applyState(full);
       // lastState (image-free autosave) is written on every change; if newer than the cached full snapshot, overlay its fresh folders.
       if(last && Array.isArray(last.photos) && last.savedAt && (!full.savedAt || last.savedAt>full.savedAt)){
-        if(Array.isArray(last.actions)){ actions=normActs(last.actions); migrateActNotes(); }   // actions list travels with the newer metadata
-        applyMetaMap(snapshotMeta(last.photos)); rebuildPorders(); buildCluster(); renderClusters(); updateGallery(); renderActions(); persistState();
+        applyState(last); overlayImagesFromCache(full);   // an additive overlay would resurrect cleared notes/links/removed photos
+        buildCluster(); renderClusters(); updateGallery(); renderActions(); persistState();
       }
     }
     else if(last && last.photos && last.photos.length){ applyState(last); }
