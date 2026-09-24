@@ -4027,18 +4027,16 @@ async function mUploadPhotos(files){
       let src=lat!=null?"exif":null;
       if(!t&&f.lastModified) t=f.lastModified;   // camera files: file time \u2248 taken time
       if(lat==null&&t){ const cr=mCrumbAt(t); if(cr){ lat=cr.lat; lng=cr.lng; src="track"; } }
-      let disp=f; if(isHeic(f)){ try{ disp=await heicToJpegBlob(f,0.85); }catch(e){} }
-      const url=URL.createObjectURL(disp);
-      let im; try{ im=await loadImg(url); }catch(e){ URL.revokeObjectURL(url); continue; }
-      const sc=Math.min(1,2048/Math.max(im.width,im.height));
-      const c=document.createElement("canvas"); c.width=Math.max(1,Math.round(im.width*sc)); c.height=Math.max(1,Math.round(im.height*sc));
-      c.getContext("2d").drawImage(im,0,0,c.width,c.height);
-      URL.revokeObjectURL(url);
-      const b64=c.toDataURL("image/jpeg",0.85).split(",")[1];
-      const base=String(f.name||("photo"+(i+1))).replace(/\.[^.]+$/,"").replace(/[^\w\- ]+/g,"").slice(0,40)||("photo"+(i+1));
-      const path="uploads/"+batch+"-"+(i+1)+"-"+base+".jpg";
+      /* ORIGINAL bytes, untouched: the EXIF GPS stays inside the file and the DESKTOP reads it —
+         the same proven path as an emailed copy. No resizing, no phone-side parsing to trust. */
+      if(f.size>25*1024*1024) continue;   // sanity cap for the GitHub contents API
+      const b64=await new Promise((res,rej)=>{ const rd=new FileReader(); rd.onload=()=>res(String(rd.result).split(",")[1]); rd.onerror=rej; rd.readAsDataURL(f); });
+      const rawName=String(f.name||("photo"+(i+1)));
+      const extM=rawName.match(/\.[A-Za-z0-9]+$/); const ext=extM?extM[0].toLowerCase():".jpg";
+      const base=rawName.replace(/\.[^.]+$/,"").replace(/[^\w\- ]+/g,"").slice(0,40)||("photo"+(i+1));
+      const path="uploads/"+batch+"-"+(i+1)+"-"+base+ext;
       await ghPutB64(cfg,path,b64,"Photo upload from phone");
-      entries.push({f:path,n:batch+"-"+(i+1)+"-"+base+".jpg",lat,lng,alt,t,src,ts:Date.now()});
+      entries.push({f:path,n:batch+"-"+(i+1)+"-"+base+ext,lat,lng,alt,t,src,ts:Date.now()});
     }
     if(!entries.length) throw new Error("no readable images");
     setB("Registering\u2026",true); mToast("Registering\u2026",true);
@@ -4482,7 +4480,7 @@ async function checkPhotoUploads(){   // polled: phone uploads auto-merge as soo
       for(const it of items){
         const bytes=await ghGetBin(cfg,it.f); if(!bytes) continue;
         const nm=it.n||it.f.split("/").pop();
-        const file=new File([bytes],nm,{type:"image/jpeg"});
+        const file=new File([bytes],nm,{type:(/\.(heic|heif)$/i.test(nm)?"image/heic":/\.png$/i.test(nm)?"image/png":"image/jpeg")});
         metaByName.set(nm,it);
         fitems.push({name:nm,path:"phone-uploads/"+nm,getFile:async()=>file});
       }
@@ -4490,9 +4488,9 @@ async function checkPhotoUploads(){   // polled: phone uploads auto-merge as soo
       await ingest(fitems,true);
       const added=photos.filter(ph=>ph.id>=startId);
       const fin=x=>typeof x==="number"&&isFinite(x);
-      for(const ph of added){ const m2=metaByName.get(ph.name); if(m2){   // the resized JPEG lost its EXIF; the manifest carried it
-        if(fin(m2.lat)&&fin(m2.lng)){ ph.lat=m2.lat; ph.lng=m2.lng; ph.noGps=false; }
-        if(m2.t) ph.time=m2.t; if(fin(m2.alt)) ph.alt=m2.alt; } }
+      for(const ph of added){ const m2=metaByName.get(ph.name); if(m2){   // the file's own EXIF (read during ingest) wins; the manifest only fills gaps (e.g. from the phone's trail)
+        if(ph.lat==null&&fin(m2.lat)&&fin(m2.lng)){ ph.lat=m2.lat; ph.lng=m2.lng; ph.noGps=false; }
+        if(ph.time==null&&m2.t) ph.time=m2.t; if(ph.alt==null&&fin(m2.alt)) ph.alt=m2.alt; } }
       /* re-uploads of photos already in the project get swallowed by the byte-size dedupe —
          if THIS upload carries a location for one that sits as a placed no-GPS dot, move it home */
       const healed=[]; const addedSet=new Set(added.map(ph=>ph.id));
