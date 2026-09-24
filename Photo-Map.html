@@ -4448,7 +4448,7 @@ function mobileBoot(){
    service worker WITH their GPS intact — Android only strips location on the file-picker path.
    Requires the app installed to the home screen once (Chrome menu -> Add to Home screen). */
 async function mSetupShare(){
-  try{ if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(r=>{ try{ r.update(); }catch(e){} }); }catch(e){}   // receiver updates must never sit behind the CDN cache
+  try{ if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v="+(Date.parse(document.lastModified)||0),{updateViaCache:"none"}).then(r=>{ try{ r.update(); }catch(e){} }); }catch(e){}   // version-stamped URL: the CDN has never cached it, so the newest receiver always lands with the page
   try{
     const q=new URLSearchParams(location.search);
     if(!q.has("shared")) return;
