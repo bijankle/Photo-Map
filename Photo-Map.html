@@ -3687,6 +3687,7 @@ function mCh(id){ const p=mPend(); return (p.changes||{})[id]||{}; }
 function mSetCh(id,patch){ const p=mPend(); p.changes=p.changes||{}; p.changes[id]=Object.assign({},p.changes[id]||{},patch); mPendSave(p); }
 function mPn(pid){ const p=mPend(); const e=(p.pnotes||{})[String(pid)]; return e?e.t:null; }   // pending photo (field) note on this phone
 function mSetPn(pid,name,v){ const p=mPend(); p.pnotes=p.pnotes||{}; if(v) p.pnotes[String(pid)]={n:name||"",t:v}; else delete p.pnotes[String(pid)]; mPendSave(p); }
+function mPendSnap(p){ return JSON.stringify({c:p.changes||{},n:p.pnotes||{},a:p.newActs||[],o:p.actOrder||[]}); }
 function mChCount(){ const p=mPend(); return Object.keys(p.changes||{}).length+Object.keys(p.pnotes||{}).length+(p.newActs||[]).length+(Array.isArray(p.actOrder)&&p.actOrder.length?1:0); }
 /* Field editing: the phone can add actions, add sub-actions, and edit titles/sub-action text
    (no deleting). Everything lands in pmField and syncs back via changes.json:
@@ -3808,6 +3809,12 @@ async function mLoadPack(){
     mPack=JSON.parse(text);
     const p=mPend();
     if(p.sentAt&&mPack.exportedAt&&Date.parse(mPack.exportedAt)>p.sentAt){ mPendSave({}); }   // desktop has re-exported since we sent: its truth wins
+    else if(p.sentAt&&p.sentSnap){   // desktop merged our batch (changes.json now empty) and nothing new was edited here since: drop the stale count
+      try{ const cs=await ghGetRaw(cfg,"changes.json"); const cj=cs?JSON.parse(cs):null;
+        const empty=!cj||((!cj.changes||!Object.keys(cj.changes).length)&&(!cj.photoNotes||!Object.keys(cj.photoNotes).length)&&!(cj.newActs||[]).length&&!(cj.actOrder||[]).length);
+        if(empty&&mPendSnap(p)===p.sentSnap) mPendSave({});
+      }catch(e){}
+    }
     mStartGeo();
     mShowList();
   }catch(err){ mShowSetup("Could not load: "+(err&&err.message||err)); }
@@ -3821,7 +3828,9 @@ function mStartGeo(){
   mGeoWatch=navigator.geolocation.watchPosition(pos=>{
     const first=!mGeo;
     mGeo={lat:pos.coords.latitude,lng:pos.coords.longitude};
-    if(document.getElementById("mList")){ if(first) mShowList(); else mGeoLive(false); }   // first fix re-sorts the list (and rebuilds its map); later ones just move the pins
+    mAddCrumb(mGeo.lat,mGeo.lng);
+    const picking=mUpBusy||(window.mPickT&&Date.now()-window.mPickT<180000);
+    if(document.getElementById("mList")){ if(first&&!picking) mShowList(); else mGeoLive(false); }   // never rebuild the screen mid-pick/upload — that used to eat the selection
     else mGeoLive(first);
   },()=>{},{enableHighAccuracy:true,maximumAge:10000,timeout:20000});
 }
@@ -3875,17 +3884,11 @@ function mShowList(){
     }).join(''):'<div class="m-note" style="padding-top:40px">No open actions in the pack.</div>')
     +'</div>'
     +'<div class="m-foot"><button class="m-btn ghost" id="mUpBtn">Upload photos to the map</button>'
-    +'<input type="file" id="mUpFile" multiple style="display:none" />'
     +'<button class="m-btn" id="mSend"'+(n?'':' disabled')+'>Send changes back ('+n+')</button>'
     +'<div class="m-note" id="mSendNote">'+(n?'edits waiting to sync':'no unsent changes')+'</div></div>'
     +'<div class="m-homemap" id="mHomeMap"></div>');
   document.getElementById("mRefresh").addEventListener("click",mLoadPack);
-  const upBtn=document.getElementById("mUpBtn"), upIn=document.getElementById("mUpFile");
-  upBtn.addEventListener("click",()=>upIn.click());
-  upIn.addEventListener("change",e=>{ const all=Array.from(e.target.files||[]); e.target.value="";
-    const fs=all.filter(f=>/^image\//i.test(f.type||"")||IMG_RE.test(f.name||""));
-    if(!fs.length){ if(all.length){ upBtn.textContent="Those weren't images \u2014 try again"; setTimeout(()=>{ upBtn.textContent="Upload photos to the map"; },2500); } return; }
-    mUploadPhotos(fs,upBtn); });
+  document.getElementById("mUpBtn").addEventListener("click",()=>{ mUpInput().click(); window.mPickT=Date.now(); });
   document.getElementById("mSend").addEventListener("click",mSendChanges);
   mWireUndo();
   document.getElementById("mNewAct").addEventListener("keydown",e=>{
@@ -3931,19 +3934,50 @@ function mWireCardDrag(){
     el.addEventListener("touchend",end); el.addEventListener("touchcancel",end);
   });
 }
+/* The picker input lives on <body>, outside the re-rendered screens: a GPS fix arriving while
+   the system picker is open used to rebuild the screen and silently drop the selection. */
+function mUpInput(){
+  let el=document.getElementById("mUpFileG");
+  if(el) return el;
+  el=document.createElement("input"); el.type="file"; el.multiple=true; el.id="mUpFileG"; el.style.display="none";
+  document.body.appendChild(el);
+  el.addEventListener("change",e=>{
+    const all=Array.from(e.target.files||[]); e.target.value="";
+    const fs=all.filter(f=>/^image\//i.test(f.type||"")||IMG_RE.test(f.name||""));
+    const b=document.getElementById("mUpBtn");
+    if(!fs.length){ if(all.length&&b){ b.textContent="Those weren't images \u2014 try again"; setTimeout(()=>{ const b2=document.getElementById("mUpBtn"); if(b2) b2.textContent="Upload photos to the map"; },2500); } return; }
+    mUploadPhotos(fs);
+  });
+  return el;
+}
+/* Breadcrumb trail: Android strips GPS EXIF from any photo a browser receives, so while the app
+   is open we keep a light trail of live fixes (every 15s, 3 days) and geotag uploads by matching
+   each photo's taken-time to the trail. Real EXIF GPS still wins when it survives. */
+function mCrumbs(){ try{ return JSON.parse(localStorage.getItem("pmCrumbs")||"[]")||[]; }catch(e){ return []; } }
+let mLastCrumbT=0;
+function mAddCrumb(lat,lng){ const now=Date.now(); if(now-mLastCrumbT<15000) return; mLastCrumbT=now;
+  try{ const a=mCrumbs(); a.push({t:now,lat:+lat.toFixed(6),lng:+lng.toFixed(6)});
+    const cut=now-3*864e5; while(a.length&&a[0].t<cut) a.shift(); if(a.length>4000) a.splice(0,a.length-4000);
+    localStorage.setItem("pmCrumbs",JSON.stringify(a)); }catch(e){} }
+function mCrumbAt(t){ let best=null,bd=600000;   // nearest fix within 10 minutes
+  for(const c of mCrumbs()){ const d=Math.abs(c.t-t); if(d<=bd){ bd=d; best=c; } } return best; }
+let mUpBusy=false;
 /* Photo dump: pick or take photos on the phone; each is resized to a 2048px JPEG and pushed to
    the private data repo with its GPS/time carried in uploads.json. Assigning to actions stays a
    desktop job — these arrive there as ordinary unassigned photos. */
-async function mUploadPhotos(files,btn){
-  const cfg=ghCfg(); const orig="Upload photos to the map";
-  if(!cfg.token){ btn.textContent="Set the repo + token first (REFRESH screen)"; setTimeout(()=>{ btn.textContent=orig; },3000); return; }
-  btn.disabled=true;
+async function mUploadPhotos(files){
+  const orig="Upload photos to the map";
+  const setB=(t,dis)=>{ const b=document.getElementById("mUpBtn"); if(b){ b.textContent=t; b.disabled=!!dis; } };
+  const cfg=ghCfg();
+  if(!cfg.token){ setB("Set the repo + token first (REFRESH screen)"); setTimeout(()=>setB(orig),3000); return; }
+  if(mUpBusy) return;
+  mUpBusy=true; setB("Starting\u2026",true);
   const d0=new Date(), pd=n2=>String(n2).padStart(2,"0");
   const batch=""+d0.getFullYear()+pd(d0.getMonth()+1)+pd(d0.getDate())+"-"+pd(d0.getHours())+pd(d0.getMinutes())+pd(d0.getSeconds());
   const entries=[];
   try{
     for(let i=0;i<files.length;i++){
-      btn.textContent="Uploading "+(i+1)+" / "+files.length+"\u2026";
+      setB("Uploading "+(i+1)+" / "+files.length+"\u2026",true);
       const f=files[i];
       let lat=null,lng=null,alt=null,t=null;
       try{ const ex=await exifr.parse(f,{tiff:true,ifd0:true,exif:true,gps:true,xmp:true});
@@ -3951,6 +3985,9 @@ async function mUploadPhotos(files,btn){
           const dt=ex.DateTimeOriginal||ex.CreateDate||ex.ModifyDate; if(dt instanceof Date&&!isNaN(dt)) t=dt.getTime();
           alt=altFromExif(ex); } }catch(e){}
       if(lat==null){ try{ const g=await exifr.gps(f); if(g&&typeof g.latitude==="number"&&typeof g.longitude==="number"){ lat=g.latitude; lng=g.longitude; } }catch(e){} }
+      let src=lat!=null?"exif":null;
+      if(!t&&f.lastModified) t=f.lastModified;   // camera files: file time \u2248 taken time
+      if(lat==null&&t){ const cr=mCrumbAt(t); if(cr){ lat=cr.lat; lng=cr.lng; src="track"; } }
       let disp=f; if(isHeic(f)){ try{ disp=await heicToJpegBlob(f,0.85); }catch(e){} }
       const url=URL.createObjectURL(disp);
       let im; try{ im=await loadImg(url); }catch(e){ URL.revokeObjectURL(url); continue; }
@@ -3962,21 +3999,21 @@ async function mUploadPhotos(files,btn){
       const base=String(f.name||("photo"+(i+1))).replace(/\.[^.]+$/,"").replace(/[^\w\- ]+/g,"").slice(0,40)||("photo"+(i+1));
       const path="uploads/"+batch+"-"+(i+1)+"-"+base+".jpg";
       await ghPutB64(cfg,path,b64,"Photo upload from phone");
-      entries.push({f:path,n:batch+"-"+(i+1)+"-"+base+".jpg",lat,lng,alt,t});
+      entries.push({f:path,n:batch+"-"+(i+1)+"-"+base+".jpg",lat,lng,alt,t,src});
     }
     if(!entries.length) throw new Error("no readable images");
-    btn.textContent="Registering\u2026";
+    setB("Registering\u2026",true);
     let man={v:1,items:[]};
     try{ const cur=await ghGetRaw(cfg,"uploads.json"); if(cur){ const j=JSON.parse(cur); if(j&&Array.isArray(j.items)) man=j; } }catch(e){}
     man.v=1; man.items=(man.items||[]).concat(entries); man.updatedAt=new Date().toISOString();
     await ghPutFile(cfg,"uploads.json",JSON.stringify(man),"Photo uploads from phone");
-    const withGps=entries.filter(en=>en.lat!=null).length;
-    btn.textContent="\u2713 Uploaded "+entries.length+" ("+withGps+" with location) \u2014 merge on the desktop";
+    const gExif=entries.filter(en=>en.src==="exif").length, gTrack=entries.filter(en=>en.src==="track").length, g0=entries.length-gExif-gTrack;
+    setB("\u2713 Uploaded "+entries.length+(gTrack?(" ("+gExif+" GPS, "+gTrack+" from your track)"):(" ("+gExif+" with location)"))+" \u2014 merge on desktop");
     const note=document.getElementById("mSendNote");
-    if(note&&withGps<entries.length) note.textContent="No location on "+(entries.length-withGps)+" photo"+(entries.length-withGps===1?"":"s")+": browse to DCIM/Camera in the picker (\u2630 menu) \u2014 Google Photos entries arrive with GPS stripped.";
-    setTimeout(()=>{ btn.textContent=orig; btn.disabled=false; },5000);
+    if(note&&g0) note.textContent=g0+" photo"+(g0===1?"":"s")+" had no location: Android strips photo GPS from browsers, and your trail has no fix near "+(g0===1?"its":"their")+" taken-time. Keep this app open on site and they'll tag from your track.";
+    mUpBusy=false; setTimeout(()=>{ const b=document.getElementById("mUpBtn"); if(b&&!mUpBusy){ b.textContent=orig; b.disabled=false; } },6000);
   }catch(err){
-    btn.textContent="Upload failed \u2014 tap to retry"; btn.disabled=false;
+    mUpBusy=false; setB("Upload failed \u2014 tap to retry");
     try{ console.warn("upload",err); }catch(e){}
   }
 }
@@ -4008,7 +4045,7 @@ async function mSendChanges(){
     await ghPutFile(cfg,"changes.json",JSON.stringify({v:2,updatedAt:new Date().toISOString(),changes:p.changes||{},photoNotes:p.pnotes||{},
       newActs:(p.newActs||[]).map(x=>({text:x.text,steps:(x.steps||[]).map(s=>({t:s.t,d:!!s.d})),done:!!x.done,doneAt:x.doneAt||null,hold:!!x.hold})),
       actOrder:(Array.isArray(p.actOrder)&&p.actOrder.length)?mActOrder().map(i=>(mPack.actions[i]||{}).id).filter(x=>x!=null):[]}),"Field changes from phone");
-    p.sentAt=Date.now(); mPendSave(p);
+    p.sentAt=Date.now(); p.sentSnap=mPendSnap(p); mPendSave(p);
     note.textContent="✓ Sent — merge on desktop when you're back"; btn.disabled=false;
   }catch(err){ note.textContent="Failed: "+(err&&err.message||err); btn.disabled=false; }
 }
