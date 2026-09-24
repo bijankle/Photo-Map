@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#5865F2" />
+<link rel="manifest" href="manifest.webmanifest" />
 <title>PhotoMap</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -4417,7 +4419,31 @@ async function mCheckFresh(){
     location.reload();
   }catch(e){}
 }
-function mobileBoot(){ document.body.classList.add("mobile"); mCheckFresh(); mLoadPack(); }
+function mobileBoot(){
+  document.body.classList.add("mobile");
+  const sharedIn=/[?&]shared=/.test(location.search);
+  if(!sharedIn) mCheckFresh();   // never self-reload while shared photos are waiting to upload
+  mSetupShare();
+  mLoadPack();
+}
+/* Share-sheet intake: photos shared from the gallery (Google Photos etc.) arrive through the
+   service worker WITH their GPS intact — Android only strips location on the file-picker path.
+   Requires the app installed to the home screen once (Chrome menu -> Add to Home screen). */
+async function mSetupShare(){
+  try{ if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js"); }catch(e){}
+  try{
+    const q=new URLSearchParams(location.search);
+    if(!q.has("shared")) return;
+    history.replaceState(null,"",location.pathname);
+    const cache=await caches.open("pm-shared");
+    const metaR=await cache.match("meta"); if(!metaR) return;
+    const meta=await metaR.json(); const files=[];
+    for(let i=0;i<meta.length;i++){ const r=await cache.match("file-"+i);
+      if(r){ const b=await r.blob(); files.push(new File([b],(meta[i]&&meta[i].n)||("shared-"+(i+1)+".jpg"),{type:(meta[i]&&meta[i].t)||"image/jpeg"})); } }
+    try{ await caches.delete("pm-shared"); }catch(e){}
+    if(files.length) setTimeout(()=>mUploadPhotos(files),900);   // straight into the normal upload pipeline
+  }catch(e){}
+}
 
 /* Desktop side of the loop: offer to merge field changes pushed by the phone. */
 let _upMerging=false;
