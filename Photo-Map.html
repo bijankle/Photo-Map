@@ -32,6 +32,30 @@
   .brand .mark::after{content:"";position:absolute;inset:0;margin:auto;width:6px;height:6px;border-radius:50%;background:#fff;}
   .brand h1{font-family:var(--font);font-weight:700;font-size:17px;margin:0;color:var(--ink);}
   .brand h1 span{color:var(--accent);}
+  .menubar{display:flex;align-items:center;gap:2px;margin-left:10px;height:100%;}
+  .mb{position:relative;}
+  .mb-btn{font:500 13px var(--font);color:var(--ink);background:none;border:none;border-radius:6px;padding:6px 11px;cursor:pointer;}
+  .mb-btn:hover,.mb.open .mb-btn{background:var(--accent-tint);color:var(--accent2);}
+  .mb-drop{display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:7000;min-width:290px;background:var(--panel);border:1px solid var(--line2);border-radius:9px;box-shadow:0 12px 32px #1e1f2233;padding:5px;}
+  .mb.open .mb-drop{display:block;}
+  .mi{display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;text-align:left;font:13px var(--font);color:var(--ink);background:none;border:none;border-radius:6px;padding:8px 11px;cursor:pointer;white-space:nowrap;}
+  .mi:hover{background:var(--accent-tint);color:var(--accent2);}
+  .mi .mk{margin-left:auto;padding-left:18px;font:11px var(--mono);color:var(--dim);}
+  .mi svg{width:16px;height:16px;fill:var(--muted);flex-shrink:0;}
+  .mi.danger{color:var(--bad);}
+  .mi.danger:hover{background:#FCEBEC;color:var(--bad);}
+  .mi-chk input{margin:0;accent-color:var(--accent);}
+  .msep{height:1px;background:var(--line);margin:5px 6px;}
+  .ynmodal{position:fixed;inset:0;z-index:9500;background:#1E1F2266;display:none;align-items:center;justify-content:center;}
+  .ynmodal.show{display:flex;}
+  .yn-win{width:min(460px,92vw);background:var(--panel);border-radius:12px;border:1px solid var(--line2);box-shadow:0 24px 64px #1e1f2255;padding:20px 22px 16px;}
+  .yn-win h3{margin:0 0 10px;font-size:16px;color:var(--ink);}
+  .yn-msg{font-size:13px;line-height:1.55;color:var(--text);white-space:pre-line;}
+  .yn-btns{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+  .yn-no,.yn-yes{font:600 13px var(--font);border-radius:8px;padding:8px 16px;cursor:pointer;}
+  .yn-no{background:var(--panel);color:var(--ink);border:1px solid var(--line2);}
+  .yn-yes{background:var(--accent);color:#fff;border:1px solid var(--accent);}
+  .yn-yes.danger{background:var(--bad);border-color:var(--bad);}
   .savestat{font-family:var(--mono);font-size:9px;color:var(--faint);margin-left:8px;align-self:flex-end;padding-bottom:2px;white-space:nowrap;}
   .savestat.busy{color:var(--dim);}
   .savestat.bad{color:#fff;background:var(--bad);padding:1px 6px;border-radius:4px;font-weight:700;}   /* a failed save must be impossible to miss */
@@ -656,15 +680,31 @@
 
 <header>
   <div class="brand"><div class="mark"></div><h1>Photo<span>Map</span></h1><span class="build" id="buildStamp" title="When this copy of the app was published — if it's older than the latest change, you're running a stale copy"></span><span class="savestat" id="saveStatus" title="Auto-save status of the project .json"></span></div>
-  <div class="toolbar">
-    <button class="btn grpL" id="btnFolder">Open Folder</button>
-    <button class="btn grpL" id="btnOpenJson">Open .JSON</button>
-    <button class="btn grpL" id="btnSave" title="Changes auto-save onto the loaded .json — click to force an immediate save">Save</button>
-    <button class="btn grpL" id="btnSaveAs" title="Choose a new .json to keep this project in (metadata only — no embedded photos)">Save As</button>
-    <span class="sep"></span>
-    <button class="btn grpR" id="btnClear">Clear</button>
-    <button class="btn grpR" id="btnRefresh" title="Re-scan the main photos folder: add what's new, remove what's gone">Refresh</button>
-  </div>
+  <nav class="menubar" id="menubar">
+    <div class="mb"><button class="mb-btn" type="button">File</button><div class="mb-drop">
+      <button class="mi" id="btnOpenJson" type="button">Open project (.json)…</button>
+      <button class="mi" id="btnSave" type="button" title="Changes auto-save onto the loaded .json — this forces an immediate save">Save project now</button>
+      <button class="mi" id="btnSaveAs" type="button" title="Choose a new .json to keep this project in (metadata only — no embedded photos)">Save project as…</button>
+      <div class="msep"></div>
+      <button class="mi" id="btnFolder" type="button" title="Adds the folder's photos to this project (nothing is removed)">Add photos from a folder…</button>
+      <button class="mi" id="btnRefresh" type="button" title="Re-scan the main photos folder: add what's new, remove photos whose files were deleted">Re-scan photo folder (add new, drop deleted)…</button>
+      <div class="msep"></div>
+      <button class="mi" id="miXlsx" type="button">Export actions to Excel…</button>
+      <button class="mi" id="miPush" type="button" title="The phone syncs automatically — this pushes immediately">Sync to phone now</button>
+      <div class="msep"></div>
+      <button class="mi danger" id="btnClear" type="button">Close project &amp; clear the map…</button>
+    </div></div>
+    <div class="mb"><button class="mb-btn" type="button">Edit</button><div class="mb-drop">
+      <button class="mi" id="miUndo" type="button">Undo<span class="mk">Ctrl+Z</span></button>
+      <button class="mi" id="miRedo" type="button">Redo<span class="mk">Ctrl+Y</span></button>
+    </div></div>
+    <div class="mb"><button class="mb-btn" type="button">View</button><div class="mb-drop">
+      <label class="mi mi-chk"><input type="checkbox" id="showNoGeo" /><span>Show photos without location</span></label>
+    </div></div>
+    <div class="mb"><button class="mb-btn" type="button">Tools</button><div class="mb-drop">
+      <button class="mi" id="btnSettings" type="button"><svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm8.6 3.5c0-.6-.05-1.1-.15-1.6l2-1.55-2-3.4-2.35.95a8 8 0 0 0-2.75-1.6L14.95 2h-4l-.4 2.8a8 8 0 0 0-2.75 1.6L5.45 5.45l-2 3.4 2 1.55c-.1.5-.15 1-.15 1.6s.05 1.1.15 1.6l-2 1.55 2 3.4 2.35-.95a8 8 0 0 0 2.75 1.6l.4 2.8h4l.4-2.8a8 8 0 0 0 2.75-1.6l2.35.95 2-3.4-2-1.55c.1-.5.15-1 .15-1.6z"/><circle cx="12" cy="12" r="4.4" fill="#fff"/><circle cx="12" cy="12" r="2.6" fill="var(--accent)"/></svg><span>Settings…</span></button>
+    </div></div>
+  </nav>
   <input id="folderInput" type="file" webkitdirectory directory multiple style="display:none" />
   <input id="origInput" type="file" webkitdirectory directory multiple style="display:none" />
   <input id="jsonInput" type="file" accept="application/json,.json" style="display:none" />
@@ -675,10 +715,9 @@
     <div class="stat view"><div class="v" id="stView">0</div><div class="k">In View</div></div>
   </div>
   <div class="spacer"></div>
-  <label class="toggle"><input type="checkbox" id="showNoGeo" /><span class="switch"></span><span class="lbl">Show photos without location</span></label>
-  <button class="cogbtn" id="btnSettings" title="Settings"><svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm8.6 3.5c0-.6-.05-1.1-.15-1.6l2-1.55-2-3.4-2.35.95a8 8 0 0 0-2.75-1.6L14.95 2h-4l-.4 2.8a8 8 0 0 0-2.75 1.6L5.45 5.45l-2 3.4 2 1.55c-.1.5-.15 1-.15 1.6s.05 1.1.15 1.6l-2 1.55 2 3.4 2.35-.95a8 8 0 0 0 2.75 1.6l.4 2.8h4l.4-2.8a8 8 0 0 0 2.75-1.6l2.35.95 2-3.4-2-1.55c.1-.5.15-1 .15-1.6z"/><circle cx="12" cy="12" r="4.4" fill="#fff"/><circle cx="12" cy="12" r="2.6" fill="var(--accent)"/></svg></button>
 </header>
 
+<div class="ynmodal" id="ynModal"><div class="yn-win" role="dialog" aria-modal="true" aria-labelledby="ynTitle"><h3 id="ynTitle"></h3><div class="yn-msg" id="ynMsg"></div><div class="yn-btns"><button class="yn-no" id="ynNo" type="button">No, cancel</button><button class="yn-yes" id="ynYes" type="button">Yes</button></div></div></div>
 <div class="setmodal" id="setModal">
   <div class="set-win">
     <div class="set-side">
@@ -1746,6 +1785,37 @@ const setModal=document.getElementById("setModal");
 function openSettings(){ syncSettingsUI(); setModal.classList.add("show"); }
 function closeSettings(){ setModal.classList.remove("show"); }
 document.getElementById("btnSettings").addEventListener("click",openSettings);
+/* ---- menu bar: rarely used / big-change commands live in drop-downs, away from stray clicks ---- */
+(function(){
+  const bar=document.getElementById("menubar"); if(!bar) return;
+  const closeAll=()=>bar.querySelectorAll(".mb.open").forEach(m=>m.classList.remove("open"));
+  bar.querySelectorAll(".mb").forEach(mb=>{
+    const b=mb.querySelector(".mb-btn");
+    b.addEventListener("click",e=>{ e.stopPropagation(); const was=mb.classList.contains("open"); closeAll(); if(!was) mb.classList.add("open"); });
+    b.addEventListener("mouseenter",()=>{ if(bar.querySelector(".mb.open")&&!mb.classList.contains("open")){ closeAll(); mb.classList.add("open"); } });   // slide between open menus like a desktop app
+    mb.querySelectorAll(".mb-drop button.mi").forEach(it=>it.addEventListener("click",()=>closeAll()));
+  });
+  document.addEventListener("mousedown",e=>{ if(!bar.contains(e.target)) closeAll(); },true);
+  window.addEventListener("keydown",e=>{ if(e.key==="Escape"&&bar.querySelector(".mb.open")){ e.stopPropagation(); closeAll(); } },true);
+  document.getElementById("miUndo").addEventListener("click",()=>undoLatest(lb.classList.contains("open")));
+  document.getElementById("miRedo").addEventListener("click",()=>redoLatest(lb.classList.contains("open")));
+  document.getElementById("miXlsx").addEventListener("click",()=>exportActionsXlsx());
+  document.getElementById("miPush").addEventListener("click",()=>{ const c=ghCfg(); if(!c.token){ openSettings(); return; } exportMobile(true); loadNote("Syncing to the phone\u2026"); setTimeout(()=>loadNote(""),2500); });
+})();
+/* yes/no confirmation for anything that closes, replaces or removes work. "No" is the default. */
+function askYesNo(title,msg,yesLabel,danger){
+  return new Promise(res=>{
+    const m=document.getElementById("ynModal"), y=document.getElementById("ynYes"), n=document.getElementById("ynNo");
+    document.getElementById("ynTitle").textContent=title; document.getElementById("ynMsg").textContent=msg;
+    y.textContent=yesLabel||"Yes"; y.classList.toggle("danger",!!danger);
+    const done=v=>{ m.classList.remove("show"); y.onclick=n.onclick=null; m.onmousedown=null; window.removeEventListener("keydown",key,true); res(v); };
+    const key=e=>{ if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); done(false); } else if(e.key==="Enter"&&document.activeElement===y){ e.preventDefault(); done(true); } };
+    y.onclick=()=>done(true); n.onclick=()=>done(false);
+    m.onmousedown=e=>{ if(e.target===m) done(false); };
+    window.addEventListener("keydown",key,true);
+    m.classList.add("show"); setTimeout(()=>n.focus(),0);
+  });
+}
 document.getElementById("setClose").addEventListener("click",closeSettings);
 setModal.addEventListener("mousedown",e=>{ if(e.target===setModal) closeSettings(); });
 window.addEventListener("keydown",e=>{ if(e.key==="Escape"&&setModal.classList.contains("show")){ e.stopPropagation(); closeSettings(); } },true);
@@ -3442,12 +3512,27 @@ window.addEventListener("mousemove",e=>{ if(!resizing)return; let w=Math.max(240
 window.addEventListener("mouseup",()=>{ if(resizing){resizing=false;document.body.style.userSelect="";persistState();} });
 
 /* file ops */
-document.getElementById("btnClear").addEventListener("click",()=>{
-  if(!photos.length){ clearAll(true); return; }
-  if(confirm("Clear the map?\n\nThis removes all loaded photos and tags from the current session. Your files on disk and your saved .json are NOT touched — Refresh or Open .JSON brings everything back.")) clearAll(true);
+document.getElementById("btnClear").addEventListener("click",async()=>{
+  if(photos.length||actions.length){
+    const nm=loadedJsonName||folderName||"this project";
+    const ok=await askYesNo("Close \u201c"+nm+"\u201d and clear the map?",
+      "Every photo, action and note is removed from the screen and the app stops saving to \u201c"+nm+"\u201d.\n\nNothing is deleted: your photo files and your saved project file stay exactly as they are — reopen it any time with File \u2192 Open project.",
+      "Yes, close the project",true);
+    if(!ok) return;
+  }
+  closeProject();
 });
+function closeProject(){   // the app forgets the project file + folder, so nothing typed afterwards can autosave over it
+  clearAll(true);
+  jsonHandle=null; saveFileHandle=null; loadedJsonName=""; folderName=""; dirHandle=null; fileLoadedOnce=false;
+  try{ idbSet("jsonHandle",null); idbSet("dirHandle",null); }catch(e){}
+  setSaveStatus("","");
+}
 // Refresh = re-scan the remembered main photos folder: incremental add + removal sync.
-document.getElementById("btnRefresh").addEventListener("click",refreshFolder);
+document.getElementById("btnRefresh").addEventListener("click",async()=>{
+  if(photos.length&&!(await askYesNo("Re-scan the photo folder?","New photos in the folder are added to the map, and photos whose files were deleted or moved out of the folder are REMOVED from the map (with their notes and action links).\n\nYou can undo the removals with Ctrl+Z.","Yes, re-scan",true))) return;
+  refreshFolder();
+});
 async function refreshFolder(){
   if(!dirHandle){ try{ dirHandle=await idbGet("dirHandle"); }catch(e){} }
   if(dirHandle && await ensurePermission(dirHandle)){
@@ -3584,6 +3669,7 @@ document.getElementById("btnSave").addEventListener("click",async()=>{
 document.getElementById("btnSaveAs").addEventListener("click",adoptNewJson);
 function downloadJson(data,name){ const blob=new Blob([data],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name||((folderName||"photomap")+".json"); a.click(); setTimeout(()=>URL.revokeObjectURL(url),500); }
 document.getElementById("btnOpenJson").addEventListener("click",async()=>{
+  if((photos.length||actions.length)&&!(await askYesNo("Open a different project?","\u201c"+(loadedJsonName||folderName||"The current project")+"\u201d will be closed (it's already saved) and replaced on screen by the project you pick.","Yes, choose a project"))) return;
   if(hasFSA&&window.showOpenFilePicker){
     try{ const [h]=await window.showOpenFilePicker({types:[{description:"JSON",accept:{"application/json":[".json"]}}]}); saveFileHandle=h; jsonHandle=h; loadedJsonName=h.name; try{await idbSet("jsonHandle",h);}catch(e){} const f=await h.getFile(); etaStart("json",Math.max(0.05,(f.size||1e6)/1048576),"Loading — reading "+(h.name||".json")+"…"); loadStateText(await f.text()); etaEnd(); fileLoadedOnce=true; lastWrittenSig=metaSignature(); setSaveStatus("Saved","ok"); armFileSync(); }
     catch(err){ if(err&&err.name==="AbortError") return; console.warn(err); document.getElementById("jsonInput").click(); }   // FSA picker can fail (e.g. file:// pages); fall back to the file input
@@ -4670,7 +4756,7 @@ async function mSetupShare(){
 /* Desktop side of the loop: offer to merge field changes pushed by the phone. */
 let _upMerging=false, _chMerging=false;
 function metaByNameHas(m,f){ for(const it of m.values()) if(it.f===f) return true; return false; }
-function projectReady(){ return fileLoadedOnce||!jsonHandle; }   // never merge into a session the .json load is about to replace
+function projectReady(){ if(!(loadedJsonName||folderName||photos.length)) return false; return fileLoadedOnce||!jsonHandle; }   // a closed/empty session never takes phone data or publishes a pack   // never merge into a session the .json load is about to replace
 function origBase(n){ return String(n||"").replace(/^\d{8}-\d{6}-\d+-/,"").replace(/\.[^.]+$/,"").toLowerCase(); }   // phone uploads carry a batch prefix; the camera name underneath is the identity
 function sameShot(t1,t2){ if(t1==null||t2==null) return true; const d=Math.abs(t1-t2); return d<=3000||(d<=14*3600e3&&Math.min(d%3600e3,3600e3-d%3600e3)<=3000); }   // equal times, or equal up to a timezone shift
 async function checkPhotoUploads(){   // polled: phone uploads auto-merge as soon as they land — no click needed
