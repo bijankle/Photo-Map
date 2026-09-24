@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="theme-color" content="#5865F2" />
 <link rel="manifest" href="manifest.webmanifest?v=7" />
+<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@700&display=swap" rel="stylesheet" />
 <title>PhotoMap</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -242,7 +244,7 @@
   .slider-wrap input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;pointer-events:auto;width:13px;height:13px;border-radius:50%;background:var(--accent);border:2px solid #fff;cursor:grab;box-shadow:0 0 0 1px var(--accent),0 1px 4px #1e1f2233;}
   .slider-wrap input[type=range]::-moz-range-thumb{pointer-events:auto;width:11px;height:11px;border-radius:50%;background:var(--accent);border:2px solid #fff;cursor:grab;}
 
-  .cl-bubble{display:flex;align-items:center;justify-content:center;border-radius:50%;background:radial-gradient(circle at 35% 30%,#7782f5,#5865F2);color:#fff;font-family:var(--mono);font-weight:600;border:2px solid #fff;box-shadow:0 0 0 4px #5865F233,0 2px 8px #1e1f2233;cursor:pointer;}
+  .cl-bubble{display:flex;align-items:center;justify-content:center;border-radius:50%;background:radial-gradient(circle at 35% 30%,#7782f5,#5865F2);color:#fff;font-family:'Roboto Mono',var(--mono);font-weight:700;border:2px solid #fff;box-shadow:0 0 0 4px #5865F233,0 2px 8px #1e1f2233;cursor:pointer;}   /* bold, open numerals — as the phone renders them */
   .cl-bubble.cl-hl{animation:clpulse 1.2s ease-in-out infinite;}   /* the whole cluster flashes when it holds a selected photo */
   @keyframes clpulse{0%,100%{box-shadow:0 0 0 6px rgba(88,101,242,.85),0 2px 8px #1e1f2233;}50%{box-shadow:0 0 0 6px rgba(88,101,242,.15),0 2px 8px #1e1f2233;}}
   .leaflet-interactive.photo-dot{cursor:pointer;}
@@ -412,7 +414,7 @@
   .act-chk input,.act-hold input{appearance:none;-webkit-appearance:none;width:15px;height:15px;margin:0;border:1px solid var(--line2);border-radius:3px;cursor:pointer;position:relative;}
   .act-chk input{background:#3BA55C33;}   /* faint green: this is the COMPLETE box */
   .a-num{color:var(--accent2);font-family:var(--mono);font-weight:700;margin-right:5px;}
-  .num-dot{width:34px;height:34px;border-radius:50%;background:#5865F2;border:2px solid #3A41B0;box-sizing:border-box;color:#fff;font:700 12px var(--mono);letter-spacing:.3px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px #1e1f2255;}
+  .num-dot{width:34px;height:34px;border-radius:50%;background:#5865F2;border:2px solid #3A41B0;box-sizing:border-box;color:#fff;font:700 12px 'Roboto Mono',var(--mono);letter-spacing:.3px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px #1e1f2255;}
   body.mobile .num-dot{width:26px;height:26px;font:700 9px var(--mono);}   /* phone sizes were fine as they were */
   .act-hold{display:flex;align-items:center;padding-top:1px;cursor:pointer;margin-left:1px;}
   .act-hold input{background:#E8A33D33;}   /* faint amber: this is the ON-HOLD box */
@@ -1066,7 +1068,7 @@ function addSingleDot(p,lat,lng,isSel){
   const num=photoActNum(p);
   const dot=(num!=null)
     ?L.marker([lat,lng],{interactive:false,icon:L.divIcon({className:"",html:'<div class="num-dot">'+actNo(num)+'</div>',iconSize:[34,34],iconAnchor:[17,17]})})
-    :L.circleMarker([lat,lng],{renderer:dotRenderer,radius:8,color:"#3A41B0",weight:2,fillColor:"#5865F2",fillOpacity:.95,interactive:false});
+    :(()=>{ const cc=DOT_COL[photoStatus(p)]; return L.circleMarker([lat,lng],{renderer:dotRenderer,radius:8,color:cc[1],weight:2,fillColor:cc[0],fillOpacity:.95,interactive:false}); })();
   if(isSel){ const mk=dotMarkers.get(p.id); mk.hit=hit; mk.dot=dot; }
   markerLayer.addLayer(hit); markerLayer.addLayer(dot);
 }
@@ -1242,6 +1244,12 @@ function reorderActPhoto(a,dragId,targetId,before){   // gallery drag: photo ord
   const b=actState(a); a.porder=ids; recordActEdit(a,b); afterFolderChange();
 }
 function hasOpenAct(p){ return Array.isArray(p.acts)&&p.acts.some(id=>{ const a=actById(id); return a&&!a.done&&!a.hold; }); }
+const DOT_COL={none:["#4B5058","#2B2F35"],open:["#5865F2","#3A41B0"],hold:["#F2C230","#A8840F"],done:["#3BA55C","#27713F"]};
+function photoStatus(p){   // open beats on-hold beats complete, when a photo belongs to several actions
+  if(!Array.isArray(p.acts)||!p.acts.length) return "none";
+  let hold=false,done=false,any=false;
+  for(const id of p.acts){ const a=actById(id); if(!a) continue; any=true; if(a.done) done=true; else if(a.hold) hold=true; else return "open"; }
+  return !any?"none":hold?"hold":done?"done":"none"; }
 function heldHidden(p){ if(!Array.isArray(p.acts)||!p.acts.length) return false;   /* on-hold: photo leaves the map only when EVERY action it belongs to is held */
   let held=false; for(const id of p.acts){ const a=actById(id); if(!a) continue; if(a.hold&&!selActs.has(a.id)) held=true; else return false; } return held; }
 function passActs(p){ if(heldHidden(p)) return false; if(!actOnlyMap) return true; if(selActs.size&&Array.isArray(p.acts)&&p.acts.some(id=>selActs.has(id))) return true; return hasOpenAct(p); }
