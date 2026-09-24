@@ -3,7 +3,11 @@
    original files WITH their GPS intact, unlike the file picker, which strips it).
    It never caches the app itself — every normal request goes straight to the network,
    so the self-updating page keeps working exactly as before. */
-self.addEventListener("install", e => self.skipWaiting());
+const SW_VER = "3";
+self.addEventListener("install", e => {
+  e.waitUntil(caches.open("pm-shared").then(c => c.put("swver", new Response(SW_VER))));
+  self.skipWaiting();
+});
 self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));
 self.addEventListener("fetch", e => {
   const u = new URL(e.request.url);

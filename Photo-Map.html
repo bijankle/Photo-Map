@@ -4448,7 +4448,7 @@ function mobileBoot(){
    service worker WITH their GPS intact — Android only strips location on the file-picker path.
    Requires the app installed to the home screen once (Chrome menu -> Add to Home screen). */
 async function mSetupShare(){
-  try{ if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js"); }catch(e){}
+  try{ if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(r=>{ try{ r.update(); }catch(e){} }); }catch(e){}   // receiver updates must never sit behind the CDN cache
   try{
     const q=new URLSearchParams(location.search);
     if(!q.has("shared")) return;
@@ -4465,7 +4465,8 @@ async function mSetupShare(){
     try{ await caches.delete("pm-shared"); }catch(e){}
     if(!files.length){
       let d=""; try{ const dr=await cache.match("dbg"); if(dr) d=(await dr.json()).join(" | ").slice(0,160); }catch(e){}
-      setTimeout(()=>mToast("No usable files in that share"+(d?(" \u2014 got: "+d):" \u2014 try again")),600); return; }
+      let sv=""; try{ const vr=await cache.match("swver"); if(vr) sv=await vr.text(); }catch(e){}
+      setTimeout(()=>mToast(sv?("No usable files (receiver v"+sv+")"+(d?" \u2014 got: "+d:" \u2014 the share carried no file data")):"Receiver is outdated \u2014 close this app fully, reopen it, wait 10s, and share again"),600); return; }
     setTimeout(()=>mUploadPhotos(files),600);   // straight into the normal upload pipeline
   }catch(e){ try{ mToast("Share intake failed: "+(e&&e.message||e)); }catch(e2){} }
 }
