@@ -11,8 +11,14 @@ self.addEventListener("fetch", e => {
     e.respondWith((async () => {
       try {
         const fd = await e.request.formData();
-        const files = fd.getAll("photos").filter(f => f && f.size);
+        let files = fd.getAll("photos").filter(f => f && f.size);
+        const dbg = [];
+        for (const [k, v] of fd.entries()) dbg.push(k + "=" + (v && typeof v.arrayBuffer === "function" ? "file(" + (v.name || "?") + "," + (v.size || 0) + "," + (v.type || "?") + ")" : "text:" + String(v).slice(0, 30)));
+        if (!files.length) {   // harvest ANY file-like entry, whatever Android called the field
+          for (const [k, v] of fd.entries()) if (v && typeof v.arrayBuffer === "function" && v.size) files.push(v);
+        }
         const cache = await caches.open("pm-shared");
+        await cache.put("dbg", new Response(JSON.stringify(dbg)));
         await cache.put("meta", new Response(JSON.stringify(files.map(f => ({ n: f.name, t: f.type })))));
         for (let i = 0; i < files.length; i++) await cache.put("file-" + i, new Response(files[i]));
         return Response.redirect("./Photo-Map.html?shared=" + files.length, 303);

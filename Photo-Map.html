@@ -3870,7 +3870,7 @@ function mShowList(){
   const acts=news.concat(packActs);   // phone-created actions sit on top until they're merged on desktop
   const n=mChCount();
   mScr('<div class="m-head"><div style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0;"><div class="m-brand">Photo<span>Map</span> Field</div>'
-    +'<div class="m-sub">'+esc(mPack.project||"")+' · exported '+(mPack.exportedAt?new Date(mPack.exportedAt).toLocaleString(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"")+'</div></div>'
+    +'<div class="m-sub">'+esc(mPack.project||"")+' · exported '+(mPack.exportedAt?new Date(mPack.exportedAt).toLocaleString(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"")+' · app '+new Date(document.lastModified).toLocaleString(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})+'</div></div>'
     +mUndoHtml()+'<button class="m-chip" id="mRefresh" type="button">REFRESH</button></div>'
     +'<div class="m-body" id="mList">'
     +'<input class="m-in" id="mNewAct" placeholder="+ New action" autocomplete="off" style="margin-bottom:2px;" />'
@@ -3891,7 +3891,7 @@ function mShowList(){
     +'<button class="m-btn" id="mSend"'+(n?'':' disabled')+'>Send changes back ('+n+')</button>'
     +'<div class="m-note" id="mSendNote">'+(n?'edits waiting to sync':'no unsent changes')+'</div></div>'
     +'<div class="m-homemap" id="mHomeMap"></div>');
-  document.getElementById("mRefresh").addEventListener("click",mLoadPack);
+  document.getElementById("mRefresh").addEventListener("click",()=>{ mCheckFresh(true); mLoadPack(); });   // one tap: newest app build + newest pack
   document.getElementById("mUpBtn").addEventListener("click",()=>{ mUpInput().click(); window.mPickT=Date.now(); });
   document.getElementById("mSend").addEventListener("click",mSendChanges);
   mWireUndo();
@@ -4424,17 +4424,18 @@ function mWirePager(snap){
    Tapping the image (or ‹) drops back to the detail view at the same photo. */
 /* The mobile UI has no update pill, so a stale cached copy could linger forever: on boot,
    compare this file's timestamp with the server's and force ONE clean reload when behind. */
-async function mCheckFresh(){
+async function mCheckFresh(force){
   try{
-    if(sessionStorage.getItem("pmMobUpd")) return;
+    if(!force&&sessionStorage.getItem("pmMobUpd")) return;
     const r=await fetch(location.pathname+"?u="+Date.now(),{method:"HEAD",cache:"no-store"});
-    const lm=r.headers.get("last-modified"); if(!lm) return;
+    const lm=r.headers.get("last-modified"); if(!lm){ if(force) mToast("Could not check for updates"); return; }
     const srv=Date.parse(lm), mine=Date.parse(document.lastModified);
-    if(isNaN(srv)||isNaN(mine)||srv-mine<90000) return;   // fresh enough (or clocks disagree slightly)
+    if(isNaN(srv)||isNaN(mine)||srv-mine<90000){ if(force) mToast("\u2713 App is up to date (build "+new Date(mine).toLocaleString(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})+")"); return; }
+    if(force) mToast("Updating to the latest build\u2026",true);
     sessionStorage.setItem("pmMobUpd","1");
     try{ await fetch(location.pathname,{cache:"reload"}); }catch(e){}
     location.reload();
-  }catch(e){}
+  }catch(e){ if(force) try{ mToast("Update check failed \u2014 are you online?"); }catch(e2){} }
 }
 function mobileBoot(){
   document.body.classList.add("mobile");
@@ -4462,7 +4463,9 @@ async function mSetupShare(){
     for(let i=0;i<meta.length;i++){ const r=await cache.match("file-"+i);
       if(r){ const b=await r.blob(); files.push(new File([b],(meta[i]&&meta[i].n)||("shared-"+(i+1)+".jpg"),{type:(meta[i]&&meta[i].t)||"image/jpeg"})); } }
     try{ await caches.delete("pm-shared"); }catch(e){}
-    if(!files.length){ setTimeout(()=>mToast("No usable files in that share \u2014 try again"),600); return; }
+    if(!files.length){
+      let d=""; try{ const dr=await cache.match("dbg"); if(dr) d=(await dr.json()).join(" | ").slice(0,160); }catch(e){}
+      setTimeout(()=>mToast("No usable files in that share"+(d?(" \u2014 got: "+d):" \u2014 try again")),600); return; }
     setTimeout(()=>mUploadPhotos(files),600);   // straight into the normal upload pipeline
   }catch(e){ try{ mToast("Share intake failed: "+(e&&e.message||e)); }catch(e2){} }
 }
