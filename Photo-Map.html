@@ -1251,7 +1251,8 @@ function normActs(list){ let mx=0; const out=(list||[]).map(a=>{
   if(typeof a.note==="string"&&a.note.trim()) parts.push(a.note.trim());
   if(Array.isArray(a.notes)) for(const n of a.notes){ if(n&&n.t) parts.push(String(n.t)); }
   const o={id:+a.id||0,text:String(a.text||""),done:!!a.done,hold:!!a.hold,created:a.created||null,doneAt:a.doneAt||null,
-    steps:Array.isArray(a.steps)?a.steps.map(s=>({t:String(s.t||""),d:!!s.d})).filter(s=>s.t):[]};
+    steps:Array.isArray(a.steps)?a.steps.map(s=>{ const o={t:String(s.t||""),d:!!s.d}; if(s.id) o.id=String(s.id); return o; }).filter(s=>s.t):[]};
+  if(a.fu) o.fu=String(a.fu);   // uid of the phone-created action this came from (makes phone resends idempotent)
   if(Array.isArray(a.porder)){ const po=a.porder.map(Number).filter(x=>x>0); if(po.length) o.porder=po; }
   if(Array.isArray(a.porderK)&&a.porderK.length) o.porderK=a.porderK.map(String);
   if(parts.length) o._n=parts.join("\n");
@@ -1408,7 +1409,7 @@ function wireSteps(el,a){
   inp.addEventListener("keydown",e=>{
     e.stopPropagation();
     if(e.key!=="Enter") return; const v=inp.value.trim(); if(!v) return;
-    const b=actState(a); if(!Array.isArray(a.steps)) a.steps=[]; a.steps.push({t:v,d:false}); recordActEdit(a,b); afterFolderChange();
+    const b=actState(a); if(!Array.isArray(a.steps)) a.steps=[]; a.steps.push({t:v,d:false,id:newSid()}); recordActEdit(a,b); afterFolderChange();
     // keep typing the next one — refocus the SAME view's input (left panel or under-photo strip)
     const sel=(el.classList.contains("ipa-row")?".ipa-row":".act-row")+'[data-aid="'+a.id+'"] .st-new';
     const row2=document.querySelector(sel); if(row2) row2.focus();
@@ -1791,11 +1792,47 @@ async function ghPutFile(cfg,path,text,msg,retried){
   if(r.status===409&&!retried){ await new Promise(res=>setTimeout(res,800)); return ghPutFile(cfg,path,text,msg,true); }   // sha raced/staled: re-read it once and retry
   if(!r.ok){ let d=""; try{ d=(await r.json()).message||""; }catch(e){} throw new Error("GitHub says "+r.status+(d?" — "+d:"")); }
 }
-async function ghPutB64(cfg,path,b64,msg,retried){   // binary upload: content is already base64
-  const sha=await ghFileSha(cfg,path);
+/* Shared JSON files (uploads.json, changes.json) are written by BOTH devices. Every update is a
+   read-modify-write against the version we read: GitHub rejects the write (409/422) if the other
+   side changed it in between, and we re-read and re-apply — nothing is ever silently overwritten. */
+async function ghReadJson(cfg,path){
+  const r=await fetch("https://api.github.com/repos/"+cfg.repo+"/contents/"+path+"?t="+Date.now(),{cache:"no-store",headers:ghHeaders(cfg.token)});
+  if(r.status===404) return {obj:null,sha:null};
+  if(!r.ok) throw new Error("GitHub says "+r.status+" reading "+path);
+  const j=await r.json();
+  let obj=null; try{ obj=JSON.parse(decodeURIComponent(escape(atob(String(j.content||"").replace(/\s/g,""))))); }catch(e){ obj=null; }
+  return {obj,sha:j.sha||null};
+}
+async function ghUpdateJson(cfg,path,mutate,msg){   // mutate(current|null) -> new object, or null to leave the file alone
+  for(let attempt=0;attempt<5;attempt++){
+    const {obj,sha}=await ghReadJson(cfg,path);
+    const next=mutate(obj);
+    if(next==null) return false;
+    const body={message:msg,content:btoa(unescape(encodeURIComponent(JSON.stringify(next))))}; if(sha) body.sha=sha;
+    const r=await fetch("https://api.github.com/repos/"+cfg.repo+"/contents/"+path,{method:"PUT",headers:ghHeaders(cfg.token),body:JSON.stringify(body)});
+    if(r.ok) return true;
+    if(r.status===409||r.status===422){ await new Promise(res=>setTimeout(res,400+Math.random()*900)); continue; }   // the other device wrote first: re-read, re-apply
+    let d=""; try{ d=(await r.json()).message||""; }catch(e){}
+    throw new Error("GitHub says "+r.status+(d?" \u2014 "+d:""));
+  }
+  throw new Error("GitHub kept changing under us \u2014 try again");
+}
+async function ghDeleteMany(cfg,paths){   // one directory listing for the whole batch, not one per file
+  if(!paths.length) return;
+  const byDir=new Map(); for(const pa of paths){ const d=pa.includes("/")?pa.slice(0,pa.lastIndexOf("/")):""; if(!byDir.has(d)) byDir.set(d,[]); byDir.get(d).push(pa); }
+  for(const [dir,list] of byDir){
+    let shas=new Map();
+    try{ const r=await fetch("https://api.github.com/repos/"+cfg.repo+"/contents/"+dir+"?t="+Date.now(),{cache:"no-store",headers:ghHeaders(cfg.token)});
+      if(r.ok){ const arr=await r.json(); if(Array.isArray(arr)) for(const f of arr) shas.set(f.path,f.sha); } }catch(e){}
+    for(const pa of list){ const sha=shas.get(pa); if(!sha) continue;
+      try{ await fetch("https://api.github.com/repos/"+cfg.repo+"/contents/"+pa,{method:"DELETE",headers:ghHeaders(cfg.token),body:JSON.stringify({message:"Merged phone upload",sha})}); }catch(e){} }
+  }
+}
+async function ghPutB64(cfg,path,b64,msg,retried,isNew){   // binary upload: content is already base64
+  const sha=isNew?null:await ghFileSha(cfg,path);   // fresh upload names never exist — skip the directory listing
   const body={message:msg,content:b64}; if(sha) body.sha=sha;
   const r=await fetch("https://api.github.com/repos/"+cfg.repo+"/contents/"+path,{method:"PUT",headers:ghHeaders(cfg.token),body:JSON.stringify(body)});
-  if(r.status===409&&!retried){ await new Promise(res=>setTimeout(res,800)); return ghPutB64(cfg,path,b64,msg,true); }
+  if((r.status===409||r.status===422)&&!retried){ await new Promise(res=>setTimeout(res,800)); return ghPutB64(cfg,path,b64,msg,true,false); }
   if(!r.ok){ let d=""; try{ d=(await r.json()).message||""; }catch(e){} throw new Error("GitHub says "+r.status+(d?" \u2014 "+d:"")); }
 }
 async function ghGetBin(cfg,path){
@@ -1803,11 +1840,6 @@ async function ghGetBin(cfg,path){
   if(r.status===404) return null;
   if(!r.ok) throw new Error("GitHub says "+r.status);
   return new Uint8Array(await r.arrayBuffer());
-}
-async function ghDeleteFile(cfg,path){   // best-effort cleanup of merged uploads
-  try{ const sha=await ghFileSha(cfg,path); if(!sha) return;
-    await fetch("https://api.github.com/repos/"+cfg.repo+"/contents/"+path,{method:"DELETE",headers:ghHeaders(cfg.token),body:JSON.stringify({message:"Merged phone upload",sha})});
-  }catch(e){}
 }
 /* The pack carries the photo previews WITH their annotations baked in (marks are vector data,
    invisible to the phone otherwise). Composited once per photo and cached until marks change. */
@@ -1829,8 +1861,9 @@ async function buildMobilePack(){
   const pk={ v:2, exportedAt:new Date().toISOString(), project:loadedJsonName||folderName||"PhotoMap", actions:[] };
   for(const a of open){
     const ps=[];
-    for(const p of actPhotos(a)) ps.push({ id:p.id, name:p.name, note:(p.note||""), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), img:await annotatedPreview(p) });
-    pk.actions.push({ id:a.id, text:a.text, hold:!!a.hold, steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d})), photos:ps });
+    for(const p of actPhotos(a)) ps.push({ id:p.id, k:metaKey(p), name:p.name, note:(p.note||""), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), img:await annotatedPreview(p) });
+    for(const st of (a.steps||[])) if(!st.id) st.id=newSid();   // every exported step gets its permanent id
+    pk.actions.push({ id:a.id, text:a.text, hold:!!a.hold, fu:a.fu||null, steps:(a.steps||[]).map(stepCopy), photos:ps });
   }
   return pk;
 }
@@ -1842,7 +1875,7 @@ async function exportMobile(){
   if(!openN){ st.textContent="No open actions to export."; return; }
   btn.disabled=true; st.textContent="Building pack…";
   try{
-    const pack=await buildMobilePack();
+    const pack=await buildMobilePack(); persistState();   // newly minted sub-action ids must be saved with the project
     const text=JSON.stringify(pack);
     st.textContent="Pushing "+(text.length/1048576).toFixed(1)+" MB to "+cfg.repo+"…";
     await ghPutFile(cfg,"pack.json",text,"PhotoMap mobile pack — "+openN+" open action"+(openN===1?"":"s"));
@@ -3217,7 +3250,9 @@ function pushTagAction(items){   // one undo step, possibly touching many photos
   pushUndo({items});
 }
 function recordTagChange(p,before){ pushTagAction([{id:p.id,before,after:snapshotTags(p)}]); }
-function actState(a){ return {text:a.text,done:!!a.done,doneAt:a.doneAt||null,hold:!!a.hold,steps:(a.steps||[]).map(s=>({t:s.t,d:!!s.d})),porder:(Array.isArray(a.porder)&&a.porder.length)?a.porder.slice():null}; }
+function newSid(){ return "s"+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }   // permanent sub-action id — the phone refers to steps by it
+function stepCopy(s){ const o={t:s.t,d:!!s.d}; if(s.id) o.id=s.id; return o; }
+function actState(a){ return {text:a.text,done:!!a.done,doneAt:a.doneAt||null,hold:!!a.hold,steps:(a.steps||[]).map(stepCopy),porder:(Array.isArray(a.porder)&&a.porder.length)?a.porder.slice():null}; }
 function recordActEdit(a,before){ const after=actState(a); if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({actEdit:{id:a.id,before,after}}); }
 function cpMarks(ms){ return JSON.parse(JSON.stringify(ms||[])); }
 function pushMarksSnap(p,before,after){ if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({marksSnap:{id:p.id,before,after}}); }
@@ -3232,7 +3267,7 @@ function applyUndoEntry(a,dir){   // dir: "before" (undo) or "after" (redo)
     if(undo){ actions=actions.filter(x=>x.id!==a.actCreate.data.id); selActs.delete(a.actCreate.data.id); }
     else { const d=a.actCreate.data; if(!actById(d.id)){ actions.splice(Math.min(a.actCreate.index,actions.length),0,JSON.parse(JSON.stringify(d))); if(nextActId<=d.id) nextActId=d.id+1; } }
   }
-  if(a.actEdit){ const x=actById(a.actEdit.id); if(x){ const src=undo?a.actEdit.before:a.actEdit.after; x.text=src.text; x.done=src.done; x.doneAt=src.doneAt; x.hold=!!src.hold; if(src.steps) x.steps=src.steps.map(s=>({t:s.t,d:!!s.d})); x.porder=(src.porder&&src.porder.slice())||undefined; } }
+  if(a.actEdit){ const x=actById(a.actEdit.id); if(x){ const src=undo?a.actEdit.before:a.actEdit.after; x.text=src.text; x.done=src.done; x.doneAt=src.doneAt; x.hold=!!src.hold; if(src.steps) x.steps=src.steps.map(stepCopy); x.porder=(src.porder&&src.porder.slice())||undefined; } }
   if(a.addPhotos){   // pasted/dropped photos: undo removes them (kept aside), redo puts them back
     if(undo){
       const ids=new Set(a.addPhotos);
@@ -3529,7 +3564,7 @@ document.getElementById("jsonInput").addEventListener("change",async e=>{ const 
 function serializeState(includeImages){
   return {
     version:3, folderName, savedAt:new Date().toISOString(), nextActId,
-    actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.hold)o.hold=true; if(a.steps&&a.steps.length)o.steps=a.steps.map(s=>({t:s.t,d:!!s.d})); if(Array.isArray(a.porder)&&a.porder.length){o.porder=a.porder; o.porderK=a.porder.map(id=>{const ph=photoById(id);return ph?metaKey(ph):null;}).filter(Boolean);} return o; }),
+    actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.hold)o.hold=true; if(a.fu)o.fu=a.fu; if(a.steps&&a.steps.length)o.steps=a.steps.map(stepCopy); if(Array.isArray(a.porder)&&a.porder.length){o.porder=a.porder; o.porderK=a.porder.map(id=>{const ph=photoById(id);return ph?metaKey(ph):null;}).filter(Boolean);} return o; }),
     settings:{ baseLayer: map.hasLayer(google)?"google":map.hasLayer(esri)?"esri":"none", showNoGeo, sortBy:currentSort,
       thumb:getComputedStyle(document.documentElement).getPropertyValue("--thumb").trim(),
       sideW:getComputedStyle(document.documentElement).getPropertyValue("--side-w").trim(),
@@ -3720,14 +3755,39 @@ function parseShareHash(){
    pack.json from the private data repo (token pasted once) and pushes ticks/notes back. */
 function isMobile(){ try{ return matchMedia("(pointer:coarse)").matches && Math.min(screen.width,screen.height)<600 && !localStorage.getItem("pmForceDesktop"); }catch(e){ return false; } }
 let mPack=null, mGeo=null, mMiniMap=null, mInsetMap=null, mInsetMapL=null, mInsetCur=null, mHomeMap=null, mHomeBB=null;
-function mPend(){ try{ return JSON.parse(localStorage.getItem("pmField")||"{}")||{}; }catch(e){ return {}; } }
-function mPendSave(o){ try{ localStorage.setItem("pmField",JSON.stringify(o)); }catch(e){} }
+let _mpRaw=null,_mpObj=null;
+function mPend(){   // parsed once per actual change (renders used to re-parse it hundreds of times)
+  let raw; try{ raw=localStorage.getItem("pmField")||"{}"; }catch(e){ return {}; }
+  if(raw===_mpRaw&&_mpObj) return _mpObj;
+  try{ _mpObj=JSON.parse(raw)||{}; }catch(e){ _mpObj={}; } _mpRaw=raw; return _mpObj; }
+function mPendSave(o){ try{ const raw=JSON.stringify(o); localStorage.setItem("pmField",raw); _mpRaw=raw; _mpObj=o; }catch(e){} }
+function mUid(){ return "u"+Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
 function mCh(id){ const p=mPend(); return (p.changes||{})[id]||{}; }
-function mSetCh(id,patch){ const p=mPend(); p.changes=p.changes||{}; p.changes[id]=Object.assign({},p.changes[id]||{},patch); mPendSave(p); }
+function mSetCh(id,patch){ const p=mPend(); p.changes=p.changes||{}; const c=Object.assign({},p.changes[id]||{},patch);
+  if(!c.sids){ const pa=((mPack&&mPack.actions)||[]).find(x=>String(x.id)===String(id)); if(pa) c.sids=(pa.steps||[]).map(st=>st.id||null); }   // step references survive re-exports and desktop reorders
+  p.changes[id]=c; mPendSave(p); }
 function mPn(pid){ const p=mPend(); const e=(p.pnotes||{})[String(pid)]; return e?e.t:null; }   // pending photo (field) note on this phone
-function mSetPn(pid,name,v){ const p=mPend(); p.pnotes=p.pnotes||{}; if(v) p.pnotes[String(pid)]={n:name||"",t:v}; else delete p.pnotes[String(pid)]; mPendSave(p); }
+function mPhotoKey(pid){ for(const a of ((mPack&&mPack.actions)||[])) for(const ph of (a.photos||[])) if(String(ph.id)===String(pid)) return ph.k||null; return null; }
+function mSetPn(pid,name,v){ const p=mPend(); p.pnotes=p.pnotes||{}; if(v) p.pnotes[String(pid)]={n:name||"",t:v,k:mPhotoKey(pid)}; else delete p.pnotes[String(pid)]; mPendSave(p); }
 function mPendSnap(p){ return JSON.stringify({c:p.changes||{},n:p.pnotes||{},a:p.newActs||[],o:p.actOrder||[]}); }
-function mChCount(){ const p=mPend(); return Object.keys(p.changes||{}).length+Object.keys(p.pnotes||{}).length+(p.newActs||[]).length+(Array.isArray(p.actOrder)&&p.actOrder.length?1:0); }
+function mChCount(){ const p=mPend();
+  let snap=null; if(p.sentSnap){ try{ snap=JSON.parse(p.sentSnap); }catch(e){} }
+  const J=x=>JSON.stringify(x==null?null:x), S=snap||{c:{},n:{},a:[],o:[]};
+  let n=0;
+  for(const k of Object.keys(p.changes||{})) if(J(p.changes[k])!==J((S.c||{})[k])) n++;
+  for(const k of Object.keys(p.pnotes||{})) if(J(p.pnotes[k])!==J((S.n||{})[k])) n++;
+  const sentA=new Set((S.a||[]).map(J)); for(const x of (p.newActs||[])) if(!sentA.has(J(x))) n++;
+  if(Array.isArray(p.actOrder)&&p.actOrder.length&&J(p.actOrder)!==J(S.o||[])) n++;
+  return n; }
+function mDropSent(p){   // after a re-export the pack already holds what we sent: keep only edits made since
+  let S=null; try{ S=JSON.parse(p.sentSnap||"null"); }catch(e){} if(!S) return {};
+  const J=x=>JSON.stringify(x==null?null:x), out={};
+  const packFu=new Set(((mPack&&mPack.actions)||[]).map(a=>a.fu).filter(Boolean));
+  for(const k of Object.keys(p.changes||{})) if(J(p.changes[k])!==J((S.c||{})[k])){ out.changes=out.changes||{}; out.changes[k]=p.changes[k]; }
+  for(const k of Object.keys(p.pnotes||{})) if(J(p.pnotes[k])!==J((S.n||{})[k])){ out.pnotes=out.pnotes||{}; out.pnotes[k]=p.pnotes[k]; }
+  const sentA=new Set((S.a||[]).map(J)); const na=(p.newActs||[]).filter(x=>!sentA.has(J(x))&&!(x.u&&packFu.has(x.u))); if(na.length) out.newActs=na;
+  if(Array.isArray(p.actOrder)&&p.actOrder.length&&J(p.actOrder)!==J(S.o||[])) out.actOrder=p.actOrder;
+  return out; }
 /* Field editing: the phone can add actions, add sub-actions, and edit titles/sub-action text
    (no deleting). Everything lands in pmField and syncs back via changes.json:
    changes[id] gains title / stepEdits {idx:text} / newSteps [{t,d}]; newActs holds actions
@@ -3765,9 +3825,10 @@ function mSteps(a){   // pack sub-actions (with pending text edits, minus pendin
 function mDeleteStep(a,s){
   if(a._new){ mEditNewAct(a._ni,x=>{ x.steps.splice(s.i,1); }); return; }
   if(s.kind==="pack"){ mMutate(()=>mSetCh(a.id,{delSteps:(mCh(a.id).delSteps||[]).concat([s.i])})); return; }
-  mMutate(()=>{ const c=mCh(a.id); const ns=(c.newSteps||[]).slice(); ns.splice(s.i,1);   // phone-added: remove it and remap any order tokens
+  mMutate(()=>{ const c=mCh(a.id); const ns=(c.newSteps||[]).slice(); const gone=ns.splice(s.i,1)[0];   // phone-added: remove it and remap any order tokens
     const ord=Array.isArray(c.stepOrder)?c.stepOrder.filter(t=>!(t&&t.k==="new"&&t.i===s.i)).map(t=>(t&&t.k==="new"&&t.i>s.i)?{k:"new",i:t.i-1}:t):undefined;
-    mSetCh(a.id,{newSteps:ns,stepOrder:ord}); });
+    const delU=(gone&&gone.u)?(c.delU||[]).concat([gone.u]):c.delU;   // if it already reached the desktop, it goes there too
+    mSetCh(a.id,{newSteps:ns,stepOrder:ord,delU}); });
 }
 function mReorderStep(a,from,to){
   if(from===to||from<0||to<0) return;
@@ -3789,7 +3850,7 @@ function mEditStep(a,s,t){
 }
 function mAddStep(a,t){
   if(a._new){ mEditNewAct(a._ni,x=>{ x.steps=x.steps||[]; x.steps.push({t:t,d:false}); }); return; }
-  mMutate(()=>mSetCh(a.id,{newSteps:(mCh(a.id).newSteps||[]).concat([{t:t,d:false}])}));
+  mMutate(()=>mSetCh(a.id,{newSteps:(mCh(a.id).newSteps||[]).concat([{t:t,d:false,u:mUid()}])}));
 }
 /* generic in-place text edit: swaps an element for an input, keyboard opens in the current view */
 function mInline(el,val,onCommit){
@@ -3847,12 +3908,8 @@ async function mLoadPack(){
     if(!text){ mShowSetup("No pack.json in "+cfg.repo+" yet — click Export to mobile on the desktop first."); return; }
     mPack=JSON.parse(text);
     const p=mPend();
-    if(p.sentAt&&mPack.exportedAt&&Date.parse(mPack.exportedAt)>p.sentAt){ mPendSave({}); }   // desktop has re-exported since we sent: its truth wins
-    else if(p.sentAt&&p.sentSnap){   // desktop merged our batch (changes.json now empty) and nothing new was edited here since: drop the stale count
-      try{ const cs=await ghGetRaw(cfg,"changes.json"); const cj=cs?JSON.parse(cs):null;
-        const empty=!cj||((!cj.changes||!Object.keys(cj.changes).length)&&(!cj.photoNotes||!Object.keys(cj.photoNotes).length)&&!(cj.newActs||[]).length&&!(cj.actOrder||[]).length);
-        if(empty&&mPendSnap(p)===p.sentSnap) mPendSave({});
-      }catch(e){}
+    if(p.sentAt&&mPack.exportedAt&&Date.parse(mPack.exportedAt)>p.sentAt){   // the desktop re-exported after our send: its pack holds what we sent
+      mPendSave(mDropSent(p)); mUndoStack.length=0; mRedoStack.length=0;   // undo must not resurrect already-merged edits
     }
     mStartGeo();
     mShowList();
@@ -3869,7 +3926,8 @@ function mStartGeo(){
     mGeo={lat:pos.coords.latitude,lng:pos.coords.longitude};
     mAddCrumb(mGeo.lat,mGeo.lng);
     const picking=mUpBusy||(window.mPickT&&Date.now()-window.mPickT<180000);
-    if(document.getElementById("mList")){ if(first&&!picking) mShowList(); else mGeoLive(false); }   // never rebuild the screen mid-pick/upload — that used to eat the selection
+    const typing=(()=>{ const i=document.getElementById("mNewAct"); return !!(i&&(i===document.activeElement||i.value)); })();   // a rebuild would wipe a half-typed action
+    if(document.getElementById("mList")){ if(first&&!picking&&!typing) mShowList(); else mGeoLive(false); }   // never rebuild the screen mid-pick/upload — that used to eat the selection
     else mGeoLive(first);
   },()=>{},{enableHighAccuracy:true,maximumAge:10000,timeout:20000});
 }
@@ -3935,7 +3993,7 @@ function mShowList(){
   mWireUndo();
   document.getElementById("mNewAct").addEventListener("keydown",e=>{
     e.stopPropagation(); if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return;
-    mMutate(()=>{ const p=mPend(); p.newActs=(p.newActs||[]).concat([{text:v,steps:[],done:false}]); mPendSave(p); });
+    mMutate(()=>{ const p=mPend(); p.newActs=(p.newActs||[]).concat([{text:v,steps:[],done:false,u:mUid()}]); mPendSave(p); });
     mShowList();
   });
   document.querySelectorAll("#mList .m-card").forEach(el=>{
@@ -4015,8 +4073,8 @@ function mAddCrumb(lat,lng){ const now=Date.now(); if(now-mLastCrumbT<15000) ret
   try{ const a=mCrumbs(); a.push({t:now,lat:+lat.toFixed(6),lng:+lng.toFixed(6)});
     const cut=now-3*864e5; while(a.length&&a[0].t<cut) a.shift(); if(a.length>4000) a.splice(0,a.length-4000);
     localStorage.setItem("pmCrumbs",JSON.stringify(a)); }catch(e){} }
-function mCrumbAt(t){ let best=null,bd=600000;   // nearest fix within 10 minutes
-  for(const c of mCrumbs()){ const d=Math.abs(c.t-t); if(d<=bd){ bd=d; best=c; } } return best; }
+function mCrumbAt(t,list){ let best=null,bd=600000;   // nearest fix within 10 minutes
+  for(const c of (list||mCrumbs())){ const d=Math.abs(c.t-t); if(d<=bd){ bd=d; best=c; } } return best; }
 let mUpBusy=false, mRcptT=null, mToastEl=null, mToastT=0;
 function mToast(t,sticky){   // progress that survives screen changes — the button may not even exist yet
   if(!mToastEl){ mToastEl=document.createElement("div"); mToastEl.id="mToast"; }
@@ -4054,7 +4112,7 @@ async function mUploadPhotos(files,fixed){
   mUpBusy=true; setB("Starting\u2026",true);
   const d0=new Date(), pd=n2=>String(n2).padStart(2,"0");
   const batch=""+d0.getFullYear()+pd(d0.getMonth()+1)+pd(d0.getDate())+"-"+pd(d0.getHours())+pd(d0.getMinutes())+pd(d0.getSeconds());
-  const entries=[];
+  const entries=[], crumbs=mCrumbs(); let tooBig=0;   // trail parsed once per batch, not once per photo
   try{
     for(let i=0;i<files.length;i++){
       setB("Uploading "+(i+1)+" / "+files.length+"\u2026",true); mToast("Uploading "+(i+1)+" / "+files.length+"\u2026",true);
@@ -4079,35 +4137,40 @@ async function mUploadPhotos(files,fixed){
       let src=lat!=null?"exif":null;
       if(!t&&f.lastModified) t=f.lastModified;   // camera files: file time \u2248 taken time
       if(lat==null&&fixed){ lat=fixed.lat; lng=fixed.lng; src="live"; }   // camera-button shot: pinned where you stand
-      if(lat==null&&t){ const cr=mCrumbAt(t); if(cr){ lat=cr.lat; lng=cr.lng; src="track"; } }
+      if(lat==null&&t){ const cr=mCrumbAt(t,crumbs); if(cr){ lat=cr.lat; lng=cr.lng; src="track"; } }
       /* ORIGINAL bytes, untouched: the EXIF GPS stays inside the file and the DESKTOP reads it —
          the same proven path as an emailed copy. No resizing, no phone-side parsing to trust. */
-      if(f.size>25*1024*1024) continue;   // sanity cap for the GitHub contents API
+      if(f.size>25*1024*1024){ tooBig++; continue; }   // sanity cap for the GitHub contents API
       const b64=await new Promise((res,rej)=>{ const rd=new FileReader(); rd.onload=()=>res(String(rd.result).split(",")[1]); rd.onerror=rej; rd.readAsDataURL(f); });
       const rawName=String(f.name||("photo"+(i+1)));
       const extM=rawName.match(/\.[A-Za-z0-9]+$/); const ext=extM?extM[0].toLowerCase():".jpg";
       const base=rawName.replace(/\.[^.]+$/,"").replace(/[^\w\- ]+/g,"").slice(0,40)||("photo"+(i+1));
       const path="uploads/"+batch+"-"+(i+1)+"-"+base+ext;
-      await ghPutB64(cfg,path,b64,"Photo upload from phone");
+      await ghPutB64(cfg,path,b64,"Photo upload from phone",false,true);   // fresh name: no sha lookup
       entries.push({f:path,n:batch+"-"+(i+1)+"-"+base+ext,lat,lng,alt,t,src,ts:Date.now()});
     }
-    if(!entries.length) throw new Error("no readable images");
+    if(!entries.length) throw new Error(tooBig?"photos over 25 MB can\u2019t be sent":"no readable images");
     setB("Registering\u2026",true); mToast("Registering\u2026",true);
-    let man={v:1,items:[]};
-    try{ const cur=await ghGetRaw(cfg,"uploads.json"); if(cur){ const j=JSON.parse(cur); if(j&&Array.isArray(j.items)) man=j; } }catch(e){}
-    const cut=Date.now()-48*3600e3;   // stale/old-format leftovers (a failed merge, an old build) don\u2019t haunt future uploads
-    man.v=1; man.items=(man.items||[]).filter(it=>it&&it.ts&&it.ts>cut).concat(entries); man.updatedAt=new Date().toISOString();
-    await ghPutFile(cfg,"uploads.json",JSON.stringify(man),"Photo uploads from phone");
+    await mRegisterUploads(cfg,entries);
     const g0=entries.filter(en=>en.lat==null).length;
     mUpBusy=false;
     setB("\u2713 Uploaded "+entries.length+" \u2014 sending to desktop\u2026"); mToast("\u2713 Uploaded "+entries.length+" \u2014 sending to desktop\u2026",true);
     const note=document.getElementById("mSendNote");
-    if(note&&g0) note.textContent=g0+" photo"+(g0===1?"":"s")+" without a position \u2014 keep this app open while on site and future ones tag themselves.";
+    if(note&&(g0||tooBig)) note.textContent=(g0?g0+" photo"+(g0===1?"":"s")+" without a position \u2014 use \ud83d\udcf7 Take photo on site to pin them. ":"")+(tooBig?tooBig+" skipped (over 25 MB).":"");
     mWatchReceipt(entries.map(en=>en.f),entries.length);
   }catch(err){
-    mUpBusy=false; setB("Upload failed \u2014 tap to retry"); mToast("Upload failed \u2014 tap Upload photos to retry");
+    mUpBusy=false;
+    if(entries.length){   // photos that DID upload before the failure still get registered, so none are stranded
+      try{ await mRegisterUploads(cfg,entries); mWatchReceipt(entries.map(en=>en.f),entries.length);
+        setB("Sent "+entries.length+" of "+files.length+" \u2014 tap to retry the rest"); mToast("Sent "+entries.length+" of "+files.length+" \u2014 retry the rest"); return; }catch(e2){}
+    }
+    setB("Upload failed \u2014 tap to retry"); mToast("Upload failed: "+String(err&&err.message||err).slice(0,80));
     try{ console.warn("upload",err); }catch(e){}
   }
+}
+async function mRegisterUploads(cfg,entries){
+  await ghUpdateJson(cfg,"uploads.json",cur=>{ const its=Array.isArray(cur&&cur.items)?cur.items:[]; const have=new Set(its.map(it=>it&&it.f));
+    return {v:1,items:its.concat(entries.filter(en=>!have.has(en.f))),updatedAt:new Date().toISOString()}; },"Photo uploads from phone");
 }
 /* Home-screen map: the bottom half of the actions list. Dots = photos of ACTIVE actions
    (not done, not on hold); the view fits those dots plus your live location. */
@@ -4134,11 +4197,13 @@ async function mSendChanges(){
   const p=mPend(); if(!mChCount()) return;
   btn.disabled=true; note.textContent="Sending…";
   try{
-    await ghPutFile(cfg,"changes.json",JSON.stringify({v:2,updatedAt:new Date().toISOString(),changes:p.changes||{},photoNotes:p.pnotes||{},
-      newActs:(p.newActs||[]).map(x=>({text:x.text,steps:(x.steps||[]).map(s=>({t:s.t,d:!!s.d})),done:!!x.done,doneAt:x.doneAt||null,hold:!!x.hold})),
-      actOrder:(Array.isArray(p.actOrder)&&p.actOrder.length)?mActOrder().map(i=>(mPack.actions[i]||{}).id).filter(x=>x!=null):[]}),"Field changes from phone");
+    const payload={v:2,updatedAt:new Date().toISOString(),project:mPack.project||null,packAt:mPack.exportedAt||null,changes:p.changes||{},photoNotes:p.pnotes||{},
+      newActs:(p.newActs||[]).map(x=>({u:x.u||null,text:x.text,steps:(x.steps||[]).map(s=>({t:s.t,d:!!s.d})),done:!!x.done,doneAt:x.doneAt||null,hold:!!x.hold})),
+      actOrder:(Array.isArray(p.actOrder)&&p.actOrder.length)?mActOrder().map(i=>(mPack.actions[i]||{}).id).filter(x=>x!=null):[]};
+    await ghUpdateJson(cfg,"changes.json",()=>payload,"Field changes from phone");   // resends are idempotent on the desktop
     p.sentAt=Date.now(); p.sentSnap=mPendSnap(p); mPendSave(p);
-    note.textContent="✓ Sent — merge on desktop when you're back"; btn.disabled=false;
+    note.textContent="✓ Sent — the desktop merges it automatically";
+    btn.textContent="Send changes back (0)"; btn.disabled=true;
   }catch(err){ note.textContent="Failed: "+(err&&err.message||err); btn.disabled=false; }
 }
 function mShowDetail(ai,keepScroll){
@@ -4307,8 +4372,8 @@ function mShowDetail(ai,keepScroll){
       if(p.lat!=null){ insEl.style.opacity="1"; mInsetCur.setLatLng([p.lat,p.lng]); }
       else insEl.style.opacity="0.25"; };   // photo without GPS: dim the inset instead of pointing at nothing
     setCur(0);
-    if(hsEl) hsEl.addEventListener("scroll",()=>requestAnimationFrame(()=>{ const i=Math.round(hsEl.scrollLeft/Math.max(1,hsEl.clientWidth)); posOverlays(); if(i!==insEl._ci){ insEl._ci=i; setCur(i); onPhotoSwap(i); if(insEl._refit) insEl._refit(); } }));   // swiping to another photo resets any zoom back to the default fit
-  } else if(hsEl) hsEl.addEventListener("scroll",()=>requestAnimationFrame(()=>{ posOverlays(); onPhotoSwap(Math.round(hsEl.scrollLeft/Math.max(1,hsEl.clientWidth))); }));
+    if(hsEl){ let fr=0; hsEl.addEventListener("scroll",()=>{ if(fr) return; fr=requestAnimationFrame(()=>{ fr=0; const i=Math.round(hsEl.scrollLeft/Math.max(1,hsEl.clientWidth)); if(i!==insEl._ci){ insEl._ci=i; posOverlays(); setCur(i); onPhotoSwap(i); if(insEl._refit) insEl._refit(); } }); }); }   // one frame at a time; relayout only on landing a new photo (sizes don't change mid-swipe); swiping resets zoom
+  } else if(hsEl){ let fr=0, last=-1; hsEl.addEventListener("scroll",()=>{ if(fr) return; fr=requestAnimationFrame(()=>{ fr=0; const i=Math.round(hsEl.scrollLeft/Math.max(1,hsEl.clientWidth)); if(i!==last){ last=i; posOverlays(); onPhotoSwap(i); } }); }); }
   if(sub2){
     /* the card is THE sub-action editor: tick via the box, tap text to edit, Enter in the input
        to keep adding, drag the number badge to reorder. All refreshes stay local to the card.
@@ -4525,144 +4590,153 @@ async function mSetupShare(){
 }
 
 /* Desktop side of the loop: offer to merge field changes pushed by the phone. */
-let _upMerging=false;
+let _upMerging=false, _chMerging=false;
+function projectReady(){ return fileLoadedOnce||!jsonHandle; }   // never merge into a session the .json load is about to replace
+function origBase(n){ return String(n||"").replace(/^\d{8}-\d{6}-\d+-/,"").replace(/\.[^.]+$/,"").toLowerCase(); }   // phone uploads carry a batch prefix; the camera name underneath is the identity
+function sameShot(t1,t2){ if(t1==null||t2==null) return true; const d=Math.abs(t1-t2); return d<=3000||(d<=14*3600e3&&Math.min(d%3600e3,3600e3-d%3600e3)<=3000); }   // equal times, or equal up to a timezone shift
 async function checkPhotoUploads(){   // polled: phone uploads auto-merge as soon as they land — no click needed
-  if(_upMerging) return;
+  if(_upMerging||!projectReady()) return;
   const cfg=ghCfg(); if(!cfg.token) return;
+  _upMerging=true;
   try{
-    const text=await ghGetRaw(cfg,"uploads.json"); if(!text) return;
-    const man=JSON.parse(text); const items=Array.isArray(man&&man.items)?man.items:[];
+    const {obj:man}=await ghReadJson(cfg,"uploads.json");
+    const items=Array.isArray(man&&man.items)?man.items.filter(it=>it&&it.f):[];
     if(!items.length) return;
-    let merged=""; try{ merged=localStorage.getItem("pmMergedUploads")||""; }catch(e){}
-    if(man.updatedAt&&man.updatedAt===merged) return;
-    _upMerging=true;
     loadNote("Photo dump from the phone — downloading "+items.length+" photo"+(items.length===1?"":"s")+"…");
-    try{
-      const metaByName=new Map(), fitems=[];
-      for(const it of items){
-        const bytes=await ghGetBin(cfg,it.f); if(!bytes) continue;
-        const nm=it.n||it.f.split("/").pop();
-        const file=new File([bytes],nm,{type:(/\.(heic|heif)$/i.test(nm)?"image/heic":/\.png$/i.test(nm)?"image/png":"image/jpeg")});
-        metaByName.set(nm,it);
-        fitems.push({name:nm,path:"phone-uploads/"+nm,getFile:async()=>file});
+    const fin=x=>typeof x==="number"&&isFinite(x);
+    const have=new Map(); for(const ph of photos){ const b=origBase(ph.name); if(!b) continue; if(!have.has(b)) have.set(b,[]); have.get(b).push(ph); }
+    const handled=new Set(), metaByName=new Map(), fitems=[], healed=[], queued=new Set();
+    for(const it of items){
+      const nm=it.n||it.f.split("/").pop(), base=origBase(nm);
+      /* the same shot already in the project (an earlier upload, an emailed copy, the folder):
+         never a second dot — at most move a placed no-GPS dot to the real spot */
+      const dupe=base?(have.get(base)||[]).find(ph=>sameShot(ph.time,fin(it.t)?it.t:null)):null;
+      if(dupe||queued.has(base)){
+        if(dupe&&dupe.noGps&&fin(it.lat)&&fin(it.lng)){ const before=snapshotTags(dupe);
+          dupe.lat=it.lat; dupe.lng=it.lng; dupe.noGps=false; dupe.glat=null; dupe.glng=null;
+          if(dupe.time==null&&fin(it.t)) dupe.time=it.t; if(dupe.alt==null&&fin(it.alt)) dupe.alt=it.alt;
+          healed.push({id:dupe.id,before,after:snapshotTags(dupe)}); }
+        handled.add(it.f); continue;
       }
-      const startId=nextId;
-      await ingest(fitems,true);
-      const added=photos.filter(ph=>ph.id>=startId);
-      const fin=x=>typeof x==="number"&&isFinite(x);
-      for(const ph of added){ const m2=metaByName.get(ph.name); if(m2){   // the file's own EXIF (read during ingest) wins; the manifest only fills gaps (e.g. from the phone's trail)
-        if(ph.lat==null&&fin(m2.lat)&&fin(m2.lng)){ ph.lat=m2.lat; ph.lng=m2.lng; ph.noGps=false; }
-        if(ph.time==null&&m2.t) ph.time=m2.t; if(ph.alt==null&&fin(m2.alt)) ph.alt=m2.alt; } }
-      /* re-uploads of photos already in the project get swallowed by the byte-size dedupe —
-         if THIS upload carries a location for one that sits as a placed no-GPS dot, move it home */
-      const healed=[]; const addedSet=new Set(added.map(ph=>ph.id));
-      for(const [nm,m2] of metaByName){
-        if(!(fin(m2.lat)&&fin(m2.lng))) continue;
-        const ph=photos.find(x=>!addedSet.has(x.id)&&(x.name===nm||(Array.isArray(x.paths)&&x.paths.includes("phone-uploads/"+nm))));
-        if(!ph||!ph.noGps) continue;
-        const before=snapshotTags(ph);
-        ph.lat=m2.lat; ph.lng=m2.lng; ph.noGps=false; ph.glat=null; ph.glng=null;
-        if(m2.t&&ph.time==null) ph.time=m2.t; if(fin(m2.alt)&&ph.alt==null) ph.alt=m2.alt;
-        healed.push({id:ph.id,before,after:snapshotTags(ph)});
-      }
-      if(healed.length) pushTagAction(healed);
-      const c=map.getCenter();
-      for(const ph of added){ if(ph.lat==null){ ph.noGps=true; ph.lat=c.lat; ph.lng=c.lng; } }
-      if(added.length) pushUndo({addPhotos:added.map(ph=>ph.id)});
+      let bytes; try{ bytes=await ghGetBin(cfg,it.f); }catch(e){ continue; }   // transient failure: stays listed for the next poll
+      if(!bytes){ handled.add(it.f); continue; }   // file is gone: drop its entry
+      const file=new File([bytes],nm,{type:(/\.(heic|heif)$/i.test(nm)?"image/heic":/\.png$/i.test(nm)?"image/png":"image/jpeg")});
+      metaByName.set(nm,it); queued.add(base);
+      fitems.push({name:nm,path:"phone-uploads/"+nm,getFile:async()=>file});
+    }
+    const added=fitems.length?((await ingest(fitems,true))||[]):[];
+    for(const it of metaByName.values()) handled.add(it.f);
+    for(const ph of added){ ph.adhoc=true; const m2=metaByName.get(ph.name); if(m2){   // the file's own EXIF wins; the manifest only fills gaps (the phone's trail / live fix)
+      if(ph.lat==null&&fin(m2.lat)&&fin(m2.lng)){ ph.lat=m2.lat; ph.lng=m2.lng; ph.noGps=false; }
+      if(ph.time==null&&m2.t) ph.time=m2.t; if(ph.alt==null&&fin(m2.alt)) ph.alt=m2.alt; } }
+    const c=map.getCenter();
+    for(const ph of added){ if(ph.lat==null){ ph.noGps=true; ph.lat=c.lat; ph.lng=c.lng; } }
+    if(healed.length) pushTagAction(healed);
+    if(added.length) pushUndo({addPhotos:added.map(ph=>ph.id)});
+    if(added.length||healed.length){
       rebuildSizeIndex(); buildDateFilter(); buildCluster(); renderClusters(); updateStats(); updateGallery(); persistState(); cacheFullSession();
-      const geo=added.filter(ph=>ph.lat!=null).concat(healed.map(h=>photoById(h.id)).filter(Boolean));
+      const geo=added.filter(ph=>ph.lat!=null&&!ph.noGps).concat(healed.map(h=>photoById(h.id)).filter(Boolean));
       if(geo.length>1) map.fitBounds(L.latLngBounds(geo.map(ph=>[ph.lat,ph.lng])),{padding:[60,60],maxZoom:18});
       else if(geo.length===1) map.flyTo([geo[0].lat,geo[0].lng],Math.max(map.getZoom(),17));
-      try{ localStorage.setItem("pmMergedUploads",man.updatedAt||String(Date.now())); }catch(e){}
-      const gotN=added.length+healed.length;
-      loadNote(gotN?("Added "+added.length+" phone photo"+(added.length===1?"":"s")+(healed.length?(" · moved "+healed.length+" earlier upload"+(healed.length===1?"":"s")+" to their real spot"):"")+" — Ctrl+Z undoes"):"Phone upload had nothing new");
-      setTimeout(()=>loadNote(""),4000);
-      await ghPutFile(cfg,"uploads.json",JSON.stringify({v:1,items:[],clearedAt:new Date().toISOString()}),"Phone uploads merged on desktop");   // the phone watches this to show ✓ received
-      for(const it of items) ghDeleteFile(cfg,it.f);
-    }catch(err){ loadNote("Merge failed: "+(err&&err.message||err)); setTimeout(()=>loadNote(""),5000); }
-    _upMerging=false;
-  }catch(e){ _upMerging=false; }
+    }
+    loadNote((added.length||healed.length)?("Added "+added.length+" phone photo"+(added.length===1?"":"s")+(healed.length?(" · moved "+healed.length+" earlier one"+(healed.length===1?"":"s")+" to its real spot"):"")+" — Ctrl+Z undoes"):(handled.size?"Phone upload: those photos are already on the map":""));
+    setTimeout(()=>loadNote(""),4000);
+    if(handled.size){   // remove ONLY what we handled — anything the phone appended meanwhile survives
+      await ghUpdateJson(cfg,"uploads.json",cur=>{ const its=Array.isArray(cur&&cur.items)?cur.items:[]; const keep=its.filter(it=>!(it&&handled.has(it.f))); if(keep.length===its.length) return null; return {v:1,items:keep,updatedAt:new Date().toISOString()}; },"Phone uploads merged on desktop");   // the phone watches this to show ✓ received
+      ghDeleteMany(cfg,[...handled]).catch(()=>{});
+    }
+  }catch(err){ loadNote("Phone photo merge failed: "+(err&&err.message||err)); setTimeout(()=>loadNote(""),5000); }
+  finally{ _upMerging=false; }
 }
+/* Field changes from the phone merge automatically (polled, like photo dumps). Merges are
+   idempotent — sub-actions are matched by permanent id, phone-made steps/actions by uid, and
+   every field is set-to-value — so a batch that arrives twice can never duplicate or misapply. */
 async function checkFieldChanges(){
+  if(_chMerging||!projectReady()) return;
   const cfg=ghCfg(); if(!cfg.token) return;
+  _chMerging=true;
   try{
-    const text=await ghGetRaw(cfg,"changes.json"); if(!text) return;
-    const data=JSON.parse(text); const ch=data&&data.changes||{}; const pnCh=data&&data.photoNotes||{};
+    const {obj:data}=await ghReadJson(cfg,"changes.json"); if(!data) return;
+    const ch=data.changes||{}, pnCh=data.photoNotes||{};
     const nActs=Array.isArray(data.newActs)?data.newActs:[];
     const ordIds=Array.isArray(data.actOrder)?data.actOrder.map(Number).filter(x=>x>0):[];
     const ids=Object.keys(ch), pids=Object.keys(pnCh);
     if(!ids.length&&!pids.length&&!nActs.length&&ordIds.length<2) return;
     let merged=""; try{ merged=localStorage.getItem("pmMergedChanges")||""; }catch(e){}
     if(data.updatedAt&&data.updatedAt===merged) return;   // already merged this batch
-    const bits=[]; if(ids.length) bits.push(ids.length+" action"+(ids.length===1?"":"s")); if(ordIds.length>1) bits.push("priority order"); if(pids.length) bits.push(pids.length+" photo note"+(pids.length===1?"":"s")); if(nActs.length) bits.push(nActs.length+" new action"+(nActs.length===1?"":"s"));
-    showBanner("Field changes from the phone — <b>"+bits.join(" + ")+"</b>. Click to merge them into this project.",async()=>{
-      hideBanner();
-      for(const id of ids){
-        const a=actById(+id); if(!a) continue;
-        const before=actState(a); const c=ch[id];
-        if(typeof c.title==="string"&&c.title.trim()) a.text=c.title.trim();
-        if(c.stepEdits) for(const k of Object.keys(c.stepEdits)){ const i=+k, t=String(c.stepEdits[k]||"").trim(); if(t&&a.steps&&a.steps[i]) a.steps[i].t=t; }
-        if(c.steps) for(const k of Object.keys(c.steps)){ const i=+k; if(a.steps&&a.steps[i]) a.steps[i].d=!!c.steps[k]; }
-        if(Array.isArray(c.newSteps)) for(const s of c.newSteps){ const t=String(s&&s.t||"").trim(); if(t){ if(!Array.isArray(a.steps)) a.steps=[]; a.steps.push({t,d:!!s.d}); } }
-        if(Array.isArray(a.steps)&&a.steps.length&&(Array.isArray(c.stepOrder)||Array.isArray(c.delSteps))){
-          const newLen=Array.isArray(c.newSteps)?c.newSteps.filter(s=>String(s&&s.t||"").trim()).length:0;
-          const origLen=a.steps.length-newLen;
-          const packArr=a.steps.slice(0,origLen), newArr=a.steps.slice(origLen);
-          if(Array.isArray(c.stepOrder)){   // phone drag-reorder of sub-actions
-            const used=new Set(), out=[];
-            for(const t of c.stepOrder){ if(!t) continue;
-              if(t.k==="pack"&&packArr[t.i]!=null&&!used.has("p"+t.i)){ used.add("p"+t.i); out.push(packArr[t.i]); }
-              else if(t.k==="new"&&newArr[t.i]!=null&&!used.has("n"+t.i)){ used.add("n"+t.i); out.push(newArr[t.i]); } }
-            packArr.forEach((s,i)=>{ if(!used.has("p"+i)) out.push(s); });
-            newArr.forEach((s,i)=>{ if(!used.has("n"+i)) out.push(s); });
-            a.steps=out;
-          }
-          if(Array.isArray(c.delSteps)&&c.delSteps.length){   // phone deletions of pack sub-actions, by original index
-            const delObjs=new Set(); for(const di of c.delSteps){ const o=packArr[+di]; if(o) delObjs.add(o); }
-            if(delObjs.size) a.steps=a.steps.filter(s=>!delObjs.has(s));
-          }
-        }
-        if(typeof c.hold==="boolean") a.hold=c.hold;
-        if(c.done===true&&!a.done){ a.done=true; a.doneAt=c.doneAt||Date.now(); }
-        if(c.done===false&&a.done){ a.done=false; a.doneAt=null; }
-        recordActEdit(a,before);
+    const cur=loadedJsonName||folderName||"PhotoMap";
+    if(data.project&&data.project!==cur){ loadNote("Phone changes are for “"+data.project+"” — open that project to merge them"); setTimeout(()=>loadNote(""),6000); return; }   // left in place for the right project
+    for(const id of ids){
+      const a=actById(+id); if(!a) continue;
+      const before=actState(a); const c=ch[id]||{};
+      if(!Array.isArray(a.steps)) a.steps=[];
+      if(typeof c.title==="string"&&c.title.trim()) a.text=c.title.trim();
+      if(Array.isArray(c.sids)){   // id-based: immune to desktop-side reorders and to resends
+        const packArr=c.sids.map(sid=>sid?(a.steps.find(x=>x.id===sid)||null):null);
+        const newArr=(Array.isArray(c.newSteps)?c.newSteps:[]).map((ns,i)=>{ const t=String(ns&&ns.t||"").trim(); if(!t) return null;
+          const uid=(ns&&ns.u)||("l"+id+"_"+i+"_"+t.slice(0,24));
+          let o=a.steps.find(x=>x.id===uid); if(!o){ o={t,d:!!ns.d,id:uid}; a.steps.push(o); } else { o.t=t; o.d=!!ns.d; } return o; });
+        if(c.stepEdits) for(const k of Object.keys(c.stepEdits)){ const o=packArr[+k], t=String(c.stepEdits[k]||"").trim(); if(o&&t) o.t=t; }
+        if(c.steps) for(const k of Object.keys(c.steps)){ const o=packArr[+k]; if(o) o.d=!!c.steps[k]; }
+        if(Array.isArray(c.stepOrder)){ const used=new Set(), out=[];
+          for(const t of c.stepOrder){ if(!t) continue; const o=t.k==="pack"?packArr[t.i]:newArr[t.i]; if(o&&!used.has(o)){ used.add(o); out.push(o); } }
+          for(const o of a.steps) if(!used.has(o)) out.push(o);
+          a.steps=out; }
+        if(Array.isArray(c.delSteps)&&c.delSteps.length){ const del=new Set(c.delSteps.map(i=>packArr[+i]).filter(Boolean)); if(del.size) a.steps=a.steps.filter(o=>!del.has(o)); }
+        if(Array.isArray(c.delU)&&c.delU.length){ const du=new Set(c.delU); a.steps=a.steps.filter(o=>!du.has(o.id)); }   // phone-made steps deleted on the phone after an earlier send
+      } else {   // legacy phone build: index-based against the pack
+        if(c.stepEdits) for(const k of Object.keys(c.stepEdits)){ const i=+k, t=String(c.stepEdits[k]||"").trim(); if(t&&a.steps[i]) a.steps[i].t=t; }
+        if(c.steps) for(const k of Object.keys(c.steps)){ const i=+k; if(a.steps[i]) a.steps[i].d=!!c.steps[k]; }
+        if(Array.isArray(c.newSteps)) for(const st of c.newSteps){ const t=String(st&&st.t||"").trim(); if(t) a.steps.push({t,d:!!st.d,id:newSid()}); }
       }
-      if(ordIds.length>1){   // phone priority reorder: pack actions permute among their own slots, everything else stays put
-        const uniq=[]; const seenO=new Set();
-        for(const id of ordIds){ if(!seenO.has(id)&&actById(id)){ seenO.add(id); uniq.push(id); } }
-        if(uniq.length>1){ const idSet=new Set(uniq);
-          const beforeIds=actions.map(x=>x.id);
-          const slots=[]; actions.forEach((x,i)=>{ if(idSet.has(x.id)) slots.push(i); });
-          const seq=uniq.map(id=>actById(id));
-          const out=actions.slice(); slots.forEach((pos,j)=>{ out[pos]=seq[j]; });
-          actions=out; const afterIds=actions.map(x=>x.id);
-          if(JSON.stringify(beforeIds)!==JSON.stringify(afterIds)) pushUndo({order:{before:beforeIds,after:afterIds}});
-        }
+      if(typeof c.hold==="boolean") a.hold=c.hold;
+      if(c.done===true&&!a.done){ a.done=true; a.doneAt=c.doneAt||Date.now(); }
+      if(c.done===false&&a.done){ a.done=false; a.doneAt=null; }
+      recordActEdit(a,before);
+    }
+    if(ordIds.length>1){   // phone priority reorder: pack actions permute among their own slots, everything else stays put
+      const uniq=[]; const seenO=new Set();
+      for(const oid of ordIds){ if(!seenO.has(oid)&&actById(oid)){ seenO.add(oid); uniq.push(oid); } }
+      if(uniq.length>1){ const idSet=new Set(uniq);
+        const beforeIds=actions.map(x=>x.id);
+        const slots=[]; actions.forEach((x,i)=>{ if(idSet.has(x.id)) slots.push(i); });
+        const seq=uniq.map(oid=>actById(oid));
+        const out=actions.slice(); slots.forEach((pos,j)=>{ out[pos]=seq[j]; });
+        actions=out; const afterIds=actions.map(x=>x.id);
+        if(JSON.stringify(beforeIds)!==JSON.stringify(afterIds)) pushUndo({order:{before:beforeIds,after:afterIds}});
       }
-      for(const na of nActs){   // actions created on the phone: real actions here, each its own undo step
-        const a2=createAction(String(na&&na.text||"").trim(),null); if(!a2) continue;
-        const b2=actState(a2);
-        a2.steps=(na.steps||[]).map(s=>({t:String(s&&s.t||"").trim(),d:!!(s&&s.d)})).filter(s=>s.t);
-        if(na.hold) a2.hold=true;
-        if(na.done){ a2.done=true; a2.doneAt=na.doneAt||Date.now(); }
-        recordActEdit(a2,b2);
-      }
-      const items=[];
-      for(const k of pids){   // the phone edits the note IN PLACE (it pre-fills with the current text), so merging REPLACES; matched by name first (photo ids can shift between sessions)
-        const e=pnCh[k]; const t=((typeof e==="string"?e:(e&&e.t))||"").trim(); if(!t) continue;
-        const nm=(e&&e.n)||null;
-        const ph=(nm?photos.find(x=>x.name===nm):null)||photoById(+k); if(!ph||ph.note===t) continue;
-        const before=snapshotTags(ph); ph.note=t;
-        items.push({id:ph.id,before,after:snapshotTags(ph)});
-      }
-      if(items.length) pushUndo({items});
-      afterFolderChange();
-      try{ localStorage.setItem("pmMergedChanges",data.updatedAt||String(Date.now())); }catch(e){}
-      ghPutFile(cfg,"changes.json",JSON.stringify({v:2,changes:{},photoNotes:{},newActs:[],clearedAt:new Date().toISOString()}),"Field changes merged on desktop").catch(()=>{});
-      const n=ids.length+pids.length+nActs.length;
-      loadNote("Merged "+n+" field change"+(n===1?"":"s")+" ✓"); setTimeout(()=>loadNote(""),3000);
-    });
+    }
+    let newN=0;
+    for(const na of nActs){   // actions created on the phone: one real action per uid, however often it's sent
+      if(na&&na.u&&actions.some(x=>x.fu===na.u)) continue;
+      const a2=createAction(String(na&&na.text||"").trim(),null); if(!a2) continue;
+      const b2=actState(a2);
+      if(na.u) a2.fu=na.u;
+      a2.steps=(na.steps||[]).map(st=>({t:String(st&&st.t||"").trim(),d:!!(st&&st.d),id:newSid()})).filter(st=>st.t);
+      if(na.hold) a2.hold=true;
+      if(na.done){ a2.done=true; a2.doneAt=na.doneAt||Date.now(); }
+      recordActEdit(a2,b2); newN++;
+    }
+    const items=[];
+    for(const k of pids){   // the phone edits the note IN PLACE (pre-filled), so merging REPLACES; matched by stable photo key, then id+name, then a unique name
+      const e=pnCh[k]; const t=((typeof e==="string"?e:(e&&e.t))||"").trim(); if(!t) continue;
+      const nm=(e&&e.n)||null, key=(e&&e.k)||null;
+      let ph=key?photos.find(x=>metaKey(x)===key):null;
+      if(!ph){ const byId=photoById(+k); if(byId&&(!nm||byId.name===nm)) ph=byId; }
+      if(!ph&&nm){ const same=photos.filter(x=>x.name===nm); if(same.length===1) ph=same[0]; }
+      if(!ph||ph.note===t) continue;
+      const before=snapshotTags(ph); ph.note=t;
+      items.push({id:ph.id,before,after:snapshotTags(ph)});
+    }
+    if(items.length) pushUndo({items});
+    afterFolderChange();
+    try{ localStorage.setItem("pmMergedChanges",data.updatedAt||String(Date.now())); }catch(e){}
+    await ghUpdateJson(cfg,"changes.json",now=>{ if(!now||now.updatedAt!==data.updatedAt) return null;   // the phone sent something newer meanwhile: leave it for the next poll
+      return {v:2,changes:{},photoNotes:{},newActs:[],actOrder:[],clearedAt:new Date().toISOString(),mergedFrom:data.updatedAt}; },"Field changes merged on desktop");
+    const n=ids.length+pids.length+newN;
+    loadNote("Merged "+n+" field change"+(n===1?"":"s")+" from the phone ✓ — Ctrl+Z undoes"); setTimeout(()=>loadNote(""),3500);
   }catch(e){ console.warn("field-changes check failed",e); }
+  finally{ _chMerging=false; }
 }
 
 (async function init(){
@@ -4701,10 +4775,11 @@ async function checkFieldChanges(){
   if(jsonHandle){ if(!loadedJsonName) loadedJsonName=jsonHandle.name||null; armFileSync(); }   // on first interaction, pull the latest from the file and enable auto-save
   if(dirHandle){ try{ if((await dirHandle.queryPermission({mode:"read"}))!=="granted") armFolderPermission(); }catch(e){} }
   renderProjHead();
-  setTimeout(checkFieldChanges,1500);   // offer to merge any field changes the phone has pushed
+  setTimeout(checkFieldChanges,1500);   // merge any field changes the phone has pushed…
+  setInterval(checkFieldChanges,45000);   // …and keep watching, like photo dumps
   setTimeout(checkPhotoUploads,2600);   // …then keep watching: phone photo dumps auto-merge as they arrive
   setInterval(checkPhotoUploads,45000);
-  window.addEventListener("focus",()=>{ checkPhotoUploads(); });
+  window.addEventListener("focus",()=>{ checkPhotoUploads(); checkFieldChanges(); });
 })();
 
 /* ---- app self-update check (active only when served from the web, e.g. GitHub Pages) ----
