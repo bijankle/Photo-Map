@@ -3,7 +3,7 @@
    original files WITH their GPS intact, unlike the file picker, which strips it).
    It never caches the app itself — every normal request goes straight to the network,
    so the self-updating page keeps working exactly as before. */
-const SW_VER = "3";
+const SW_VER = "4";
 self.addEventListener("install", e => {
   e.waitUntil(caches.open("pm-shared").then(c => c.put("swver", new Response(SW_VER))));
   self.skipWaiting();
@@ -22,6 +22,7 @@ self.addEventListener("fetch", e => {
           for (const [k, v] of fd.entries()) if (v && typeof v.arrayBuffer === "function" && v.size) files.push(v);
         }
         const cache = await caches.open("pm-shared");
+        await cache.put("swver", new Response(SW_VER));   // restamped every share — survives cache clears
         await cache.put("dbg", new Response(JSON.stringify(dbg)));
         await cache.put("meta", new Response(JSON.stringify(files.map(f => ({ n: f.name, t: f.type })))));
         for (let i = 0; i < files.length; i++) await cache.put("file-" + i, new Response(files[i]));
