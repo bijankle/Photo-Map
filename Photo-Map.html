@@ -115,6 +115,9 @@
 
   .reconnect{position:absolute;top:calc(var(--header-h) + 12px);left:50%;transform:translateX(-50%);z-index:1500;background:#fff;border:1px solid var(--accent);border-radius:10px;padding:10px 14px;display:none;align-items:center;gap:14px;box-shadow:0 12px 32px #1e1f2226;}
   .reconnect.show{display:flex;}
+  .reconnect .rc-x{border:none;background:none;color:var(--dim);font-size:18px;line-height:1;cursor:pointer;padding:2px 4px;margin-left:-6px;}
+  .reconnect .rc-x:hover{color:var(--ink);}
+  .reconnect .msg{max-width:720px;line-height:1.45;}
   .reconnect .msg{font-size:13px;color:var(--text);} .reconnect .msg b{color:var(--accent);}
 
   .main{display:flex;height:calc(100% - var(--header-h));position:relative;}
@@ -845,6 +848,7 @@
 <div class="reconnect" id="reconnect">
   <span class="msg" id="rcMsg">—</span>
   <button class="btn primary" id="btnReconnect">Load</button>
+  <button class="rc-x" id="rcX" type="button" title="Dismiss">&times;</button>
 </div>
 
 <div class="main tab-photo" id="main">
@@ -2320,7 +2324,7 @@ map.on("contextmenu",e=>{
 });
 
 /* file loading */
-const IMG_RE=/\.(jpe?g|png|tiff?|heic|heif|webp|gif|bmp)$/i;
+const IMG_RE=/\.(jpe?g|jfif|png|tiff?|heic|heif|webp|avif|gif|bmp)$/i;
 const hasFSA="showDirectoryPicker" in window;
 document.getElementById("btnFolder").addEventListener("click",openFolder);
 document.getElementById("folderInput").addEventListener("change",async e=>{
@@ -2336,7 +2340,7 @@ async function openFolder(){
     try{
       const prevRoot=folderName, hadPhotos=photos.length>0;
       dirHandle=await window.showDirectoryPicker(); invalidateDirIndex(); await idbSet("dirHandle",dirHandle); folderName=dirHandle.name;
-      await loadFromHandle(dirHandle,true,{prune: hadPhotos && (prevRoot===dirHandle.name || !prevRoot)});
+      scanReport(await loadFromHandle(dirHandle,true,{prune: hadPhotos && (prevRoot===dirHandle.name || !prevRoot)}));
     }
     catch(err){ if(err&&err.name==="AbortError")return; console.warn("picker fallback",err); document.getElementById("folderInput").click(); }
   } else { document.getElementById("folderInput").click(); }
@@ -2350,11 +2354,62 @@ async function* walkDir(handle,prefix){
 }
 async function loadFromHandle(handle, append, opts){
   etaStart("scan",1,"Loading — scanning “"+(handle.name||"folder")+"”…");
-  const items=[];
-  for await (const f of walkDir(handle,"")) if(IMG_RE.test(f.name)){ items.push({name:f.name,path:f.path,getFile:()=>f.handle.getFile()}); if(items.length%200===0) loadNote("Loading — scanning “"+(handle.name||"folder")+"”… "+items.length.toLocaleString()+" photos found"); }
+  const items=[]; let zips=0, other=0;
+  for await (const f of walkDir(handle,"")){
+    if(IMG_RE.test(f.name)){ items.push({name:f.name,path:f.path,getFile:()=>f.handle.getFile()}); if(items.length%200===0) loadNote("Loading — scanning “"+(handle.name||"folder")+"”… "+items.length.toLocaleString()+" photos found"); }
+    else if(/\.zip$/i.test(f.name)) zips++; else if(/\.(dng|raw|cr2|nef|arw|mp4|mov|3gp)$/i.test(f.name)) other++; }
   etaEnd();
-  await ingest(items, append);
+  const created=items.length?((await ingest(items, append))||[]):[];
   if(opts&&opts.prune){ loadNote("Loading — syncing removed files…"); pruneMissing(handle.name,new Set(items.map(it=>it.path))); loadNote(""); }
+  return {root:handle.name||"folder",seen:items.length,created,zips,other};
+}
+/* After any folder scan: say exactly what was found, and why anything new isn't visible
+   (no GPS in the file, or hidden by a filter), with a one-click way to show it. */
+function onMapNow(p){ return p.lat!=null&&passDate(p)&&passSearch(p)&&passTags(p)&&passActs(p)&&passAlt(p)&&(!boxBounds||boxBounds.contains([p.lat,p.lng])); }
+function scanReport(r,quiet){
+  if(!r) return;
+  const n=r.created.length, noLoc=r.created.filter(p=>p.lat==null), hid=r.created.filter(p=>p.lat!=null&&!onMapNow(p));
+  if(quiet&&!n) return;
+  const why=[]; if(actOnlyMap) why.push("\u201cActions only\u201d is on"); if(boxBounds) why.push("an area filter is on"); if(nameFilter) why.push("the search box has text"); if(tagFilters.size) why.push("a folder-tag filter is on"); if(dateLo!=null&&(dateLo>dateMin||dateHi<dateMax)) why.push("the date range is narrowed"); if(altLo!=null&&(altLo>altMinV||altHi<altMaxV)) why.push("the altitude range is narrowed");
+  let msg="Scanned <b>"+esc(r.root)+"</b>: "+r.seen+" photo"+(r.seen===1?"":"s")+" \u2014 <b>"+n+" new</b>";
+  if(!n) msg+=" (everything there is already in the project)";
+  if(hid.length) msg+=". "+hid.length+" of the new ones "+(hid.length===1?"is":"are")+" hidden because "+(why.join(" and ")||"of a filter");
+  if(noLoc.length) msg+=". "+noLoc.length+" "+(noLoc.length===1?"has":"have")+" no GPS location in the file (common for copies made by Phone Link / \u201cMobile devices\u201d or messaging apps), so "+(noLoc.length===1?"it's":"they're")+" only in the gallery";
+  if(r.zips) msg+=". "+r.zips+" .zip file"+(r.zips===1?"":"s")+" found \u2014 unzip "+(r.zips===1?"it":"them")+" first (photos inside archives can't be read)";
+  if(r.other) msg+=". "+r.other+" RAW/video file"+(r.other===1?" was":"s were")+" skipped";
+  msg+=".";
+  showBanner(msg, n?()=>showNewPhotos(r.created):null, "Show the new photos");
+  if(n) logChange("Found "+n+" new photo"+(n===1?"":"s")+" in \u201c"+r.root+"\u201d");
+}
+function showNewPhotos(list){
+  hideBanner();
+  const loc=list.filter(p=>p.lat!=null);
+  if(loc.some(p=>!onMapNow(p))){   // lift exactly the filters that hide them
+    actOnlyMap=false; if(boxBounds){ boxBounds=null; if(boxRect){ map.removeLayer(boxRect); boxRect=null; } setAreaBtn(); }
+    if(nameFilter){ nameFilter=""; document.getElementById("nameFilter").value=""; }
+    if(tagFilters.size){ tagFilters.clear(); }
+    buildDateFilter();   // resets date + altitude ranges to the full span
+  }
+  if(list.some(p=>p.lat==null)&&!showNoGeo){ showNoGeo=true; const c=document.getElementById("showNoGeo"); if(c) c.checked=true; }
+  selSet=new Set(list.map(p=>p.id)); setAreaBtn();
+  buildCluster(); renderClusters(); renderActions(); renderMapTags(); updateGallery(); persistState();
+  if(loc.length>1) map.fitBounds(L.latLngBounds(loc.map(p=>[p.lat,p.lng])),{padding:[60,60],maxZoom:18}); else if(loc.length===1) map.flyTo([loc[0].lat,loc[0].lng],17);
+  setTab("gallery");
+  loadNote("The new photos are selected (Esc clears) \u2014 "+loc.length+" on the map"+(list.length>loc.length?", "+(list.length-loc.length)+" without location at the end of the gallery":""));
+  setTimeout(()=>loadNote(""),6000);
+}
+/* The folder is re-checked by itself (when you come back to the window, and every few minutes):
+   photos copied in later are added without a manual re-scan. Only new paths are read. */
+let _watchBusy=false;
+async function watchFolder(){
+  if(_watchBusy||!dirHandle||!projectReady()||userTyping()) return;
+  try{ if((await dirHandle.queryPermission({mode:"read"}))!=="granted") return; }catch(e){ return; }
+  _watchBusy=true;
+  try{
+    const root=dirHandle.name||"", known=new Set(); for(const p of photos) for(const pa of physPaths(p)){ known.add(pa); if(root&&pa.startsWith(root+"/")) known.add(pa.slice(root.length+1)); }
+    const fresh=[]; for await (const f of walkDir(dirHandle,"")) if(IMG_RE.test(f.name)&&!known.has(f.path)) fresh.push({name:f.name,path:f.path,getFile:()=>f.handle.getFile()});
+    if(fresh.length){ const created=(await ingest(fresh,true))||[]; scanReport({root:root||"folder",seen:fresh.length,created,zips:0,other:0},true); }
+  }catch(e){} finally{ _watchBusy=false; }
 }
 /* Disk-truth sync: a fresh scan of the root folder is authoritative for PHYSICAL paths. Any stored
    physical path no longer present is removed from that photo — so folder-derived tags disappear for
@@ -3822,7 +3877,7 @@ async function refreshFolder(){
   if(!dirHandle){ try{ dirHandle=await idbGet("dirHandle"); }catch(e){} }
   if(dirHandle && await ensurePermission(dirHandle)){
     invalidateDirIndex(); folderName=dirHandle.name; hideBanner();
-    await loadFromHandle(dirHandle,true,{prune:photos.length>0});
+    scanReport(await loadFromHandle(dirHandle,true,{prune:photos.length>0}));
   } else openFolder();   // no remembered folder yet -> pick one
 }
 function clearAll(redraw){
@@ -4080,7 +4135,8 @@ let fullCacheTimer=null;
 function cacheFullSession(){ clearTimeout(fullCacheTimer); fullCacheTimer=setTimeout(()=>{ try{ if(photos.some(p=>p.thumb)){ const st=serializeState(true); lastFullCache=st; idbSet("lastFull",st).catch(()=>{}); } }catch(e){} },1500); }   // keep the in-memory cache reference fresh so a later Open .JSON in the same session can restore images
 
 /* banner */
-function showBanner(html,action){ document.getElementById("rcMsg").innerHTML=html; bannerAction=action; document.getElementById("reconnect").classList.add("show"); }
+function showBanner(html,action,label){ document.getElementById("rcMsg").innerHTML=html; bannerAction=action; const b=document.getElementById("btnReconnect"); b.textContent=label||"Load"; b.style.display=action?"":"none"; document.getElementById("reconnect").classList.add("show"); }
+document.getElementById("rcX").addEventListener("click",()=>hideBanner());
 function hideBanner(){ document.getElementById("reconnect").classList.remove("show"); bannerAction=null; }
 document.getElementById("btnReconnect").addEventListener("click",()=>{ if(bannerAction) bannerAction(); });
 function maybeOfferReconnect(){
@@ -4092,7 +4148,7 @@ function maybeOfferReconnect(){
   else showBanner('Images live in the photos folder — connect <b>'+esc(folderName||"the photos folder")+'</b> to load them.',()=>{ hideBanner(); openFolder(); });
 }
 async function reconnectFolder(){ if(!dirHandle)return; if(!(await ensurePermission(dirHandle))){ alert("Permission to read the folder was not granted."); return; } folderName=dirHandle.name; hideBanner();
-  await loadFromHandle(dirHandle,true,{prune:true});   // append: heals images onto the existing photos, keeps actions/notes/pasted photos intact
+  scanReport(await loadFromHandle(dirHandle,true,{prune:true}),true);   // append: heals images onto the existing photos, keeps actions/notes/pasted photos intact
   buildCluster(); renderClusters(); updateGallery(); renderActions(); persistState();
 }
 async function ensurePermission(handle){ try{ const o={mode:"read"}; if((await handle.queryPermission(o))==="granted")return true; const g=(await handle.requestPermission(o))==="granted"; releaseStuckDrag(); if(g)return true; }catch(e){ releaseStuckDrag(); } return false; }
@@ -5379,10 +5435,11 @@ async function checkFieldChanges(){
   renderProjHead();
   setTimeout(checkFieldChanges,1500);   // merge any field changes the phone has pushed…
   setInterval(()=>syncTick(),20000);   // …and keep watching
+  setInterval(()=>watchFolder(),180000);   // new photos copied into the folder are picked up by themselves
   setTimeout(()=>scheduleAutoExport(0),6000);   // bring the phone up to date with this session
   setTimeout(checkPhotoUploads,2600);   // …then keep watching: phone photo dumps auto-merge as they arrive
 
-  window.addEventListener("focus",()=>syncTick());
+  window.addEventListener("focus",()=>{ syncTick(); watchFolder(); });
 })();
 
 /* ---- app self-update check (active only when served from the web, e.g. GitHub Pages) ----
