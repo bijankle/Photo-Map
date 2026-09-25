@@ -56,7 +56,9 @@
   .yn-no{background:var(--panel);color:var(--ink);border:1px solid var(--line2);}
   .yn-yes{background:var(--accent);color:#fff;border:1px solid var(--accent);}
   .yn-yes.danger{background:var(--bad);border-color:var(--bad);}
-  .hsearch{position:relative;margin-left:14px;flex:0 1 380px;min-width:180px;}
+  .hsearch{display:none;position:absolute;top:calc(100% - 6px);left:180px;width:460px;z-index:7100;background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:0 12px 32px #1e1f2233;padding:8px;}
+  .hsearch.open{display:block;}
+  .hsearch .hs-drop{position:static;min-width:0;box-shadow:none;border:none;padding:4px 0 0;max-height:60vh;}
   .hsearch input{width:100%;box-sizing:border-box;font:13px var(--font);color:var(--ink);background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:7px 11px;outline:none;}
   .hsearch input:focus{border-color:var(--accent);background:var(--panel);box-shadow:0 0 0 3px var(--accent-tint);}
   .hs-drop{display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;min-width:420px;max-height:70vh;overflow-y:auto;z-index:7000;background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:0 12px 32px #1e1f2233;padding:4px;}
@@ -73,8 +75,9 @@
   .hs-st.open{background:#E7F6EC;color:#237042;} .hs-st.hold{background:#FDF3D2;color:#7A5C00;} .hs-st.done{background:#EEF0F2;color:#666;}
   .hs-drop mark{background:#FDEBA3;color:inherit;border-radius:2px;padding:0 1px;}
   .hs-empty{padding:12px;color:var(--dim);font-size:12.5px;}
-  @media (max-width:1150px){ .hsearch{flex-basis:240px;} }
-  .savestat{font-family:var(--mono);font-size:9px;color:var(--faint);margin-left:8px;align-self:flex-end;padding-bottom:2px;white-space:nowrap;}
+  .brand-t{display:flex;flex-direction:column;line-height:1.05;}
+  .savestat{font:11px var(--font);color:var(--dim);white-space:nowrap;margin-top:2px;}
+  .savestat:empty{display:none;}
   .savestat.busy{color:var(--dim);}
   .savestat.bad{color:#fff;background:var(--bad);padding:1px 6px;border-radius:4px;font-weight:700;}   /* a failed save must be impossible to miss */
   .brand .build{font-family:var(--mono);font-size:9px;color:var(--faint);margin-left:8px;align-self:flex-end;padding-bottom:2px;}
@@ -716,38 +719,41 @@
 <body>
 
 <header>
-  <div class="brand"><div class="mark"></div><h1>Photo<span>Map</span></h1><span class="build" id="buildStamp" title="When this copy of the app was published — if it's older than the latest change, you're running a stale copy"></span><span class="savestat" id="saveStatus" title="Auto-save status of the project .json"></span></div>
+  <div class="brand"><div class="mark"></div><div class="brand-t"><h1>Photo<span>Map</span></h1><span class="savestat" id="saveStatus" title="When the project file was last saved"></span></div><span class="build" id="buildStamp" style="display:none" title="When this copy of the app was published — if it's older than the latest change, you're running a stale copy"></span></div>
   <nav class="menubar" id="menubar">
     <div class="mb"><button class="mb-btn" type="button">File</button><div class="mb-drop">
-      <button class="mi" id="btnOpenJson" type="button">Open project (.json)…</button>
-      <button class="mi" id="btnSave" type="button" title="Changes auto-save onto the loaded .json — this forces an immediate save">Save project now</button>
-      <button class="mi" id="btnSaveAs" type="button" title="Choose a new .json to keep this project in (metadata only — no embedded photos)">Save project as…</button>
+      <button class="mi" id="btnOpenJson" type="button" title="Open a saved project file (.json). The current project is closed first — you'll be asked.">Open project…</button>
+      <button class="mi" id="btnSave" type="button" title="Save the project now. It also saves by itself a moment after every change.">Save</button>
+      <button class="mi" id="btnSaveAs" type="button" title="Keep this project in a new .json file (metadata only — the photos stay where they are).">Save as…</button>
       <div class="msep"></div>
-      <button class="mi" id="btnFolder" type="button" title="Adds the folder's photos to this project (nothing is removed)">Add photos from a folder…</button>
-      <button class="mi" id="btnRefresh" type="button" title="Re-scan the main photos folder: add what's new, remove photos whose files were deleted">Re-scan photo folder (add new, drop deleted)…</button>
+      <button class="mi" id="btnFolder" type="button" title="Add every photo from a folder to this project. Nothing already in the project is removed.">Add folder…</button>
+      <button class="mi" id="btnRefresh" type="button" title="Re-scan the main photo folder: add new photos and drop ones whose files were deleted or moved out. You'll be asked first, and removals can be undone.">Refresh folder…</button>
       <div class="msep"></div>
-      <button class="mi" id="miReport" type="button" title="All open and on-hold actions, with a linked table of contents — save it as a PDF from the print dialog">Pending actions report (PDF)…</button>
-      <button class="mi" id="miXlsx" type="button">Export actions to Excel…</button>
-      <button class="mi" id="miPush" type="button" title="The phone syncs automatically — this pushes immediately">Sync to phone now</button>
+      <button class="mi" id="miReport" type="button" title="Pending actions report: every open and on-hold action with its photos, sub-actions and notes, a linked contents page and a 'Back to contents' link on every page. Save it as a PDF from the print dialog.">Report (PDF)…</button>
+      <button class="mi" id="miXlsx" type="button" title="Every action as a spreadsheet row — status, sub-actions, photo notes — with the annotated photos embedded.">Export to Excel…</button>
+      <button class="mi" id="miPush" type="button" title="Push to the phone right now. The phone already syncs by itself within seconds of any change.">Sync phone</button>
       <div class="msep"></div>
-      <button class="mi danger" id="btnClear" type="button">Close project &amp; clear the map…</button>
+      <button class="mi danger" id="btnClear" type="button" title="Close this project and clear the map. Nothing on disk is deleted — reopen it any time. You'll be asked first.">Close project…</button>
     </div></div>
     <div class="mb"><button class="mb-btn" type="button">Edit</button><div class="mb-drop">
-      <button class="mi" id="miUndo" type="button">Undo<span class="mk">Ctrl+Z</span></button>
-      <button class="mi" id="miRedo" type="button">Redo<span class="mk">Ctrl+Y</span></button>
+      <button class="mi" id="miUndo" type="button" title="Undo the last change — edits, ticks, moves, notes, links, deletions.">Undo<span class="mk">Ctrl+Z</span></button>
+      <button class="mi" id="miRedo" type="button" title="Redo the change you just undid.">Redo<span class="mk">Ctrl+Y</span></button>
     </div></div>
     <div class="mb"><button class="mb-btn" type="button">View</button><div class="mb-drop">
-      <label class="mi mi-chk"><input type="checkbox" id="showNoGeo" /><span>Show photos without location</span></label>
+      <label class="mi mi-chk" title="Also list photos that have no GPS position (they can't be placed on the map) in the gallery."><input type="checkbox" id="showNoGeo" /><span>Photos without location</span></label>
     </div></div>
     <div class="mb"><button class="mb-btn" type="button">Tools</button><div class="mb-drop">
-      <button class="mi" id="btnSettings" type="button"><svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm8.6 3.5c0-.6-.05-1.1-.15-1.6l2-1.55-2-3.4-2.35.95a8 8 0 0 0-2.75-1.6L14.95 2h-4l-.4 2.8a8 8 0 0 0-2.75 1.6L5.45 5.45l-2 3.4 2 1.55c-.1.5-.15 1-.15 1.6s.05 1.1.15 1.6l-2 1.55 2 3.4 2.35-.95a8 8 0 0 0 2.75 1.6l.4 2.8h4l.4-2.8a8 8 0 0 0 2.75-1.6l2.35.95 2-3.4-2-1.55c.1-.5.15-1 .15-1.6z"/><circle cx="12" cy="12" r="4.4" fill="#fff"/><circle cx="12" cy="12" r="2.6" fill="var(--accent)"/></svg><span>Settings…</span></button>
+      <button class="mi" id="btnSettings" type="button" title="Map, photo, filter, action and phone-sync settings — including your name for the change history."><svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm8.6 3.5c0-.6-.05-1.1-.15-1.6l2-1.55-2-3.4-2.35.95a8 8 0 0 0-2.75-1.6L14.95 2h-4l-.4 2.8a8 8 0 0 0-2.75 1.6L5.45 5.45l-2 3.4 2 1.55c-.1.5-.15 1-.15 1.6s.05 1.1.15 1.6l-2 1.55 2 3.4 2.35-.95a8 8 0 0 0 2.75 1.6l.4 2.8h4l.4-2.8a8 8 0 0 0 2.75-1.6l2.35.95 2-3.4-2-1.55c.1-.5.15-1 .15-1.6z"/><circle cx="12" cy="12" r="4.4" fill="#fff"/><circle cx="12" cy="12" r="2.6" fill="var(--accent)"/></svg><span>Settings…</span></button>
+    </div></div>
+    <div class="mb"><button class="mb-btn" type="button">Help</button><div class="mb-drop">
+      <button class="mi" id="miSearch" type="button" title="Find an action by its number, title, a sub-action or a photo note — active and completed actions.">Search…<span class="mk">Ctrl+K</span></button>
     </div></div>
   </nav>
-  <div class="hsearch"><input type="text" id="hSearch" placeholder="Find an action — title, sub-action, note, number  (Ctrl+K)" autocomplete="off" spellcheck="false" /><div class="hs-drop" id="hsDrop"></div></div>
+  <div class="hsearch" id="hsWrap"><input type="text" id="hSearch" placeholder="Find an action — number, title, sub-action or note" autocomplete="off" spellcheck="false" /><div class="hs-drop" id="hsDrop"></div></div>
   <input id="folderInput" type="file" webkitdirectory directory multiple style="display:none" />
   <input id="origInput" type="file" webkitdirectory directory multiple style="display:none" />
   <input id="jsonInput" type="file" accept="application/json,.json" style="display:none" />
-  <div class="stats">
+  <div class="stats" style="display:none">
     <div class="stat total"><div class="v" id="stTotal">0</div><div class="k">Photos</div></div>
     <div class="stat geo"><div class="v" id="stGeo">0</div><div class="k">Geotagged</div></div>
     <div class="stat"><div class="v" id="stNo">0</div><div class="k">No Loc</div></div>
@@ -861,7 +867,7 @@
       <button class="act-tgl" id="actOpenOnly" title="Show only uncompleted actions in this list">Open only</button>
       <button class="act-tgl" id="actMapOnly" title="Show only photos with an uncompleted action on the map">Actions only</button>
       <button class="act-tgl" id="actExpAll" title="Expand or collapse every action's details">Collapse all</button></div>
-    <div class="act-new"><input type="text" id="actNewInput" placeholder="+ New action — Enter to add" autocomplete="off" /></div>
+    <div class="act-new"><input type="text" id="actNewInput" placeholder="+ New action" autocomplete="off" /></div>
     <div class="act-list" id="actList"></div>
   </aside>
   <div class="splitter" id="actSplit"></div>
@@ -1734,9 +1740,7 @@ function renderActions(){
       +'<div class="act-body"><div class="bh"><div class="t"><span class="a-num">'+actNo(a)+'</span>'+esc(a.text)+'</div>'
         +expBtnHtml(a)+'<button class="ipa-x act-del" type="button" title="'+(isCur?'Remove this action from the open photo':'Delete this action')+'">&times;</button></div>'
       +(exp?('<div class="asec">'+stepsHtml(a)+'</div>'
-        +(((a.steps&&a.steps.length)||(a.done&&a.doneAt))?('<div class="m">'
-        +((a.steps&&a.steps.length)?'steps '+a.steps.filter(s=>s.d).length+'/'+a.steps.length:'')
-        +(a.done&&a.doneAt?((a.steps&&a.steps.length)?' · ':'')+'done '+fmtDate(a.doneAt):'')+'</div>'):'')):'')
+        +((a.done&&a.doneAt)?('<div class="m">done '+fmtDate(a.doneAt)+'</div>'):'')):'')
       +'</div>'+cov+'</div>'; }).join("");
   list.querySelectorAll(".act-row").forEach(el=>{
     const a=actById(Number(el.dataset.aid)); if(!a) return;
@@ -1781,13 +1785,13 @@ document.getElementById("actExpAll").addEventListener("click",()=>{ if(actions.s
 /* Right-click "New action" on photos doesn't pop a dialog: it ARMS this input — type the action
    and Enter creates it already assigned to those photos. Escape disarms. */
 let pendingActPhotos=null, pendingActLoc=null;
-const ACT_PH="+ New action — Enter to add";
-function armNewActionAt(ll){ armNewAction(null); pendingActLoc={lat:ll.lat,lng:ll.lng}; const inp=document.getElementById("actNewInput"); inp.placeholder="New action at the map spot — Enter to add"; inp.classList.add("arm"); inp.focus(); }
+const ACT_PH="+ New action";
+function armNewActionAt(ll){ armNewAction(null); pendingActLoc={lat:ll.lat,lng:ll.lng}; const inp=document.getElementById("actNewInput"); inp.placeholder="+ New action at the map spot"; inp.classList.add("arm"); inp.focus(); }
 function armNewAction(pids){
   pendingActLoc=null;
   pendingActPhotos=(pids&&pids.length)?pids.slice():null;
   const inp=document.getElementById("actNewInput");
-  inp.placeholder=pendingActPhotos?("New action for "+pendingActPhotos.length+" photo"+(pendingActPhotos.length>1?"s":"")+" — Enter to add"):ACT_PH;
+  inp.placeholder=pendingActPhotos?("+ New action for "+pendingActPhotos.length+" photo"+(pendingActPhotos.length>1?"s":"")):ACT_PH;
   inp.classList.toggle("arm",!!pendingActPhotos);
   inp.focus();
 }
@@ -1858,8 +1862,8 @@ document.getElementById("btnSettings").addEventListener("click",openSettings);
   const closeAll=()=>bar.querySelectorAll(".mb.open").forEach(m=>m.classList.remove("open"));
   bar.querySelectorAll(".mb").forEach(mb=>{
     const b=mb.querySelector(".mb-btn");
-    b.addEventListener("click",e=>{ e.stopPropagation(); const was=mb.classList.contains("open"); closeAll(); if(!was) mb.classList.add("open"); });
-    b.addEventListener("mouseenter",()=>{ if(bar.querySelector(".mb.open")&&!mb.classList.contains("open")){ closeAll(); mb.classList.add("open"); } });   // slide between open menus like a desktop app
+    b.addEventListener("click",e=>{ e.stopPropagation(); const was=mb.classList.contains("open")&&!(mb._hoverT&&Date.now()-mb._hoverT<600); closeAll(); if(!was) mb.classList.add("open"); mb._hoverT=0; });   // a click on a menu that just slid open by hover keeps it open
+    b.addEventListener("mouseenter",()=>{ if(bar.querySelector(".mb.open")&&!mb.classList.contains("open")){ closeAll(); mb.classList.add("open"); mb._hoverT=Date.now(); } });   // slide between open menus like a desktop app
     mb.querySelectorAll(".mb-drop button.mi").forEach(it=>it.addEventListener("click",()=>closeAll()));
   });
   document.addEventListener("mousedown",e=>{ if(!bar.contains(e.target)) closeAll(); },true);
@@ -1873,7 +1877,10 @@ document.getElementById("btnSettings").addEventListener("click",openSettings);
 /* ---- Find an action: one box searches numbers, titles, sub-actions and photo notes across
    active AND completed actions; picking a result jumps to it (list + map). ---- */
 (function(){
-  const inp=document.getElementById("hSearch"), drop=document.getElementById("hsDrop"); if(!inp) return;
+  const inp=document.getElementById("hSearch"), drop=document.getElementById("hsDrop"), wrap=document.getElementById("hsWrap"); if(!inp) return;
+  const openS=()=>{ wrap.classList.add("open"); inp.focus(); inp.select(); if(inp.value.trim()) render(); };
+  const closeS=()=>{ wrap.classList.remove("open"); drop.classList.remove("show"); inp.blur(); };
+  document.getElementById("miSearch").addEventListener("click",()=>setTimeout(openS,0));
   let res=[], cur=-1;
   const hl=(txt,terms)=>{ let h=esc(txt); for(const t of terms){ if(!t) continue; h=h.replace(new RegExp("("+t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+")","ig"),"<mark>$1</mark>"); } return h; };
   function search(q){
@@ -1905,7 +1912,7 @@ document.getElementById("btnSettings").addEventListener("click",openSettings);
   }
   function mark(){ drop.querySelectorAll(".hs-row").forEach((el,i)=>el.classList.toggle("on",i===cur)); const el=drop.querySelector(".hs-row.on"); if(el) el.scrollIntoView({block:"nearest"}); }
   function pick(i){ const r=res[i]; if(!r) return; const a=r.a;
-    drop.classList.remove("show"); inp.value=""; inp.blur();
+    inp.value=""; closeS();
     if(a.done&&actShowOpenOnly){ actShowOpenOnly=false; }   // a completed hit must be visible in the list
     collActs.delete(a.id);
     selActs=new Set([a.id]); lastActClick=a.id; if(typeof rebuildActionFilter==="function") rebuildActionFilter();
@@ -1919,10 +1926,10 @@ document.getElementById("btnSettings").addEventListener("click",openSettings);
     if(e.key==="ArrowDown"){ e.preventDefault(); if(res.length){ cur=(cur+1)%res.length; mark(); } }
     else if(e.key==="ArrowUp"){ e.preventDefault(); if(res.length){ cur=(cur-1+res.length)%res.length; mark(); } }
     else if(e.key==="Enter"){ e.preventDefault(); if(cur>=0) pick(cur); }
-    else if(e.key==="Escape"){ inp.value=""; drop.classList.remove("show"); inp.blur(); } });
+    else if(e.key==="Escape"){ inp.value=""; closeS(); } });
   drop.addEventListener("mousedown",e=>{ const r=e.target.closest(".hs-row"); if(r){ e.preventDefault(); pick(Number(r.dataset.i)); } });
-  document.addEventListener("mousedown",e=>{ if(!e.target.closest(".hsearch")) drop.classList.remove("show"); },true);
-  window.addEventListener("keydown",e=>{ if((e.ctrlKey||e.metaKey)&&(e.key==="k"||e.key==="K")){ e.preventDefault(); e.stopPropagation(); inp.focus(); inp.select(); } },true);
+  document.addEventListener("mousedown",e=>{ if(!e.target.closest(".hsearch")&&!e.target.closest("#miSearch")) closeS(); },true);
+  window.addEventListener("keydown",e=>{ if((e.ctrlKey||e.metaKey)&&(e.key==="k"||e.key==="K")){ e.preventDefault(); e.stopPropagation(); openS(); } },true);
 })();
 /* yes/no confirmation for anything that closes, replaces or removes work. "No" is the default. */
 function askYesNo(title,msg,yesLabel,danger){
@@ -3905,7 +3912,15 @@ async function ensureJsonWrite(interactive){
   return false;
 }
 let autoTimer=null, autoPending=false, autoBusy=false, autoDisabled=false, fileCorrupt=false, lastWrittenSig=null;
-function setSaveStatus(txt,cls){ const el=document.getElementById("saveStatus"); if(!el)return; el.textContent=txt; el.className="savestat"+(cls?" "+cls:""); }
+let _saveSt={txt:"",cls:""};
+function setSaveStatus(txt,cls){ _saveSt={txt:txt||"",cls:cls||""}; renderSaveStatus(); }
+function agoText(t){ const s2=Math.max(0,(Date.now()-t)/1000); if(s2<60) return "just now"; const m=Math.round(s2/60); if(m<60) return m+" min"+(m===1?"":"s")+" ago";
+  const h=Math.round(m/60); if(h<24) return h+" hr"+(h===1?"":"s")+" ago"; return "on "+new Date(t).toLocaleDateString(undefined,{day:"numeric",month:"short"}); }
+function renderSaveStatus(){ const el=document.getElementById("saveStatus"); if(!el) return; const {txt,cls}=_saveSt;
+  let t=""; if(cls==="bad") t="Save failed \u2014 check the project file"; else if(cls==="busy") t="Saving\u2026"; else if(/pending/i.test(txt)) t="Not saved yet \u2014 click anywhere to save";
+  else if(lastSavedAt&&(jsonHandle||saveFileHandle)) t="Updated "+agoText(lastSavedAt);
+  el.textContent=t; el.className="savestat"+(cls?" "+cls:""); }
+setInterval(renderSaveStatus,30000);
 // Content signature excluding volatile fields (timestamp, map view) so only real changes trigger a write.
 function metaSignature(){ const st=serializeState(false); delete st.savedAt; if(st.settings) delete st.settings.view; return JSON.stringify(st); }
 function scheduleAutoSave(){ if(!jsonHandle||autoDisabled) return; autoPending=true; clearTimeout(autoTimer); autoTimer=setTimeout(()=>flushAutoSave(false),900); }
@@ -5396,7 +5411,7 @@ async function checkFieldChanges(){
 (async function init(){
   if(isMobile()){ mobileBoot(); return; }   // phones get the field UI — the desktop app never boots
   // Build stamp: the file's publish/modified time — the quickest way to spot a stale copy.
-  try{ const d=new Date(document.lastModified); if(!isNaN(d)) document.getElementById("buildStamp").textContent="build "+d.toLocaleDateString(undefined,{day:"numeric",month:"short"})+" "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}); }catch(e){}
+  try{ const d=new Date(document.lastModified); if(!isNaN(d)) document.querySelector(".brand").title="App build "+d.toLocaleString(); if(!isNaN(d)) document.getElementById("buildStamp").textContent="build "+d.toLocaleDateString(undefined,{day:"numeric",month:"short"})+" "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}); }catch(e){}
   setTimeout(maybeStartGeo,800);   // you-are-here dot; silent when the site already holds the permission
   // Ask the browser to protect this site's stored data (remembered .json/folder, image cache)
   // from automatic low-disk cleanup. Best-effort; ignored where unsupported (e.g. file://).
