@@ -2582,7 +2582,7 @@ function scaleToDataURL(img,max,q){
   const c=document.createElement("canvas"); c.width=w; c.height=h; c.getContext("2d").drawImage(img,0,0,w,h);
   try{ return c.toDataURL("image/jpeg",q); }catch(e){ return null; }
 }
-function finishLoad(refit){ buildDateFilter(); buildCluster(); if(refit) fitToPhotos(); renderClusters(); updateStats(); updateGallery(); persistState(); cacheFullSession(); hideBanner(); setTimeout(autoReadAltitudes,300); }
+function finishLoad(refit){ buildDateFilter(); buildCluster(); if(refit) fitToPhotos(); renderClusters(); updateStats(); updateGallery(); persistState(); cacheFullSession(); hideBanner(); setTimeout(autoReadAltitudes,300); setTimeout(healMissingImages,1500); }
 function fitToPhotos(){
   let geo=photos.filter(p=>p.lat!=null && passDate(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng])));
   if(!geo.length) geo=photos.filter(p=>p.lat!=null);
@@ -3787,7 +3787,7 @@ function fromIndex(p){ if(!originalIndex) return null; return originalIndex.get(
    built by walking the whole folder tree — so root-name mismatches, overlap-merged photos, and
    reorganized subfolders all still resolve without ever re-prompting for the folder. */
 let dirIndex=null, dirIndexBuild=null;
-function invalidateDirIndex(){ dirIndex=null; dirIndexBuild=null; }
+function invalidateDirIndex(){ dirIndex=null; dirIndexBuild=null; for(const p of photos) p._healTried=false; }
 async function buildDirIndex(){
   if(dirIndex) return dirIndex;
   if(!dirIndexBuild) dirIndexBuild=(async()=>{
@@ -3953,9 +3953,47 @@ async function flushAutoSave(interactive, force){
 }
 // Fill images into the file-loaded (metadata-only) photos from the browser-local image cache.
 function overlayImagesFromCache(cache){
-  if(!cache||!Array.isArray(cache.photos)) return; const m=new Map();
-  for(const c of cache.photos){ const k=metaKey(c); if(!m.has(k)) m.set(k,c); }
-  for(const p of photos){ const c=m.get(metaKey(p)); if(!c) continue; if(!p.thumb&&c.thumb){ p.thumb=c.thumb; p.tv=c.tv||null; } if(!p.preview&&c.preview)p.preview=c.preview; }
+  if(!cache||!Array.isArray(cache.photos)) return; const m=new Map(), byNS=new Map();
+  for(const c of cache.photos){ const k=metaKey(c); if(!m.has(k)) m.set(k,c); const k2=imgKey(c); if(k2&&!byNS.has(k2)) byNS.set(k2,c); }
+  for(const p of photos){ const c=m.get(metaKey(p))||byNS.get(imgKey(p));   // name+size fallback: a moved/healed location changes metaKey, never the file
+    if(!c) continue; if(!p.thumb&&c.thumb&&(c.rot||0)===(p.rot||0)){ p.thumb=c.thumb; p.tv=c.tv||null; } if(!p.preview&&c.preview&&(c.rot||0)===(p.rot||0))p.preview=c.preview; }
+}
+/* ---- Images never go missing: every photo's thumbnail + preview is also kept in a per-photo
+   device store (keyed by file name + size, so location changes and other projects can't orphan
+   it), and a background healer rebuilds any missing image from, in order: that store, the photo
+   folder (any subfolder, by name), the original kept in the private repo, or — for phone photos
+   merged before originals were kept — a matching camera name among the repo's past uploads. ---- */
+function imgKey(p){ return p&&p.name?String(p.name).toLowerCase()+"|"+(p.size!=null?p.size:""):null; }
+let _imgSaveBusy=false;
+async function imgStoreSaveAll(){
+  if(_imgSaveBusy) return; _imgSaveBusy=true;
+  try{ for(const p of photos){ if(!p.thumb) continue; const sig=p.thumb.length+"|"+(p.rot||0)+"|"+(p.preview?p.preview.length:0);
+      if(p._imgSaved===sig) continue; const k=imgKey(p); if(!k) continue;
+      try{ await idbSet("pimg:"+k,{thumb:p.thumb,preview:p.preview||null,tv:p.tv||null,rot:p.rot||0}); p._imgSaved=sig; }catch(e){ break; } } }
+  finally{ _imgSaveBusy=false; }
+}
+let _healBusy=false, _upList=null;
+async function repoUploadByName(p){
+  const cfg=ghCfg(); if(!cfg.token) return null;
+  if(!_upList){ _upList=[]; try{ const r=await fetch("https://api.github.com/repos/"+cfg.repo+"/contents/uploads?t="+Date.now(),{cache:"no-store",headers:ghHeaders(cfg.token)}); if(r.ok){ const a=await r.json(); if(Array.isArray(a)) _upList=a.map(f=>f.path); } }catch(e){} }
+  const b=origBase(p.name); if(!b) return null;
+  return _upList.find(f=>origBase(f.split("/").pop())===b)||null;
+}
+async function healMissingImages(){
+  if(_healBusy) return; const todo=photos.filter(p=>!p.thumb&&!p._healTried); if(!todo.length) return;
+  _healBusy=true; let fixed=0;
+  try{
+    for(const p of todo){ p._healTried=true;
+      try{
+        const k=imgKey(p); if(k){ const c=await idbGet("pimg:"+k); if(c&&c.thumb&&(c.rot||0)===(p.rot||0)){ p.thumb=c.thumb; p.preview=p.preview||c.preview; p.tv=c.tv||null; p._imgSaved=null; fixed++; continue; } }
+        let f=null; try{ f=await getOriginalFileSilent(p); }catch(e){}
+        if(!f&&isAdhoc(p)&&!p.repoPath){ const rp=await repoUploadByName(p); if(rp){ p.repoPath=rp; try{ f=await getOriginalFileSilent(p); }catch(e){} } }
+        if(f){ await healRenditions(p,f); if(p.thumb) fixed++; }
+      }catch(e){}
+      if(fixed&&fixed%8===0) updateGallery(true);
+    }
+  } finally{ _healBusy=false; }
+  if(fixed){ updateGallery(true); persistState(); cacheFullSession(); loadNote("Restored "+fixed+" missing photo image"+(fixed===1?"":"s")); setTimeout(()=>loadNote(""),3500); }
 }
 // Load the latest straight from the .json file (the source of truth), using the cache only for images.
 let fileLoadedOnce=false, lastFullCache=null;
@@ -4143,7 +4181,7 @@ function persistState(){ clearTimeout(persistTimer); persistTimer=setTimeout(()=
 // Cache the image-bearing session to IndexedDB (browser-local, no .crswap) so reopen shows photos
 // instantly without reconnecting the folder. The .json file itself stays small (metadata only).
 let fullCacheTimer=null;
-function cacheFullSession(){ clearTimeout(fullCacheTimer); fullCacheTimer=setTimeout(()=>{ try{ if(photos.some(p=>p.thumb)){ const st=serializeState(true); lastFullCache=st; idbSet("lastFull",st).catch(()=>{}); } }catch(e){} },1500); }   // keep the in-memory cache reference fresh so a later Open .JSON in the same session can restore images
+function cacheFullSession(){ clearTimeout(fullCacheTimer); fullCacheTimer=setTimeout(()=>{ try{ if(photos.some(p=>p.thumb)){ const st=serializeState(true); lastFullCache=st; idbSet("lastFull",st).catch(()=>{}); imgStoreSaveAll(); } }catch(e){} },1500); }   // keep the in-memory cache reference fresh so a later Open .JSON in the same session can restore images
 
 /* banner */
 function showBanner(html,action,label){ document.getElementById("rcMsg").innerHTML=html; bannerAction=action; const b=document.getElementById("btnReconnect"); b.textContent=label||"Load"; b.style.display=action?"":"none"; document.getElementById("reconnect").classList.add("show"); }
@@ -5302,7 +5340,7 @@ function batchDiff(data,last){   // only what changed since the previous merged 
   if(J(data.actOrder||[])===J(last.actOrder||[])) out.actOrder=[];
   return out;
 }
-async function syncTick(){ try{ await checkFieldChanges(); }catch(e){} try{ await checkPhotoUploads(); }catch(e){} }
+async function syncTick(){ try{ await checkFieldChanges(); }catch(e){} try{ await checkPhotoUploads(); }catch(e){} try{ await healMissingImages(); }catch(e){} }
 async function checkFieldChanges(){
   if(_chMerging||!projectReady()||userTyping()) return;
   const cfg=ghCfg(); if(!cfg.token) return;
