@@ -268,7 +268,7 @@
   .slider-wrap input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;pointer-events:auto;width:13px;height:13px;border-radius:50%;background:var(--accent);border:2px solid #fff;cursor:grab;box-shadow:0 0 0 1px var(--accent),0 1px 4px #1e1f2233;}
   .slider-wrap input[type=range]::-moz-range-thumb{pointer-events:auto;width:11px;height:11px;border-radius:50%;background:var(--accent);border:2px solid #fff;cursor:grab;}
 
-  .cl-bubble{display:flex;align-items:center;justify-content:center;border-radius:50%;background:radial-gradient(circle at 35% 30%,#7782f5,#5865F2);color:#fff;font-family:'Roboto Mono',var(--mono);font-weight:700;border:2px solid #fff;box-shadow:0 0 0 4px #5865F233,0 2px 8px #1e1f2233;cursor:pointer;}   /* bold, open numerals — as the phone renders them */
+  .cl-bubble{display:flex;align-items:center;justify-content:center;border-radius:50%;background:radial-gradient(circle at 35% 30%,#6cc588,#3BA55C);color:#fff;font-family:'Roboto Mono',var(--mono);font-weight:700;border:2px solid #fff;box-shadow:0 0 0 4px #5865F233,0 2px 8px #1e1f2233;cursor:pointer;}   /* bold, open numerals — as the phone renders them */
   .cl-bubble.cl-hl{animation:clpulse 1.2s ease-in-out infinite;}   /* the whole cluster flashes when it holds a selected photo */
   @keyframes clpulse{0%,100%{box-shadow:0 0 0 6px rgba(88,101,242,.85),0 2px 8px #1e1f2233;}50%{box-shadow:0 0 0 6px rgba(88,101,242,.15),0 2px 8px #1e1f2233;}}
   .leaflet-interactive.photo-dot{cursor:pointer;}
@@ -438,7 +438,9 @@
   .act-chk input,.act-hold input{appearance:none;-webkit-appearance:none;width:15px;height:15px;margin:0;border:1px solid var(--line2);border-radius:3px;cursor:pointer;position:relative;}
   .act-chk input{background:#3BA55C33;}   /* faint green: this is the COMPLETE box */
   .a-num{color:var(--accent2);font-family:var(--mono);font-weight:700;margin-right:5px;}
-  .num-dot{width:34px;height:34px;border-radius:50%;background:#5865F2;border:2px solid #3A41B0;box-sizing:border-box;color:#fff;font:700 12px 'Roboto Mono',var(--mono);letter-spacing:.3px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px #1e1f2255;}
+  .cl-bubble.cl-g{background:radial-gradient(circle at 35% 30%,#6cc588,#3BA55C);color:#fff;box-shadow:0 0 0 4px #3BA55C33,0 2px 8px #1e1f2233;}   /* holds photos on an action */
+  .cl-bubble.cl-y{background:radial-gradient(circle at 35% 30%,#f7d86a,#F2C230);color:#3d3000;box-shadow:0 0 0 4px #F2C23040,0 2px 8px #1e1f2233;}   /* photos not on any action */
+  .num-dot{width:34px;height:34px;border-radius:50%;background:#3BA55C;border:2px solid #27713F;box-sizing:border-box;color:#fff;font:700 12px 'Roboto Mono',var(--mono);letter-spacing:.3px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px #1e1f2255;}
   body.mobile .num-dot{width:26px;height:26px;font:700 9px var(--mono);}   /* phone sizes were fine as they were */
   .act-hold{display:flex;align-items:center;padding-top:1px;cursor:pointer;margin-left:1px;}
   .act-hold input{background:#E8A33D33;}   /* faint amber: this is the ON-HOLD box */
@@ -1029,8 +1031,8 @@ function passSearch(p){
 function passTags(p){ if(!tagFilters.size) return true; for(const f of tagFilters) if(!photoInFolder(p,f)) return false; return true; }
 function buildCluster(){
   const hl=hlPhotoSet();   // clusters aggregate how many highlighted photos they contain, so the BUBBLE can flash
-  const feats=photos.filter(p=>p.lat!=null && passDate(p) && passSearch(p) && passTags(p) && passActs(p) && passAlt(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng]))).map(p=>({type:"Feature",properties:{pid:p.id,hl:hl.has(p.id)?1:0,sel:selSet.has(p.id)?1:0},geometry:{type:"Point",coordinates:[p.lng,p.lat]}}));
-  cluster=new Supercluster(Object.assign({maxZoom:21,map:pr=>({hl:pr.hl||0,sel:pr.sel||0}),reduce:(acc,pr)=>{acc.hl+=pr.hl;acc.sel+=pr.sel;}},clusterOpts()));
+  const feats=photos.filter(p=>p.lat!=null && passDate(p) && passSearch(p) && passTags(p) && passActs(p) && passAlt(p) && (!boxBounds||boxBounds.contains([p.lat,p.lng]))).map(p=>({type:"Feature",properties:{pid:p.id,hl:hl.has(p.id)?1:0,sel:selSet.has(p.id)?1:0,asg:photoStatus(p)==="none"?0:1},geometry:{type:"Point",coordinates:[p.lng,p.lat]}}));
+  cluster=new Supercluster(Object.assign({maxZoom:21,map:pr=>({hl:pr.hl||0,sel:pr.sel||0,asg:pr.asg||0}),reduce:(acc,pr)=>{acc.hl+=pr.hl;acc.sel+=pr.sel;acc.asg+=pr.asg;}},clusterOpts()));
   cluster.load(feats);
 }
 /* Cluster sensitivity (Settings): 0% = dots never merge, 50% = the classic radius, 100% = merge very easily. */
@@ -1061,7 +1063,7 @@ function renderClusters(){
           if(st.size){ const arr=[...st].sort((x,y)=>x-y); label=actNo(arr[0])+(arr.length>1?"\u2026":""); fs=13; }
         }catch(err){} }
       const grabbable=(c.properties.sel||0)>0&&selSet.size>0;   // holds selected photos: dragging the bubble moves the whole selection
-      const icon=L.divIcon({className:"",html:'<div class="cl-bubble'+(c.properties.hl?' cl-hl':'')+'" style="width:'+size+'px;height:'+size+'px;font-size:'+fs+'px'+(grabbable?';cursor:move':'')+'">'+label+'</div>',iconSize:[size,size],iconAnchor:[size/2,size/2]});
+      const icon=L.divIcon({className:"",html:'<div class="cl-bubble '+(c.properties.asg?'cl-g':'cl-y')+(c.properties.hl?' cl-hl':'')+'" style="width:'+size+'px;height:'+size+'px;font-size:'+fs+'px'+(grabbable?';cursor:move':'')+'">'+label+'</div>',iconSize:[size,size],iconAnchor:[size/2,size/2]});
       const m=L.marker([lat,lng],{icon}); const cid=c.properties.cluster_id;
       let ring=null;
       if(grabbable) m.on("mousedown",e=>{ const oe=e.originalEvent; if(oe&&oe.button===0){ L.DomEvent.stop(oe); startClusterDrag(m,ring); } });
@@ -1283,7 +1285,7 @@ function reorderActPhoto(a,dragId,targetId,before){   // gallery drag: photo ord
   const b=actState(a); a.porder=ids; recordActEdit(a,b); afterFolderChange();
 }
 function hasOpenAct(p){ return Array.isArray(p.acts)&&p.acts.some(id=>{ const a=actById(id); return a&&!a.done&&!a.hold; }); }
-const DOT_COL={none:["#4B5058","#2B2F35"],open:["#5865F2","#3A41B0"],hold:["#F2C230","#A8840F"],done:["#3BA55C","#27713F"]};
+const DOT_COL={none:["#F2C230","#A8840F"],open:["#3BA55C","#27713F"],hold:["#3BA55C","#27713F"],done:["#3BA55C","#27713F"]};   // yellow = not on an action, green = on an action
 function photoStatus(p){   // open beats on-hold beats complete, when a photo belongs to several actions
   if(!Array.isArray(p.acts)||!p.acts.length) return "none";
   let hold=false,done=false,any=false;
@@ -1572,7 +1574,7 @@ function showAreaPreviews(a){
     el.querySelector(".ap-tail").style.left=Math.max(14,Math.min(w-14,Math.round(g.cx-x)))+"px";   // tail points at the dot even if the card was clamped at an edge
     const mm=L.map(el.querySelector(".ap-map"),{zoomControl:false,attributionControl:false,dragging:false,touchZoom:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false});
     L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",{subdomains:["mt0","mt1","mt2","mt3"],maxZoom:22,maxNativeZoom:21}).addTo(mm);
-    for(const p of g.ps) L.circleMarker([p.lat,p.lng],{radius:8,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.95,className:"hl-dot",interactive:false}).addTo(mm);
+    for(const p of g.ps) L.circleMarker([p.lat,p.lng],{radius:8,color:"#ffffff",weight:3,fillColor:"#3BA55C",fillOpacity:.95,className:"hl-dot",interactive:false}).addTo(mm);
     const bb=L.latLngBounds(g.ps.map(p=>[p.lat,p.lng]));
     setTimeout(()=>{ try{ mm.invalidateSize(); if(g.ps.length>1) mm.fitBounds(bb,{padding:[26,26],maxZoom:19}); else mm.setView([g.ps[0].lat,g.ps[0].lng],18); }catch(e){} },60);
     areaPrevs.push({el,map:mm});
@@ -4499,7 +4501,7 @@ function mShowDetail(ai,keepScroll){
       tapDot.on("click",()=>{ const strip=snap.querySelector(".m-pphoto"), hs=document.getElementById("mHsnap");
         if(strip) snap.scrollTo({top:strip.offsetTop,behavior:"smooth"});
         if(hs) setTimeout(()=>hs.scrollTo({left:i*hs.clientWidth,behavior:"smooth"}),80); });
-      L.circleMarker([p.lat,p.lng],{radius:9,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:.85,className:"hl-dot",interactive:false}).addTo(mMiniMap);
+      L.circleMarker([p.lat,p.lng],{radius:9,color:"#ffffff",weight:3,fillColor:"#3BA55C",fillOpacity:.85,className:"hl-dot",interactive:false}).addTo(mMiniMap);
     });
     if(mGeo) mMiniMap._geoPin=L.marker([mGeo.lat,mGeo.lng],{icon:youAreHereIcon(40),interactive:false,zIndexOffset:900}).addTo(mMiniMap);
     const bb=L.latLngBounds(pts.map(p=>[p.lat,p.lng])); if(mGeo) bb.extend([mGeo.lat,mGeo.lng]);
@@ -4571,11 +4573,11 @@ function mShowDetail(ai,keepScroll){
     mInsetMapL=mkMini(document.getElementById("miL"));
     mInsetMap=mkMini(document.getElementById("miR"));
     for(const p of pts){
-      L.circleMarker([p.lat,p.lng],{radius:4,color:"#ffffff",weight:2,fillColor:"#5865F2",fillOpacity:.9,interactive:false}).addTo(mInsetMapL);
-      L.circleMarker([p.lat,p.lng],{radius:4,color:"#ffffff",weight:2,fillColor:"#5865F2",fillOpacity:.9,interactive:false}).addTo(mInsetMap);
+      L.circleMarker([p.lat,p.lng],{radius:4,color:"#ffffff",weight:2,fillColor:"#3BA55C",fillOpacity:.9,interactive:false}).addTo(mInsetMapL);
+      L.circleMarker([p.lat,p.lng],{radius:4,color:"#ffffff",weight:2,fillColor:"#3BA55C",fillOpacity:.9,interactive:false}).addTo(mInsetMap);
     }
     if(mGeo) mInsetMapL._geoPin=L.marker([mGeo.lat,mGeo.lng],{icon:youAreHereIcon(26),interactive:false,zIndexOffset:900}).addTo(mInsetMapL);
-    mInsetCur=L.circleMarker([pts[0].lat,pts[0].lng],{radius:7,color:"#ffffff",weight:3,fillColor:"#5865F2",fillOpacity:1,className:"hl-dot",interactive:false}).addTo(mInsetMap);
+    mInsetCur=L.circleMarker([pts[0].lat,pts[0].lng],{radius:7,color:"#ffffff",weight:3,fillColor:"#3BA55C",fillOpacity:1,className:"hl-dot",interactive:false}).addTo(mInsetMap);
     const bbR=L.latLngBounds(pts.map(p=>[p.lat,p.lng]));
     const ifit=()=>{ try{
       mInsetMapL.invalidateSize(); mInsetMap.invalidateSize();
