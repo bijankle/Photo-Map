@@ -707,6 +707,7 @@
       <button class="mi" id="btnFolder" type="button" title="Adds the folder's photos to this project (nothing is removed)">Add photos from a folder…</button>
       <button class="mi" id="btnRefresh" type="button" title="Re-scan the main photos folder: add what's new, remove photos whose files were deleted">Re-scan photo folder (add new, drop deleted)…</button>
       <div class="msep"></div>
+      <button class="mi" id="miReport" type="button" title="All open and on-hold actions, with a linked table of contents — save it as a PDF from the print dialog">Pending actions report (PDF)…</button>
       <button class="mi" id="miXlsx" type="button">Export actions to Excel…</button>
       <button class="mi" id="miPush" type="button" title="The phone syncs automatically — this pushes immediately">Sync to phone now</button>
       <div class="msep"></div>
@@ -1846,6 +1847,7 @@ document.getElementById("btnSettings").addEventListener("click",openSettings);
   document.getElementById("miUndo").addEventListener("click",()=>undoLatest(lb.classList.contains("open")));
   document.getElementById("miRedo").addEventListener("click",()=>redoLatest(lb.classList.contains("open")));
   document.getElementById("miXlsx").addEventListener("click",()=>exportActionsXlsx());
+  document.getElementById("miReport").addEventListener("click",()=>openPendingReport());
   document.getElementById("miPush").addEventListener("click",()=>{ const c=ghCfg(); if(!c.token){ openSettings(); return; } exportMobile(true); loadNote("Syncing to the phone\u2026"); setTimeout(()=>loadNote(""),2500); });
 })();
 /* yes/no confirmation for anything that closes, replaces or removes work. "No" is the default. */
@@ -2070,6 +2072,63 @@ async function exportMobile(manual){
   if(_expAgain){ _expAgain=false; scheduleAutoExport(1500); }
 }
 document.getElementById("btnMobileExport").addEventListener("click",()=>exportMobile(true));
+/* ---- Pending actions report: a print-ready document (Save as PDF from the print dialog).
+   Cover + linked table of contents + one section per open/on-hold action; a fixed
+   "Back to contents" link repeats on every printed page. ---- */
+async function openPendingReport(){
+  const pend=actions.filter(a=>!a.done);
+  const w=window.open("","_blank");   // opened inside the click so no popup blocker interferes
+  if(!w){ alert("Your browser blocked the report window — allow pop-ups for this site and try again."); return; }
+  w.document.write('<!doctype html><title>Building report…</title><body style="font:15px system-ui;padding:40px;color:#333">Building the report… preparing '+pend.length+' action'+(pend.length===1?'':'s')+'.</body>');
+  const proj=String(loadedJsonName||folderName||"PhotoMap").replace(/\.json$/i,"");
+  const now=new Date(), nOpen=pend.filter(a=>!a.hold).length, nHold=pend.length-nOpen;
+  const fmtD=t=>t?new Date(t).toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"}):"";
+  let toc="", body="";
+  for(const a of pend){
+    const ps=actPhotos(a), st=a.steps||[], sd=st.filter(x=>x.d).length, id="a"+actNo(a);
+    const status=a.hold?'<span class="badge hold">On hold</span>':'<span class="badge open">Open</span>';
+    toc+='<tr><td class="n"><a href="#'+id+'">'+actNo(a)+'</a></td><td><a href="#'+id+'">'+esc(a.text)+'</a></td><td>'+status+'</td><td class="r">'+(st.length?sd+' / '+st.length:'—')+'</td><td class="r">'+ps.length+'</td></tr>';
+    let imgs="";
+    for(const ph of ps){ let src=null; try{ src=await packPreview(ph); }catch(e){}
+      imgs+='<figure>'+(src?'<img src="'+src+'" alt="">':'<div class="noimg">No image</div>')+'<figcaption><b>'+esc(ph.name||"")+'</b>'+(ph.time?' · '+fmtD(ph.time):'')+(ph.note?'<br>'+esc(ph.note):'')+'</figcaption></figure>'; }
+    const loc=a.loc||(ps.find(p=>p.lat!=null&&!p.noGps)||null);
+    body+='<section class="act" id="'+id+'"><div class="ah"><div class="num">'+actNo(a)+'</div><h2>'+esc(a.text)+'</h2>'+status+'</div>'
+      +'<div class="meta">'+(a.created?'Created '+fmtD(a.created)+' · ':'')+ps.length+' photo'+(ps.length===1?'':'s')
+      +(loc?' · Location '+(+loc.lat).toFixed(6)+', '+(+loc.lng).toFixed(6)+' (<a href="https://www.google.com/maps?q='+(+loc.lat)+','+(+loc.lng)+'">map</a>)':'')+'</div>'
+      +(st.length?'<h3>Sub-actions ('+sd+' of '+st.length+' done)</h3><table class="steps">'+st.map((x,i)=>'<tr class="'+(x.d?'done':'')+'"><td class="l">'+stepLetter(i)+'.</td><td class="b">'+(x.d?'☑':'☐')+'</td><td>'+esc(x.t)+'</td></tr>').join('')+'</table>':'<p class="none">No sub-actions.</p>')
+      +(ps.some(p=>p.note)?'<h3>Photo notes</h3><ul class="notes">'+ps.map((p,i)=>p.note?'<li><b>Photo '+(i+1)+'</b> ('+esc(p.name||"")+') — '+esc(p.note)+'</li>':'').join('')+'</ul>':'')
+      +(imgs?'<h3>Photos</h3><div class="grid">'+imgs+'</div>':'')
+      +'<p class="back"><a href="#toc">↑ Back to contents</a></p></section>';
+  }
+  const css=`@page{size:A4;margin:14mm 12mm 16mm;} *{box-sizing:border-box} body{font:11pt/1.45 'Segoe UI',system-ui,-apple-system,sans-serif;color:#1e1f22;margin:0}
+  a{color:#3A41B0;text-decoration:none} .wrap{max-width:190mm;margin:0 auto;padding:0 4mm}
+  .cover{min-height:250mm;display:flex;flex-direction:column;justify-content:center;border-bottom:3px solid #5865F2;page-break-after:always}
+  .cover h1{font-size:28pt;margin:0 0 6mm} .cover .sub{font-size:13pt;color:#555} .cover .stats{margin-top:10mm;font-size:12pt}
+  #toc{page-break-after:always;padding-top:4mm} #toc h1{font-size:18pt;margin:0 0 5mm} table.toc{width:100%;border-collapse:collapse} .toc td,.toc th{padding:5px 6px;border-bottom:1px solid #e3e5e8;vertical-align:top;text-align:left}
+  .toc th{font-size:9pt;text-transform:uppercase;letter-spacing:.5px;color:#666} .toc .n{font-family:'Roboto Mono',Consolas,monospace;font-weight:700;width:44px} .toc .r{text-align:right;white-space:nowrap}
+  .act{page-break-before:always;padding-top:2mm} .ah{display:flex;align-items:center;gap:10px;border-bottom:2px solid #5865F2;padding-bottom:3mm}
+  .ah .num{font:700 14pt 'Roboto Mono',Consolas,monospace;background:#3BA55C;color:#fff;border-radius:6px;padding:2px 8px} .ah h2{font-size:16pt;margin:0;flex:1}
+  .badge{font-size:9pt;font-weight:700;border-radius:5px;padding:2px 8px;white-space:nowrap} .badge.open{background:#E7F6EC;color:#237042} .badge.hold{background:#FDF3D2;color:#7A5C00}
+  .meta{color:#555;font-size:9.5pt;margin:2mm 0 3mm} h3{font-size:11pt;margin:5mm 0 2mm;color:#333}
+  table.steps{border-collapse:collapse;width:100%} .steps td{padding:3px 5px;vertical-align:top;border-bottom:1px solid #f0f1f3} .steps .l{font-family:monospace;color:#3A41B0;width:28px} .steps .b{width:22px;font-size:12pt} .steps tr.done td{color:#777;text-decoration:line-through} .steps tr.done .b,.steps tr.done .l{text-decoration:none}
+  .notes{margin:0;padding-left:18px} .none{color:#888;font-style:italic}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:4mm} figure{margin:0;break-inside:avoid;page-break-inside:avoid} figure img{width:100%;max-height:85mm;object-fit:contain;background:#f2f3f5;border:1px solid #e3e5e8;border-radius:4px;display:block}
+  figcaption{font-size:8.5pt;color:#444;margin-top:1mm} .noimg{height:40mm;background:#f2f3f5;border:1px dashed #ccc;display:flex;align-items:center;justify-content:center;color:#999}
+  .back{margin-top:5mm;font-size:9pt}
+  .tocfix{position:fixed;right:0;bottom:0;font-size:8.5pt;background:#fff;padding:2px 6px;border:1px solid #d7d9dd;border-radius:4px}
+  .bar{position:sticky;top:0;background:#5865F2;color:#fff;padding:10px 14px;display:flex;gap:14px;align-items:center;font-size:10pt;z-index:5} .bar button{font:inherit;font-weight:700;border:0;border-radius:6px;padding:6px 14px;cursor:pointer;background:#fff;color:#3A41B0}
+  @media print{.bar{display:none}}`;
+  const html='<!doctype html><html><head><meta charset="utf-8"><title>'+esc(proj)+' — pending actions '+now.toISOString().slice(0,10)+'</title>'
+    +'<style>'+css+'</style></head><body>'
+    +'<div class="bar"><button onclick="print()">Save as PDF / Print</button><span>In the print dialog choose <b>Save as PDF</b>. Contents links work in the saved PDF.</span></div>'
+    +'<a class="tocfix" href="#toc">↑ Contents</a>'
+    +'<div class="wrap"><div class="cover"><h1>'+esc(proj)+'</h1><div class="sub">Pending actions report</div>'
+    +'<div class="stats"><b>'+pend.length+'</b> pending action'+(pend.length===1?'':'s')+' — '+nOpen+' open, '+nHold+' on hold<br>Generated '+now.toLocaleString(undefined,{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})+' by '+esc(userName())+'</div></div>'
+    +'<div id="toc"><h1>Contents</h1><table class="toc"><tr><th>#</th><th>Action</th><th>Status</th><th class="r">Sub-actions</th><th class="r">Photos</th></tr>'+(toc||'<tr><td colspan="5">No pending actions.</td></tr>')+'</table></div>'
+    +body+'</div><script>window.addEventListener("load",()=>setTimeout(()=>{ try{ print(); }catch(e){} },500));<\/script></body></html>';
+  w.document.open(); w.document.write(html); w.document.close();
+  logChange("Created the pending actions report ("+pend.length+" action"+(pend.length===1?"":"s")+")");
+}
 /* ---- Excel export: every action as a row, annotated photos embedded alongside ---- */
 let _exceljsP=null;
 function loadExcelJS(){ if(window.ExcelJS) return Promise.resolve();
