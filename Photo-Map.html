@@ -1936,13 +1936,42 @@ async function annotatedPreview(p){
     return p._pa;
   }catch(e){ return src; }
 }
+/* Repo growth control: previews are small (800px) and stored ONCE each as img/<hash>.jpg; the
+   pack itself is text only. Unchanged photos are never re-uploaded, and the phone caches every
+   image on the device, so a sync moves kilobytes instead of megabytes. */
+async function packPreview(p){
+  const src=await annotatedPreview(p); if(!src) return null;
+  try{ const im=await loadImg(src); const sc=Math.min(1,800/Math.max(im.width,im.height));
+    if(sc>=1&&/^data:image\/jpeg/.test(src)) return src;
+    const c=document.createElement("canvas"); c.width=Math.max(1,Math.round(im.width*sc)); c.height=Math.max(1,Math.round(im.height*sc));
+    c.getContext("2d").drawImage(im,0,0,c.width,c.height); return c.toDataURL("image/jpeg",0.74); }catch(e){ return src; }
+}
+async function hashB64(b64){   // content address for a preview
+  try{ if(crypto&&crypto.subtle){ const bin=Uint8Array.from(atob(b64),ch=>ch.charCodeAt(0)); const d=await crypto.subtle.digest("SHA-1",bin);
+    return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,"0")).join(""); } }catch(e){}
+  let h1=0x811c9dc5,h2=0x01000193; for(let i=0;i<b64.length;i++){ const c=b64.charCodeAt(i); h1=Math.imul(h1^c,16777619)>>>0; h2=Math.imul(h2+c,2654435761)>>>0; }
+  return h1.toString(16).padStart(8,"0")+h2.toString(16).padStart(8,"0")+b64.length.toString(16);
+}
+async function publishPackImages(cfg,pack,st){
+  let have=new Set();
+  try{ const r=await fetch("https://api.github.com/repos/"+cfg.repo+"/contents/img?t="+Date.now(),{cache:"no-store",headers:ghHeaders(cfg.token)});
+    if(r.ok){ const arr=await r.json(); if(Array.isArray(arr)) for(const f of arr) have.add(f.path); } }catch(e){}
+  const used=new Set(); let up=0;
+  for(const a of pack.actions) for(const ph of a.photos){
+    const m=/^data:image\/[a-z]+;base64,(.*)$/.exec(ph.img||""); if(!m){ delete ph.img; continue; }
+    const h=await hashB64(m[1]), path="img/"+h+".jpg"; used.add(path);
+    if(!have.has(path)){ if(st) st.textContent="Uploading new photo previews\u2026 "+(++up); await ghPutB64(cfg,path,m[1],"Pack preview",false,true); have.add(path); }
+    ph.h=h; delete ph.img;
+  }
+  return {have,used};
+}
 async function buildMobilePack(){
   const open=actions.filter(a=>!a.done);
   let mergedFrom=null; try{ mergedFrom=localStorage.getItem("pmMergedChanges")||null; }catch(e){}
   const pk={ v:2, exportedAt:new Date().toISOString(), project:loadedJsonName||folderName||"PhotoMap", mergedFrom, actions:[] };   // mergedFrom = ack: the phone lets go of sent edits only once this covers them
   for(const a of open){
     const ps=[];
-    for(const p of actPhotos(a)) ps.push({ id:p.id, k:metaKey(p), name:p.name, note:(p.note||""), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), img:await annotatedPreview(p) });
+    for(const p of actPhotos(a)) ps.push({ id:p.id, k:metaKey(p), name:p.name, note:(p.note||""), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), img:await packPreview(p) });   // exportMobile swaps img for a content hash
     for(const st of (a.steps||[])) if(!st.id) st.id=newSid();   // every exported step gets its permanent id
     pk.actions.push({ id:a.id, text:a.text, hold:!!a.hold, fu:a.fu||null, steps:(a.steps||[]).map(stepCopy), photos:ps });
   }
@@ -1977,9 +2006,14 @@ async function exportMobile(manual){
   try{
     st.textContent="Building pack…";
     const pack=await buildMobilePack(); persistState();   // newly minted sub-action ids must be saved with the project
+    const imgs=await publishPackImages(cfg,pack,st);
     const text=JSON.stringify(pack);
-    st.textContent="Pushing "+(text.length/1048576).toFixed(1)+" MB to "+cfg.repo+"…";
+    st.textContent="Pushing "+Math.max(1,Math.round(text.length/1024))+" KB to "+cfg.repo+"…";
     await ghPutFile(cfg,"pack.json",text,"PhotoMap mobile pack — "+openN+" open action"+(openN===1?"":"s"));
+    /* previews no pack refers to any more are removed (keeping the previous pack's, for phones mid-update) */
+    try{ const pk="pmPackImgs:"+cfg.repo; const prev=new Set(JSON.parse(localStorage.getItem(pk)||"[]"));
+      const stale=[...imgs.have].filter(x=>!imgs.used.has(x)&&!prev.has(x)); if(stale.length) ghDeleteMany(cfg,stale).catch(()=>{});
+      localStorage.setItem(pk,JSON.stringify([...imgs.used])); }catch(e){}
     await ghPutFile(cfg,"pack-stamp.json",JSON.stringify({exportedAt:pack.exportedAt,project:pack.project,n:openN}),"Pack stamp");
     try{ localStorage.setItem("pmLastExport",String(Date.now())); localStorage.setItem(key,sig); }catch(e){} _expBackoffUntil=0;
     st.textContent="✓ Phone up to date — "+openN+" action"+(openN===1?"":"s")+", "+new Date().toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"});
@@ -4035,6 +4069,7 @@ async function mLoadPack(silent){
     const text=await ghGetRaw(cfg,"pack.json");
     if(!text){ if(!silent) mShowSetup("No pack.json in "+cfg.repo+" yet — open the project on the desktop once (it syncs to the phone automatically)."); return; }
     const np=JSON.parse(text);
+    await mHydrateImages(cfg,np,silent);   // previews live as img/<hash>.jpg — fetched once, then from the device cache
     if(silent&&!mSafeToSwap()){ mPackNext=np; mPackStale=true; return; }   // you started something during the download: applied when you're back on the list
     mApplyPack(np);
     mStartGeo();
@@ -4044,7 +4079,24 @@ async function mLoadPack(silent){
     if(mChCount()) mAutoSendSoon(800);   // anything still unsent goes straight out
   }catch(err){ if(!silent) mShowSetup("Could not load: "+(err&&err.message||err)); }
 }
-let mPackNext=null;
+let mPackNext=null; const mImgUrl=new Map();
+async function mHydrateImages(cfg,pk,silent){
+  const need=[]; for(const a of (pk.actions||[])) for(const ph of (a.photos||[])) if(ph.h&&!ph.img) need.push(ph);
+  const note=silent?null:document.querySelector(".m-body .m-note");
+  let done=0, i=0;
+  const one=async ph=>{
+    if(mImgUrl.has(ph.h)){ ph.img=mImgUrl.get(ph.h); return; }
+    let blob=null; try{ blob=await idbGet("pmimg:"+ph.h); }catch(e){}
+    if(!blob){ try{ const b=await ghGetBin(cfg,"img/"+ph.h+".jpg"); if(b){ blob=new Blob([b],{type:"image/jpeg"}); try{ await idbSet("pmimg:"+ph.h,blob); }catch(e){} } }catch(e){} }
+    if(blob){ const u=URL.createObjectURL(blob); mImgUrl.set(ph.h,u); ph.img=u; }
+  };
+  const worker=async()=>{ while(i<need.length){ const ph=need[i++]; await one(ph); done++; if(note) note.textContent="Loading photos\u2026 "+done+" / "+need.length; } };
+  await Promise.all([worker(),worker(),worker(),worker()]);
+  /* forget cached previews no pack uses any more */
+  try{ const live=new Set(need.map(ph=>ph.h)); for(const a of (pk.actions||[])) for(const ph of (a.photos||[])) if(ph.h) live.add(ph.h);
+    const prev=JSON.parse(localStorage.getItem("pmImgKeys")||"[]"); for(const h of prev) if(!live.has(h)){ try{ idbSet("pmimg:"+h,undefined); }catch(e){} if(mImgUrl.has(h)){ URL.revokeObjectURL(mImgUrl.get(h)); mImgUrl.delete(h); } }
+    localStorage.setItem("pmImgKeys",JSON.stringify([...live])); }catch(e){}
+}
 function mSafeToSwap(){ const onList=!!document.getElementById("mList"); const i=document.getElementById("mNewAct");
   return onList&&!(i&&(i===document.activeElement||i.value))&&!mUpBusy&&!document.querySelector(".m-card.mdrag"); }
 function mApplyPack(np){
