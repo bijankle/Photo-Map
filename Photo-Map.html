@@ -440,6 +440,10 @@
   .a-num{color:var(--accent2);font-family:var(--mono);font-weight:700;margin-right:5px;}
   .cl-bubble.cl-g{background:radial-gradient(circle at 35% 30%,#6cc588,#3BA55C);color:#fff;box-shadow:0 0 0 4px #3BA55C33,0 2px 8px #1e1f2233;}   /* holds photos on an action */
   .cl-bubble.cl-y{background:radial-gradient(circle at 35% 30%,#f7d86a,#F2C230);color:#3d3000;box-shadow:0 0 0 4px #F2C23040,0 2px 8px #1e1f2233;}   /* photos not on any action */
+  .act-pin{width:46px;height:40px;display:flex;justify-content:center;filter:drop-shadow(0 2px 3px #1e1f2255);cursor:pointer;}
+  .act-pin span{position:relative;background:#3BA55C;color:#fff;border:2px solid #fff;border-radius:7px;font:700 12px 'Roboto Mono',var(--mono);padding:4px 6px;height:fit-content;}
+  .act-pin span::after{content:"";position:absolute;left:50%;bottom:-9px;transform:translateX(-50%);border:7px solid transparent;border-top-color:#3BA55C;border-bottom:0;}
+  body.mobile .act-pin span{font:700 9px var(--mono);padding:3px 5px;}
   .num-dot{width:34px;height:34px;border-radius:50%;background:#3BA55C;border:2px solid #27713F;box-sizing:border-box;color:#fff;font:700 12px 'Roboto Mono',var(--mono);letter-spacing:.3px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px #1e1f2255;}
   body.mobile .num-dot{width:26px;height:26px;font:700 9px var(--mono);}   /* phone sizes were fine as they were */
   .act-hold{display:flex;align-items:center;padding-top:1px;cursor:pointer;margin-left:1px;}
@@ -1109,6 +1113,15 @@ function renderClusters(){
       addSingleDot(p,lat,lng,hlSet.has(p.id));
     }
   }
+  drawActionPins();
+}
+function drawActionPins(){   // actions placed at a map spot: a green numbered pin (open ones, plus any selected)
+  for(const a of actions){ if(!a.loc) continue; const sel=selActs.has(a.id); if((a.done||a.hold)&&!sel) continue;
+    if(sel) markerLayer.addLayer(mkHlDot(a.loc.lat,a.loc.lng));
+    const m=L.marker([a.loc.lat,a.loc.lng],{zIndexOffset:500,icon:L.divIcon({className:"",html:'<div class="act-pin"><span>'+actNo(a)+'</span></div>',iconSize:[46,40],iconAnchor:[23,40]})});
+    m.on("mouseover",()=>{ m.bindTooltip(actNo(a)+" \u2014 "+esc(a.text),{direction:"top",offset:[0,-36]}).openTooltip(); });
+    m.on("click",()=>{ uiClickT=Date.now(); clickAction(a,null,true); setTimeout(()=>actNavigate(a),30); });
+    markerLayer.addLayer(m); }
 }
 function addSingleDot(p,lat,lng,isSel){
   if(isSel){ const hl=mkHlDot(lat,lng); markerLayer.addLayer(hl); dotMarkers.set(p.id,{hl}); }   // selected = same pulsing highlight as a single open photo
@@ -1322,6 +1335,7 @@ function normActs(list){ let mx=0; const out=(list||[]).map(a=>{
   if(Array.isArray(a.notes)) for(const n of a.notes){ if(n&&n.t) parts.push(String(n.t)); }
   const o={id:+a.id||0,text:String(a.text||""),done:!!a.done,hold:!!a.hold,created:a.created||null,doneAt:a.doneAt||null,
     steps:Array.isArray(a.steps)?a.steps.map(s=>{ const o={t:String(s.t||""),d:!!s.d}; if(s.id) o.id=String(s.id); return o; }).filter(s=>s.t):[]};
+  if(a.loc&&isFinite(a.loc.lat)&&isFinite(a.loc.lng)) o.loc={lat:+a.loc.lat,lng:+a.loc.lng};
   if(a.fu) o.fu=String(a.fu);   // uid of the phone-created action this came from (makes phone resends idempotent)
   if(Array.isArray(a.porder)){ const po=a.porder.map(Number).filter(x=>x>0); if(po.length) o.porder=po; }
   if(Array.isArray(a.porderK)&&a.porderK.length) o.porderK=a.porderK.map(String);
@@ -1336,9 +1350,10 @@ function migrateActNotes(){   // notes live on PHOTOS now: any old action-level 
 function rebuildActionFilter(){ actionFilter=selActs.size?new Set([...selActs].flatMap(id=>actPhotos(actById(id)).map(p=>p.id))):null; }
 function drawActionRings(){ buildCluster(); renderClusters(); }   // highlights are rendered with the clusters (bubbles flash when they contain selected photos)
 function clearActSel(){ if(!selActs.size) return; selActs.clear(); actionFilter=null; if(typeof clearAreaPreviews==="function") clearAreaPreviews(); renderActions(); drawActionRings(); updateGallery(); }
-function createAction(text,pids){
+function createAction(text,pids,loc){
   text=(text||"").trim(); if(!text) return null;
   const a={id:nextActId++,text,done:false,created:Date.now(),doneAt:null,steps:[]};
+  if(loc&&isFinite(loc.lat)&&isFinite(loc.lng)) a.loc={lat:+loc.lat,lng:+loc.lng};   // an action placed at a map spot (may have no photos)
   actions.unshift(a);
   const items=(pids&&pids.length)?buildAssign([a.id],pids.map(photoById).filter(Boolean)):[];
   pushUndo({actCreate:{data:JSON.parse(JSON.stringify(a)),index:0},items});   // creation (incl. its links) is one undo step
@@ -1617,12 +1632,14 @@ function actNavigate(a,refitOnly){
   if(!selActs.has(a.id)) return;   // selection moved on before a deferred zoom fired — the newest click wins
   const ps=actPhotos(a);
   const geo=ps.filter(p=>p.lat!=null);
+  if(a.loc) geo.push({lat:a.loc.lat,lng:a.loc.lng});
   if(geo.length){
     /* Fit ALL open actions' dots (plus the selected action's own), so the flashing selection
        reads in the context of the remaining work rather than filling the screen alone. */
     const seen=new Set(), ctx=[];
     for(const x of actions){ if((x.done||x.hold)&&!selActs.has(x.id)) continue;
-      for(const p of actPhotos(x)){ if(p.lat!=null&&!seen.has(p.id)){ seen.add(p.id); ctx.push(p); } } }
+      for(const p of actPhotos(x)){ if(p.lat!=null&&!seen.has(p.id)){ seen.add(p.id); ctx.push(p); } }
+      if(x.loc) ctx.push({lat:x.loc.lat,lng:x.loc.lng}); }
     const all=ctx.length?ctx:geo;
     const bb=L.latLngBounds(all.map(p=>[p.lat,p.lng]));
     if(geoMarker) bb.extend(geoMarker.getLatLng());   // keep yourself in the picture
@@ -1742,9 +1759,11 @@ document.getElementById("actMapOnly").addEventListener("click",()=>{ actOnlyMap=
 document.getElementById("actExpAll").addEventListener("click",()=>{ if(actions.some(a=>!collActs.has(a.id))) actions.forEach(a=>collActs.add(a.id)); else collActs.clear(); renderActions(); });
 /* Right-click "New action" on photos doesn't pop a dialog: it ARMS this input — type the action
    and Enter creates it already assigned to those photos. Escape disarms. */
-let pendingActPhotos=null;
+let pendingActPhotos=null, pendingActLoc=null;
 const ACT_PH="+ New action — Enter to add";
+function armNewActionAt(ll){ armNewAction(null); pendingActLoc={lat:ll.lat,lng:ll.lng}; const inp=document.getElementById("actNewInput"); inp.placeholder="New action at the map spot — Enter to add"; inp.classList.add("arm"); inp.focus(); }
 function armNewAction(pids){
+  pendingActLoc=null;
   pendingActPhotos=(pids&&pids.length)?pids.slice():null;
   const inp=document.getElementById("actNewInput");
   inp.placeholder=pendingActPhotos?("New action for "+pendingActPhotos.length+" photo"+(pendingActPhotos.length>1?"s":"")+" — Enter to add"):ACT_PH;
@@ -1752,13 +1771,14 @@ function armNewAction(pids){
   inp.focus();
 }
 document.getElementById("actNewInput").addEventListener("keydown",e=>{
-  if(e.key==="Escape"&&pendingActPhotos){ e.stopPropagation(); armNewAction(null); return; }
+  if(e.key==="Escape"&&(pendingActPhotos||pendingActLoc)){ e.stopPropagation(); armNewAction(null); return; }
   if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return;
   e.target.value="";
   // Assign to whatever is current: armed photos > map selection > the photo open in the viewer > nothing.
-  const pids=pendingActPhotos||(selSet.size?[...selSet]:((lb.classList.contains("open")&&curPhoto())?[curPhoto().id]:null));
+  const loc=pendingActLoc;
+  const pids=loc?null:(pendingActPhotos||(selSet.size?[...selSet]:((lb.classList.contains("open")&&curPhoto())?[curPhoto().id]:null)));
   armNewAction(null);
-  createAction(v,pids);
+  createAction(v,pids,loc);
   document.getElementById("actNewInput").focus();   // keep typing to add the next one
 });
 ["mousedown","pointerdown","dblclick"].forEach(ev=>document.getElementById("ipActions").addEventListener(ev,e=>e.stopPropagation()));
@@ -1998,7 +2018,7 @@ async function buildMobilePack(){
     const ps=[];
     for(const p of actPhotos(a)) ps.push({ id:p.id, k:metaKey(p), name:p.name, note:(p.note||""), lat:(p.lat!=null?p.lat:null), lng:(p.lng!=null?p.lng:null), img:await packPreview(p) });   // exportMobile swaps img for a content hash
     for(const st of (a.steps||[])) if(!st.id) st.id=newSid();   // every exported step gets its permanent id
-    pk.actions.push({ id:a.id, text:a.text, hold:!!a.hold, fu:a.fu||null, steps:(a.steps||[]).map(stepCopy), photos:ps });
+    pk.actions.push({ id:a.id, text:a.text, hold:!!a.hold, fu:a.fu||null, loc:a.loc||null, steps:(a.steps||[]).map(stepCopy), photos:ps });
   }
   return pk;
 }
@@ -2010,7 +2030,7 @@ function packSig(){
   for(const a of open) for(const st of (a.steps||[])) if(!st.id) st.id=newSid();
   let ack=""; try{ ack=localStorage.getItem("pmMergedChanges")||""; }catch(e){}
   const noT=m=>Array.isArray(m)?m.map(x=>{ if(x&&x._t!=null){ const c={...x}; delete c._t; return c; } return x; }):m;   // session timestamps must not change the signature
-  return JSON.stringify([loadedJsonName||folderName||"PhotoMap",ack,open.map(a=>[a.id,a.text,!!a.hold,a.fu||null,(a.steps||[]).map(st=>[st.id,st.t,!!st.d]),
+  return JSON.stringify([loadedJsonName||folderName||"PhotoMap",ack,open.map(a=>[a.id,a.text,!!a.hold,a.fu||null,a.loc||null,(a.steps||[]).map(st=>[st.id,st.t,!!st.d]),
     actPhotos(a).map(ph=>[ph.id,metaKey(ph),ph.note||"",ph.lat,ph.lng,JSON.stringify([noT(ph.marks||[]),ph.mkw||0,ph.mth||0,ph.rot||0])])])]);
 }
 let _expBusy=false,_expAgain=false,_expT=null;
@@ -2164,6 +2184,7 @@ map.on("contextmenu",e=>{
   mkCtxItem("Zoom window [z]",toggleZoom);
   mkCtxItem("Measure [m]",toggleMeasure);
   mkCtxItem("New action…",()=>armNewAction(null));   // focuses the Actions panel input
+  { const ll=e.latlng; mkCtxItem("New action at this spot…",()=>armNewActionAt(ll)); }
   if(selSet.size||selActs.size) mkCtxItem("Clear selections",()=>{ clearSel(); clearActSel(); });
   showCtxAt(e.originalEvent.clientX,e.originalEvent.clientY);
 });
@@ -3486,7 +3507,7 @@ function pushTagAction(items){   // one undo step, possibly touching many photos
 function recordTagChange(p,before){ pushTagAction([{id:p.id,before,after:snapshotTags(p)}]); }
 function newSid(){ return "s"+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }   // permanent sub-action id — the phone refers to steps by it
 function stepCopy(s){ const o={t:s.t,d:!!s.d}; if(s.id) o.id=s.id; return o; }
-function actState(a){ return {text:a.text,done:!!a.done,doneAt:a.doneAt||null,hold:!!a.hold,steps:(a.steps||[]).map(stepCopy),porder:(Array.isArray(a.porder)&&a.porder.length)?a.porder.slice():null}; }
+function actState(a){ return {text:a.text,loc:a.loc?{lat:a.loc.lat,lng:a.loc.lng}:null,done:!!a.done,doneAt:a.doneAt||null,hold:!!a.hold,steps:(a.steps||[]).map(stepCopy),porder:(Array.isArray(a.porder)&&a.porder.length)?a.porder.slice():null}; }
 function recordActEdit(a,before){ const after=actState(a); if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({actEdit:{id:a.id,before,after}}); }
 function cpMarks(ms){ return JSON.parse(JSON.stringify(ms||[])); }
 function pushMarksSnap(p,before,after){ if(JSON.stringify(before)===JSON.stringify(after)) return; pushUndo({marksSnap:{id:p.id,before,after}}); }
@@ -3501,7 +3522,7 @@ function applyUndoEntry(a,dir){   // dir: "before" (undo) or "after" (redo)
     if(undo){ actions=actions.filter(x=>x.id!==a.actCreate.data.id); selActs.delete(a.actCreate.data.id); }
     else { const d=a.actCreate.data; if(!actById(d.id)){ actions.splice(Math.min(a.actCreate.index,actions.length),0,JSON.parse(JSON.stringify(d))); if(nextActId<=d.id) nextActId=d.id+1; } }
   }
-  if(a.actEdit){ const x=actById(a.actEdit.id); if(x){ const src=undo?a.actEdit.before:a.actEdit.after; x.text=src.text; x.done=src.done; x.doneAt=src.doneAt; x.hold=!!src.hold; if(src.steps) x.steps=src.steps.map(stepCopy); x.porder=(src.porder&&src.porder.slice())||undefined; } }
+  if(a.actEdit){ const x=actById(a.actEdit.id); if(x){ const src=undo?a.actEdit.before:a.actEdit.after; x.text=src.text; x.done=src.done; x.doneAt=src.doneAt; x.hold=!!src.hold; if("loc" in src){ if(src.loc) x.loc={lat:src.loc.lat,lng:src.loc.lng}; else delete x.loc; } if(src.steps) x.steps=src.steps.map(stepCopy); x.porder=(src.porder&&src.porder.slice())||undefined; } }
   if(a.addPhotos){   // pasted/dropped photos: undo removes them (kept aside), redo puts them back
     if(undo){
       const ids=new Set(a.addPhotos);
@@ -3817,7 +3838,7 @@ document.getElementById("jsonInput").addEventListener("change",async e=>{ const 
 function serializeState(includeImages){
   return {
     version:3, folderName, savedAt:new Date().toISOString(), nextActId, log:projLog,
-    actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.hold)o.hold=true; if(a.fu)o.fu=a.fu; if(a.steps&&a.steps.length)o.steps=a.steps.map(stepCopy); if(Array.isArray(a.porder)&&a.porder.length){o.porder=a.porder; o.porderK=a.porder.map(id=>{const ph=photoById(id);return ph?metaKey(ph):null;}).filter(Boolean);} return o; }),
+    actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.hold)o.hold=true; if(a.fu)o.fu=a.fu; if(a.loc)o.loc=a.loc; if(a.steps&&a.steps.length)o.steps=a.steps.map(stepCopy); if(Array.isArray(a.porder)&&a.porder.length){o.porder=a.porder; o.porderK=a.porder.map(id=>{const ph=photoById(id);return ph?metaKey(ph):null;}).filter(Boolean);} return o; }),
     settings:{ baseLayer: map.hasLayer(google)?"google":map.hasLayer(esri)?"esri":"none", showNoGeo, sortBy:currentSort,
       thumb:getComputedStyle(document.documentElement).getPropertyValue("--thumb").trim(),
       sideW:getComputedStyle(document.documentElement).getPropertyValue("--side-w").trim(),
@@ -3829,7 +3850,7 @@ function serializeState(includeImages){
     photos: photos.map(p=>{ const o={path:p.path,name:p.name,lat:p.lat,lng:p.lng,time:p.time,dir:p.dir,size:p.size,isHeic:p.isHeic};
       if(Array.isArray(p.paths)&&(p.paths.length!==1||p.paths[0]!==p.path))o.paths=p.paths;   // physical locations (incl. empty when pruned from disk)
       o.vpaths=Array.isArray(p.vpaths)?p.vpaths:[];   // always written: a missing field means 'legacy file' to the loader, which would reclassify real copies as tags
-      if(p.adhoc)o.adhoc=1; if(p.repoPath)o.repoPath=p.repoPath;
+      if(p.adhoc)o.adhoc=1; if(p.repoPath)o.repoPath=p.repoPath; if(p.pendFu)o.pendFu=p.pendFu;
       if(p.rot)o.rot=p.rot;
       if(p.glat!=null){ o.glat=p.glat; o.glng=p.glng; }   // dot was repositioned in-app; lat/lng show it, glat/glng keep the photo's true GPS
       if(Array.isArray(p.acts)&&p.acts.length)o.acts=p.acts;
@@ -3862,7 +3883,7 @@ function applyState(st){
     if(vp===null){   // legacy file (mixed paths): keep the anchor path as physical, treat extras as virtual so tags can never be wrongly pruned
       vp=phys.filter(pa=>pa!==m.path); phys=m.path?[m.path]:phys.slice(0,1);
     }
-    photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,rot:m.rot||0,lat:m.lat,lng:m.lng,glat:(m.glat!=null?m.glat:null),glng:(m.glng!=null?m.glng:null),time:m.time,dir:m.dir,alt:(m.alt!=null?m.alt:null),mkw:(m.mkw!=null?m.mkw:null),mth:(m.mth!=null?m.mth:null),acts:Array.isArray(m.acts)?m.acts.slice():[],note:(typeof m.note==="string"?m.note:""),noGps:!!m.noGps,adhoc:!!m.adhoc,repoPath:m.repoPath||null,marks:Array.isArray(m.marks)?m.marks.map(mk=>{ if(mk&&mk._t!=null){ const c={...mk}; delete c._t; return c; } return mk; }):[]});
+    photos.push({id:nextId++,path:m.path,name:m.name,paths:phys,vpaths:vp,file:null,size:(m.size!=null?m.size:null),isHeic:!!m.isHeic,thumb:m.thumb||null,preview:m.preview||null,tv:m.tv||null,rot:m.rot||0,lat:m.lat,lng:m.lng,glat:(m.glat!=null?m.glat:null),glng:(m.glng!=null?m.glng:null),time:m.time,dir:m.dir,alt:(m.alt!=null?m.alt:null),mkw:(m.mkw!=null?m.mkw:null),mth:(m.mth!=null?m.mth:null),acts:Array.isArray(m.acts)?m.acts.slice():[],note:(typeof m.note==="string"?m.note:""),noGps:!!m.noGps,adhoc:!!m.adhoc,repoPath:m.repoPath||null,pendFu:m.pendFu||null,marks:Array.isArray(m.marks)?m.marks.map(mk=>{ if(mk&&mk._t!=null){ const c={...mk}; delete c._t; return c; } return mk; }):[]});
   });   // baked full-quality renditions from old files are intentionally dropped
   rebuildPorders();   // ids were just renumbered — restore each action's photo order from the key form
   if(st.nextActId>nextActId) nextActId=st.nextActId;   // deleted action numbers are never reissued
@@ -4297,14 +4318,15 @@ function mShowList(){
         +'<div style="align-self:center;color:var(--line2);font-size:22px;">›</div></div>';
     }).join(''):'<div class="m-note" style="padding-top:40px">No open actions in the pack.</div>')
     +'</div>'
-    +'<div class="m-foot"><button class="m-btn" id="mCamBtn">\ud83d\udcf7 Take photo \u2014 pinned at your position</button>'
+    +'<div class="m-foot"><div style="display:flex;gap:8px;"><button class="m-btn" id="mCamBtn" style="flex:1">\ud83d\udcf7 Take photo</button><button class="m-btn" id="mCamNewBtn" style="flex:1">\ud83d\udcf7 + New action</button></div>'
     +'<button class="m-btn ghost" id="mUpBtn">Upload photos to the map</button>'
     +'<div class="m-note m-sync" id="mSendNote">'+mSyncText()+'</div></div>'
     +'<div class="m-homemap" id="mHomeMap"></div>');
   document.getElementById("mRefresh").addEventListener("click",()=>{ mCheckFresh(true); mLoadPack(); });
   document.getElementById("mWho").addEventListener("click",()=>{ const v=prompt("Your name, shown next to your changes in the history:",mUserName(true)); if(v!=null){ try{ localStorage.setItem("pmUserName",v.trim()); }catch(e){} mShowList(); } });   // one tap: newest app build + newest pack
   document.getElementById("mUpBtn").addEventListener("click",()=>{ mUpInput().click(); window.mPickT=Date.now(); });
-  document.getElementById("mCamBtn").addEventListener("click",()=>{ mCamInput().click(); window.mPickT=Date.now(); });
+  document.getElementById("mCamBtn").addEventListener("click",()=>mTakePhoto(null));
+  document.getElementById("mCamNewBtn").addEventListener("click",()=>mTakePhoto({newAction:true}));
   document.getElementById("mSendNote").addEventListener("click",()=>{ mSendChanges(); mPackPoll(true); });   // tap = sync now
   mWireUndo();
   document.getElementById("mNewAct").addEventListener("keydown",e=>{
@@ -4362,10 +4384,18 @@ function mCamInput(){
     if(!fs.length) return;
     const fixed=mGeo?{lat:mGeo.lat,lng:mGeo.lng}:null;   // where you are standing right now = where the photo was taken
     if(!fixed) mToast("No GPS fix yet \u2014 photo will place from your trail if possible",true);
-    mUploadPhotos(fs,fixed);
+    let link=mCamLink; mCamLink=null;
+    if(link&&link.newAction){   // "New action from a photo": name it, create it, link the shot to it
+      const v=prompt("Name the new action for this photo:","");
+      if(v&&v.trim()){ const u=mUid(); mMutate(()=>{ const p=mPend(); p.newActs=(p.newActs||[]).concat([{text:v.trim(),steps:[],done:false,u,loc:fixed||null}]); mPendSave(p); }); link={au:u}; if(document.getElementById("mList")) mShowList(); }
+      else link=null;   // cancelled: the photo still goes to the map, unlinked
+    }
+    mUploadPhotos(fs,fixed,link);
   });
   return el;
 }
+let mCamLink=null;
+function mTakePhoto(link){ mCamLink=link||null; mCamInput().click(); window.mPickT=Date.now(); }
 function mUpInput(){
   let el=document.getElementById("mUpFileG");
   if(el) return el;
@@ -4419,7 +4449,7 @@ function mWatchReceipt(paths,count){   // \u2713 only when the DESKTOP has actua
 /* Photo dump: pick or take photos on the phone; each is resized to a 2048px JPEG and pushed to
    the private data repo with its GPS/time carried in uploads.json. Assigning to actions stays a
    desktop job — these arrive there as ordinary unassigned photos. */
-async function mUploadPhotos(files,fixed){
+async function mUploadPhotos(files,fixed,link){
   const orig="Upload photos to the map";
   const setB=(t,dis)=>{ const b=document.getElementById("mUpBtn"); if(b){ b.textContent=t; b.disabled=!!dis; } };
   const cfg=ghCfg();
@@ -4463,7 +4493,7 @@ async function mUploadPhotos(files,fixed){
       const base=rawName.replace(/\.[^.]+$/,"").replace(/[^\w\- ]+/g,"").slice(0,40)||("photo"+(i+1));
       const path="uploads/"+batch+"-"+(i+1)+"-"+base+ext;
       await ghPutB64(cfg,path,b64,"Photo upload from phone",false,true);   // fresh name: no sha lookup
-      entries.push({f:path,n:batch+"-"+(i+1)+"-"+base+ext,lat,lng,alt,t,src,ts:Date.now(),by:mUserName()});
+      entries.push(Object.assign({f:path,n:batch+"-"+(i+1)+"-"+base+ext,lat,lng,alt,t,src,ts:Date.now(),by:mUserName()},link&&link.act!=null?{act:link.act}:{},link&&link.au?{au:link.au}:{}));
     }
     if(!entries.length) throw new Error(tooBig?"photos over 25 MB can\u2019t be sent":"no readable images");
     setB("Registering\u2026",true); mToast("Registering\u2026",true);
@@ -4499,6 +4529,14 @@ function mBuildHomeMap(acts){
     acts.forEach((a,ix)=>{ if(mDone(a)||mHold(a)) return;
       for(const ph of (a.photos||[])){ if(ph.lat!=null&&!seen.has(ph.id)){ seen.add(ph.id); pts.push(ph);
         L.marker([ph.lat,ph.lng],{interactive:false,icon:L.divIcon({className:"",html:'<div class="num-dot">'+(a._new?"\u2022":actNo(a))+'</div>',iconSize:[26,26],iconAnchor:[13,13]})}).addTo(m2); } } });
+    const packFu=new Set((mPack.actions||[]).map(x=>x.fu).filter(Boolean));
+    const locs=(mPack.actions||[]).filter(x=>x.loc&&!mDone(x)&&!mHold(x)).map(x=>({loc:x.loc,lbl:actNo(x)}))
+      .concat(mNewActs().filter(x=>x.loc&&!(x.u&&packFu.has(x.u))).map(x=>({loc:x.loc,lbl:"\u2022"})));
+    for(const l of locs){ L.marker([l.loc.lat,l.loc.lng],{interactive:false,icon:L.divIcon({className:"",html:'<div class="act-pin"><span>'+l.lbl+'</span></div>',iconSize:[40,34],iconAnchor:[20,34]})}).addTo(m2); pts.push({lat:l.loc.lat,lng:l.loc.lng}); }
+    m2.on("contextmenu",e=>{   // long-press the map: a new action at that spot
+      const v=prompt("New action at this spot \u2014 name it:",""); if(!v||!v.trim()) return;
+      mMutate(()=>{ const p=mPend(); p.newActs=(p.newActs||[]).concat([{text:v.trim(),steps:[],done:false,u:mUid(),loc:{lat:e.latlng.lat,lng:e.latlng.lng}}]); mPendSave(p); });
+      mShowList(); });
     const bb=pts.length?L.latLngBounds(pts.map(p=>[p.lat,p.lng])):null;
     if(mGeo){ m2._geoPin=L.marker([mGeo.lat,mGeo.lng],{icon:youAreHereIcon(30),interactive:false,zIndexOffset:900}).addTo(m2); if(bb) bb.extend([mGeo.lat,mGeo.lng]); }
     mHomeMap=m2; mHomeBB=bb;
@@ -4529,7 +4567,7 @@ async function mSendChanges(){
   const payloadSrc=JSON.parse(JSON.stringify(p));
   try{
     const payload={v:2,updatedAt:new Date().toISOString(),project:mPack.project||null,packAt:mPack.exportedAt||null,changes:payloadSrc.changes||{},photoNotes:payloadSrc.pnotes||{},
-      newActs:(payloadSrc.newActs||[]).map(x=>({u:x.u||null,text:x.text,steps:(x.steps||[]).map(s=>({t:s.t,d:!!s.d,u:s.u||null})),done:!!x.done,doneAt:x.doneAt||null,hold:!!x.hold})),
+      newActs:(payloadSrc.newActs||[]).map(x=>({u:x.u||null,loc:x.loc||null,text:x.text,steps:(x.steps||[]).map(s=>({t:s.t,d:!!s.d,u:s.u||null})),done:!!x.done,doneAt:x.doneAt||null,hold:!!x.hold})),
       actOrder:(Array.isArray(payloadSrc.actOrder)&&payloadSrc.actOrder.length)?mActOrder().map(i=>(mPack.actions[i]||{}).id).filter(x=>x!=null):[]};
     payload.device=mDeviceId(); payload.by=mUserName();
     payload.changes=Object.assign({},payload.changes);   // reverts below must not leak into the sent-snapshot bookkeeping
@@ -4592,13 +4630,14 @@ function mShowDetail(ai,keepScroll){
       +'</div>'+(hasMap?'<div class="m-inset" id="mInset"></div>':'')
       +(photos.length>1?'<div class="m-thumbs" id="mThumbs"></div>':'')
       +'<input class="m-nin" id="mNin" placeholder="Image note" autocomplete="off" />'
-      +'<div class="m-ur" id="mUR">'+mUndoHtml()+'</div>'
+      +'<div class="m-ur" id="mUR"><button class="m-chip m-ub" id="mCamAct" type="button" aria-label="Take a photo for this action">\ud83d\udcf7</button>'+mUndoHtml()+'</div>'
       +'<div class="m-sub2" id="mSub2"></div></section>':'')
     +'<section class="m-page m-pdet"><div class="m-body" style="height:100%;box-sizing:border-box;padding-top:70px;">'
     +(!photos.length?'<div class="m-sec"><div class="m-lab">SUB-ACTIONS</div>'+mSteps(a).map((s,i)=>
         '<div class="m-strow'+(s.d?' done':'')+'" data-si="'+i+'"><div class="m-chk'+(s.d?' on':'')+'">'+(s.d?'✓':'')+'</div><div class="t"><span style="color:var(--accent2);font-family:var(--mono);font-size:11px;">'+stepLetter(i)+'.</span> <span class="m-stt">'+esc(s.t)+'</span></div><button class="m-sted" type="button" aria-label="Edit sub-action">✎</button><button class="s2x" type="button" aria-label="Delete sub-action">&times;</button></div>'
       ).join('')
     +'<input class="m-in" id="mStNew" placeholder="+ sub-action" autocomplete="off" style="margin-top:4px;" /></div>':'')
+    +'<button class="m-btn" id="mCamAct2">\ud83d\udcf7 Take a photo for this action</button>'
     +'<button class="m-btn '+(done?'ghost':'green')+'" id="mDoneBtn">'+(done?'Reopen action':'Mark action complete')+'</button>'
     +'<button class="m-btn ghost" id="mAllBtn">All actions</button>'
     +'</div></section>'
@@ -4607,6 +4646,9 @@ function mShowDetail(ai,keepScroll){
   mWireUndo();
   const snap=document.getElementById("mSnap");
   const rer=()=>mShowDetail(ai,snap.scrollTop);
+  { const lk=a._new?{au:(mNewActs()[a._ni]||{}).u}:{act:a.id};   // shots taken here are linked to THIS action on the desktop
+    const go=()=>{ mTakePhoto(lk); mToast("Photo will be linked to "+(a._new?"this new action":"action "+actNo(a))+" \u2014 it appears here after the desktop syncs"); };
+    const c1=document.getElementById("mCamAct"), c2=document.getElementById("mCamAct2"); if(c1) c1.addEventListener("click",e=>{ e.stopPropagation(); go(); }); if(c2) c2.addEventListener("click",go); }
   document.getElementById("mDoneBtn").addEventListener("click",()=>{
     if(a._new) mEditNewAct(a._ni,x=>{ x.done=!mDone(a); x.doneAt=Date.now(); });
     else mMutate(()=>mSetCh(a.id,{done:!mDone(a),doneAt:Date.now()}));
@@ -4964,8 +5006,14 @@ async function mSetupShare(){
 
 /* Desktop side of the loop: offer to merge field changes pushed by the phone. */
 let _upMerging=false, _chMerging=false;
-function userTyping(){ const el=document.activeElement; if(!el) return false; if(el.isContentEditable) return true; const t=(el.tagName||"").toLowerCase(); return t==="textarea"||(t==="input"&&!/^(checkbox|radio|range|button|submit|file|color)$/i.test(el.type||"")); }
+function userTyping(){ const el=document.activeElement; if(!el) return false;   // only a field that actually holds text counts (an empty, focused input must not stall sync)
+  if(el.isContentEditable) return !!(el.textContent||"").trim(); const t=(el.tagName||"").toLowerCase();
+  return (t==="textarea"||(t==="input"&&!/^(checkbox|radio|range|button|submit|file|color)$/i.test(el.type||"")))&&!!String(el.value||"").trim(); }
 function metaByNameHas(m,f){ for(const it of m.values()) if(it.f===f) return true; return false; }
+function linkPendingFu(a){ if(!a||!a.fu) return; const items=[];
+  for(const ph of photos) if(ph.pendFu===a.fu){ const before=snapshotTags(ph); if(!Array.isArray(ph.acts)) ph.acts=[]; if(!ph.acts.includes(a.id)) ph.acts.push(a.id); delete ph.pendFu; items.push({id:ph.id,before,after:snapshotTags(ph)}); }
+  if(items.length) pushTagAction(items); }
+function resolveLinkAct(it){ if(it.act!=null&&actById(+it.act)) return actById(+it.act); if(it.au){ const a=actions.find(x=>x.fu===it.au); if(a) return a; } return null; }
 function projectReady(){ if(!(loadedJsonName||folderName||photos.length)) return false; return fileLoadedOnce||!jsonHandle; }   // a closed/empty session never takes phone data or publishes a pack   // never merge into a session the .json load is about to replace
 function origBase(n){ return String(n||"").replace(/^\d{8}-\d{6}-\d+-/,"").replace(/\.[^.]+$/,"").toLowerCase(); }   // phone uploads carry a batch prefix; the camera name underneath is the identity
 function sameShot(t1,t2){ if(t1==null||t2==null) return false;   // unknown time: never assume the same shot (a false match would drop a real photo)
@@ -4992,7 +5040,8 @@ async function checkPhotoUploads(){   // polled: phone uploads auto-merge as soo
           dupe.lat=it.lat; dupe.lng=it.lng; dupe.noGps=false; dupe.glat=null; dupe.glng=null;
           if(dupe.time==null&&fin(it.t)) dupe.time=it.t; if(dupe.alt==null&&fin(it.alt)) dupe.alt=it.alt;
           healed.push({id:dupe.id,before,after:snapshotTags(dupe)}); }
-        if(dupe&&isAdhoc(dupe)&&!dupe.repoPath&&!dupe.file){ dupe.repoPath=it.f; adopt.add(it.f); }   // an earlier phone photo lost its original: this upload becomes it
+        if(dupe&&isAdhoc(dupe)&&!dupe.repoPath&&!dupe.file){ dupe.repoPath=it.f; adopt.add(it.f); }
+        if(dupe){ const la=resolveLinkAct(it); if(la&&!(dupe.acts||[]).includes(la.id)){ const before=snapshotTags(dupe); dupe.acts=(dupe.acts||[]).concat([la.id]); healed.push({id:dupe.id,before,after:snapshotTags(dupe)}); } }   // an earlier phone photo lost its original: this upload becomes it
         handled.add(it.f); continue;
       }
       let bytes; try{ bytes=await ghGetBin(cfg,it.f); }catch(e){ continue; }   // transient failure: stays listed for the next poll
@@ -5004,7 +5053,8 @@ async function checkPhotoUploads(){   // polled: phone uploads auto-merge as soo
     _logBy=String((items.find(it=>it.by)||{}).by||"Phone");
     const added=fitems.length?((await ingest(fitems,true))||[]):[];
     for(const it of metaByName.values()) handled.add(it.f);
-    for(const ph of added){ ph.adhoc=true; const m2=metaByName.get(ph.name); if(m2) ph.repoPath=m2.f;   // the full-resolution original stays in the private repo — the viewer fetches it from there
+    for(const ph of added){ ph.adhoc=true; const m2=metaByName.get(ph.name); if(m2) ph.repoPath=m2.f;
+      if(m2){ const la=resolveLinkAct(m2); if(la){ ph.acts=(ph.acts||[]).concat([la.id]); } else if(m2.au) ph.pendFu=m2.au; }   // taken inside an action on the phone   // the full-resolution original stays in the private repo — the viewer fetches it from there
       if(m2){   // the file's own EXIF wins; the manifest only fills gaps (the phone's trail / live fix)
       if(ph.lat==null&&fin(m2.lat)&&fin(m2.lng)){ ph.lat=m2.lat; ph.lng=m2.lng; ph.noGps=false; }
       if(ph.time==null&&m2.t) ph.time=m2.t; if(ph.alt==null&&fin(m2.alt)) ph.alt=m2.alt; } }
@@ -5055,6 +5105,7 @@ function batchDiff(data,last){   // only what changed since the previous merged 
   if(J(data.actOrder||[])===J(last.actOrder||[])) out.actOrder=[];
   return out;
 }
+async function syncTick(){ try{ await checkFieldChanges(); }catch(e){} try{ await checkPhotoUploads(); }catch(e){} }
 async function checkFieldChanges(){
   if(_chMerging||!projectReady()||userTyping()) return;
   const cfg=ghCfg(); if(!cfg.token) return;
@@ -5130,6 +5181,8 @@ async function checkFieldChanges(){
       const a2=createAction(String(na&&na.text||"").trim(),null); if(!a2) continue;
       const b2=actState(a2);
       if(na.u) a2.fu=na.u;
+      if(na.loc&&isFinite(na.loc.lat)&&isFinite(na.loc.lng)) a2.loc={lat:+na.loc.lat,lng:+na.loc.lng};
+      linkPendingFu(a2);   // phone photos taken for this action before it existed here
       a2.steps=(na.steps||[]).map(st=>({t:String(st&&st.t||"").trim(),d:!!(st&&st.d),id:(st&&st.u)||newSid()})).filter(st=>st.t);
       if(na.hold) a2.hold=true;
       if(na.done){ a2.done=true; a2.doneAt=na.doneAt||Date.now(); }
@@ -5195,11 +5248,11 @@ async function checkFieldChanges(){
   if(dirHandle){ try{ if((await dirHandle.queryPermission({mode:"read"}))!=="granted") armFolderPermission(); }catch(e){} }
   renderProjHead();
   setTimeout(checkFieldChanges,1500);   // merge any field changes the phone has pushed…
-  setInterval(checkFieldChanges,20000);   // …and keep watching, like photo dumps
+  setInterval(()=>syncTick(),20000);   // …and keep watching
   setTimeout(()=>scheduleAutoExport(0),6000);   // bring the phone up to date with this session
   setTimeout(checkPhotoUploads,2600);   // …then keep watching: phone photo dumps auto-merge as they arrive
-  setInterval(checkPhotoUploads,20000);
-  window.addEventListener("focus",()=>{ checkPhotoUploads(); checkFieldChanges(); });
+
+  window.addEventListener("focus",()=>syncTick());
 })();
 
 /* ---- app self-update check (active only when served from the web, e.g. GitHub Pages) ----
