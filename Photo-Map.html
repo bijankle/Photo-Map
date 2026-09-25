@@ -361,7 +361,7 @@
   .dropzone.show{display:flex;}
   @media (max-width:900px){ .stats{display:none;} }
   /* ---- layout order: actions | map | splitter | photo/gallery | tab strip ---- */
-  .actpanel{order:1;} #actSplit{order:1;} #map{order:2;} #splitter{order:3;} .imgpanel{order:4;} .gallery{order:5;}
+  .actpanel{order:1;} #actSplit{order:1;} #map{order:2;} #splitter{order:3;} .imgpanel{order:4;} .gallery{order:5;} .histpanel{order:6;}
 
   /* left actions panel */
   .actpanel{width:var(--act-w,270px);flex:0 0 var(--act-w,270px);min-width:170px;height:100%;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:2;}
@@ -463,6 +463,18 @@
   .rtabs .count{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--accent);}
 
   /* tab visibility: photo tab shows the viewer panel (or its placeholder), gallery tab shows the gallery */
+  .histpanel{display:none;width:var(--side-w);flex:0 0 var(--side-w);height:calc(100% - 40px);margin-top:40px;background:var(--panel);flex-direction:column;z-index:2;min-width:220px;border-left:1px solid var(--line);}
+  #main.tab-history .histpanel{display:flex;}
+  #main.tab-history .imgpanel,#main.tab-history .gallery{display:none!important;}
+  .hist-body{flex:1;overflow-y:auto;padding:4px 0 12px;}
+  .hist-day{font:700 10px var(--mono);letter-spacing:.8px;text-transform:uppercase;color:var(--dim);padding:12px 14px 4px;}
+  .hist-row{display:flex;gap:9px;align-items:flex-start;padding:7px 14px;border-bottom:1px solid var(--line);font-size:12.5px;line-height:1.4;color:var(--ink);}
+  .hist-row.link{cursor:pointer;}
+  .hist-row.link:hover{background:var(--accent-tint);}
+  .hist-row .ht{font:11px var(--mono);color:var(--dim);flex-shrink:0;padding-top:1px;white-space:nowrap;}
+  .hist-row .hw{font:600 10.5px var(--font);color:var(--accent2);background:var(--accent-tint);border-radius:5px;padding:1px 6px;flex-shrink:0;max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .hist-row .hd{min-width:0;word-wrap:break-word;}
+  .hist-row.undo .hd{color:var(--muted);font-style:italic;}
   #main.tab-photo .imgpanel{display:flex;}
   #main.tab-photo .gallery{display:none!important;}
   #main.tab-gallery .imgpanel{display:none!important;}
@@ -790,6 +802,10 @@
       <div class="set-sec" data-sec="actions">
         <h3>Actions</h3>
         <div class="set-row">
+          <div class="set-lbl">Your name<span class="set-sub">Shown in the History tab next to every change made on this computer.</span></div>
+          <div class="set-ctl"><input type="text" id="setUserName" placeholder="Desktop" style="width:180px;font:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--line2);border-radius:8px;" /></div>
+        </div>
+        <div class="set-row">
           <div class="set-lbl">List: open actions only<span class="set-sub">Hide completed actions in the Actions panel.</span></div>
           <div class="set-ctl"><input type="checkbox" id="setActOpen" /></div>
         </div>
@@ -894,6 +910,7 @@
   <div class="rtabs" id="rtabs">
     <button class="rtab active" id="tabPhoto" title="Show the photo viewer">Photo</button>
     <button class="rtab" id="tabGallery" title="Show the thumbnail gallery">Gallery</button>
+    <button class="rtab" id="tabHistory" title="Who changed what, and when">History</button>
     <span class="count" id="galCount">0 shown</span>
   </div>
   <aside class="gallery">
@@ -904,9 +921,13 @@
       <div class="ctl-row"><label for="thumbSize">Size</label><input type="range" id="thumbSize" min="64" max="260" value="120" /></div>
     </div>
     <div class="gallery-body" id="galleryBody">
-      <div class="empty-msg"><b>No photos loaded.</b><br/>Click <b>Open Folder</b>, or drag a folder onto the window.<br/><br/>
+      <div class="empty-msg"><b>No photos loaded.</b><br/>Use <b>File → Add photos from a folder</b>, or drag a folder onto the window.<br/><br/>
         <span class="hint">Images stay on your device. Only geotagged photos appear on the map.</span></div>
     </div>
+  </aside>
+  <aside class="histpanel" id="histPanel">
+    <div class="controls"><div class="ctl-row"><label for="histFilter">Filter</label><span class="xwrap"><input type="text" id="histFilter" placeholder="Search the history (name, action, text)" autocomplete="off" /><button class="xclear" type="button" title="Clear">&times;</button></span></div></div>
+    <div class="hist-body" id="histBody"></div>
   </aside>
 </div>
 
@@ -1744,16 +1765,19 @@ document.getElementById("actNewInput").addEventListener("keydown",e=>{
 
 /* right sidebar tabs */
 function setTab(t){
-  const nt=(t==="gallery")?"gallery":"photo";
+  const nt=(t==="gallery"||t==="history")?t:"photo";
   const changed=nt!==rightTab;
   rightTab=nt;
   const m=document.getElementById("main");
-  m.classList.toggle("tab-photo",rightTab==="photo"); m.classList.toggle("tab-gallery",rightTab==="gallery");
+  m.classList.toggle("tab-photo",rightTab==="photo"); m.classList.toggle("tab-gallery",rightTab==="gallery"); m.classList.toggle("tab-history",rightTab==="history");
   document.getElementById("tabPhoto").classList.toggle("active",rightTab==="photo");
   document.getElementById("tabGallery").classList.toggle("active",rightTab==="gallery");
+  document.getElementById("tabHistory").classList.toggle("active",rightTab==="history");
+  if(rightTab==="history") renderHistory();
   if(changed) setTimeout(()=>{ map.invalidateSize(); renderClusters(); positionTools(); if(rightTab==="photo"&&lb.classList.contains("open")) refit(); },30);   // no relayout jolt when the tab is already active
 }
 document.getElementById("tabPhoto").addEventListener("click",()=>{ setTab("photo"); persistState(); });
+document.getElementById("tabHistory").addEventListener("click",()=>{ setTab("history"); persistState(); });
 document.getElementById("tabGallery").addEventListener("click",()=>{ setTab("gallery"); persistState(); });
 
 /* right-click menu on an action row */
@@ -1834,6 +1858,7 @@ function syncSettingsUI(){
   document.getElementById("setThumb").value=parseInt(getComputedStyle(document.documentElement).getPropertyValue("--thumb"))||120;
   document.getElementById("setActOpen").checked=actShowOpenOnly;
   document.getElementById("setActMap").checked=actOnlyMap;
+  { let n=""; try{ n=localStorage.getItem("pmUserName")||""; }catch(e){} document.getElementById("setUserName").value=n; }
   const g=ghCfg(); document.getElementById("setGhRepo").value=g.repo; document.getElementById("setGhToken").value=g.token;
   let le=0; try{ le=+localStorage.getItem("pmLastExport")||0; }catch(e){}
   document.getElementById("mobExpStatus").textContent=le?("Last export: "+new Date(le).toLocaleString(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})):"";
@@ -2103,6 +2128,7 @@ async function exportActionsXlsx(){
 document.getElementById("actXlsx").addEventListener("click",e=>{ e.stopPropagation(); exportActionsXlsx(); });
 document.getElementById("setGhRepo").addEventListener("change",e=>{ try{ localStorage.setItem("pmGhRepo",e.target.value.trim()); }catch(err){} });
 document.getElementById("setGhToken").addEventListener("change",e=>{ try{ localStorage.setItem("pmGhToken",e.target.value.trim()); }catch(err){} });
+document.getElementById("setUserName").addEventListener("input",e=>{ try{ localStorage.setItem("pmUserName",e.target.value.trim()); }catch(err){} });
 document.getElementById("setActMap").addEventListener("change",e=>{ actOnlyMap=e.target.checked; buildCluster(); renderClusters(); updateGallery(); renderActions(); persistState(); });
 
 /* right-click: on/near a dot -> the DOT menu; only genuinely empty map gets the general commands */
@@ -3010,7 +3036,10 @@ function applyMoveMark(m,orig,dx,dy){
 }
 function curPhoto(){ return lightboxList[lightboxIndex]; }
 function curMarks(){ const p=curPhoto(); if(!p)return []; if(!p.marks)p.marks=[]; return p.marks; }
-function afterMarkChange(){ const ms=curMarks(); if(ms.length&&!ms[ms.length-1]._t) ms[ms.length-1]._t=Date.now(); redoMarks=[]; redrawMarks(); persistState(); ensureAnnotThumb(curPhoto()); }   // stamp marks so undo can interleave chronologically with tag edits
+function afterMarkChange(){ const ms=curMarks(); if(ms.length&&!ms[ms.length-1]._t) ms[ms.length-1]._t=Date.now(); redoMarks=[]; logAnnot(curPhoto()); redrawMarks(); persistState(); ensureAnnotThumb(curPhoto()); }
+function logAnnot(p){ if(!p) return; const last=projLog[projLog.length-1], by=_logBy||userName();   // a burst of strokes on one photo is ONE history line
+  if(last&&last.k==="annot"&&last.pid===p.id&&last.by===by&&Date.now()-last.t<180000){ last.n=(last.n||1)+1; last.t=Date.now(); last.d="Annotated "+p.name+" ("+last.n+" marks)"; if(rightTab==="history") renderHistory(); return; }
+  logChange("Annotated "+p.name,null,"annot"); projLog[projLog.length-1].pid=p.id; }   // stamp marks so undo can interleave chronologically with tag edits
 function setColor(c){ markColor=c; document.querySelectorAll("#markPalette .sw").forEach(b=>b.classList.toggle("on",b.dataset.c===c)); if(selMark){ selMark.c=c; tbText.style.color=c; tbText.style.borderColor=c; } if(selObj){ selObj.c=c; redrawMarks(); persistState(); } }
 document.querySelectorAll("#markPalette .sw").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); setColor(b.dataset.c); }));
 /* Universal sizing: ONE line weight (p.mkw) and ONE text size (p.mth) per photo — the vertical
@@ -3383,7 +3412,72 @@ function snapshotTags(p){ return {paths:physPaths(p).slice(), vpaths:virtPaths(p
 /* EVERY data change goes through pushUndo so Ctrl+Z always works — keep it that way for new features.
    Entry fields (any combination): items (photo snapshots), act (deleted action), actCreate (new action),
    actEdit (title/description/done change), marksSnap (a photo's whole markup array), rot (rotation). */
-function pushUndo(entry){ entry.t=Date.now(); tagUndoStack.push(entry); if(tagUndoStack.length>200) tagUndoStack.shift(); tagRedoStack=[]; }
+function pushUndo(entry){ entry.t=Date.now(); tagUndoStack.push(entry); if(tagUndoStack.length>200) tagUndoStack.shift(); tagRedoStack=[];
+  try{ for(const e of describeEntry(entry)) logChange(e.d,e.a); }catch(err){} }   // every data change passes here, so the History tab sees all of it
+/* ---- History: who changed what, and when. Saved inside the project file (newest 3000). ---- */
+let projLog=[], _logBy=null, _histT=null;
+function userName(){ let n=""; try{ n=localStorage.getItem("pmUserName")||""; }catch(e){} return n.trim()||"Desktop"; }
+function logChange(d,a,kind){ if(!d) return; projLog.push({t:Date.now(),by:_logBy||userName(),d,a:a!=null?a:null,k:kind||null}); if(projLog.length>3000) projLog.splice(0,projLog.length-3000);
+  if(rightTab==="history"){ clearTimeout(_histT); _histT=setTimeout(renderHistory,120); } }
+function qT(t){ t=String(t||""); return "\u201c"+(t.length>60?t.slice(0,57)+"\u2026":t)+"\u201d"; }
+function actLbl(id,text){ const a=actById(id); return actNo(id)+" "+qT(text!=null?text:(a?a.text:"")); }
+function phLbl(id){ const p=photoById(id); return p?p.name:"a photo"; }
+function describeEntry(e){
+  const out=[];
+  if(e.actCreate){ const d=e.actCreate.data; out.push({d:"Created action "+actLbl(d.id,d.text)+((e.items&&e.items.length)?" with "+e.items.length+" photo"+(e.items.length===1?"":"s"):""),a:d.id}); return out; }
+  if(e.act){ const d=e.act.data; out.push({d:"Deleted action "+actLbl(d.id,d.text),a:d.id}); return out; }
+  if(e.actEdit){ const id=e.actEdit.id, b=e.actEdit.before||{}, f=e.actEdit.after||{}, L=actLbl(id,f.text);
+    if(b.text!==f.text) out.push({d:"Renamed action "+actNo(id)+" from "+qT(b.text)+" to "+qT(f.text),a:id});
+    if(!!b.done!==!!f.done) out.push({d:(f.done?"Completed ":"Reopened ")+"action "+L,a:id});
+    if(!!b.hold!==!!f.hold) out.push({d:(f.hold?"Put action "+L+" on hold":"Took action "+L+" off hold"),a:id});
+    const key=(s2,i)=>s2.id||("#"+i), bm=new Map((b.steps||[]).map((s2,i)=>[key(s2,i),s2])), fm=new Map((f.steps||[]).map((s2,i)=>[key(s2,i),s2]));
+    for(const [k,s2] of fm){ const o=bm.get(k); if(!o) out.push({d:"Added sub-action "+qT(s2.t)+" to "+L,a:id});
+      else{ if(o.t!==s2.t) out.push({d:"Edited sub-action "+qT(o.t)+" \u2192 "+qT(s2.t)+" on "+L,a:id}); if(!!o.d!==!!s2.d) out.push({d:(s2.d?"Ticked ":"Unticked ")+qT(s2.t)+" on "+L,a:id}); } }
+    for(const [k,s2] of bm) if(!fm.has(k)) out.push({d:"Removed sub-action "+qT(s2.t)+" from "+L,a:id});
+    const ob=[...bm.keys()].filter(k=>fm.has(k)), of=[...fm.keys()].filter(k=>bm.has(k));
+    if(ob.join()!==of.join()) out.push({d:"Reordered the sub-actions of "+L,a:id});
+    if(JSON.stringify(b.porder||null)!==JSON.stringify(f.porder||null)) out.push({d:"Reordered the photos of "+L+" (sets the cover)",a:id});
+    return out; }
+  if(e.addPhotos){ out.push({d:"Added "+e.addPhotos.length+" photo"+(e.addPhotos.length===1?"":"s")+(e.addPhotos.length<=3?": "+e.addPhotos.map(phLbl).join(", "):"")}); return out; }
+  if(e.delPhotos){ const it=e.delPhotos.items||[]; out.push({d:"Removed "+it.length+" photo"+(it.length===1?"":"s")+" from the project"+(it.length<=3?": "+it.map(x=>x.photo&&x.photo.name).join(", "):"")}); return out; }
+  if(e.order){ out.push({d:"Changed the priority order of the actions"}); return out; }
+  if(e.marksSnap){ out.push({d:"Edited the annotations on "+phLbl(e.marksSnap.id)}); return out; }
+  if(e.sizeSnap){ out.push({d:"Changed the markup size on "+phLbl(e.sizeSnap.id)}); return out; }
+  if(e.rot){ out.push({d:"Rotated "+phLbl(e.rot.id)}); return out; }
+  const its=e.items?e.items:(e.id!=null?[{id:e.id,before:e.before,after:e.after}]:[]);
+  const moved=[], agg=new Map(), push=(k,d,a)=>{ if(!agg.has(k)) agg.set(k,{d,a,n:0,names:[]}); const g=agg.get(k); g.n++; };
+  for(const it of its){ const b=it.before||{}, f=it.after||{}, nm=phLbl(it.id);
+    const ba=new Set(b.acts||[]), fa=new Set(f.acts||[]);
+    for(const x of fa) if(!ba.has(x)) push("link"+x,null,x);
+    for(const x of ba) if(!fa.has(x)) push("unlink"+x,null,x);
+    if((b.note||"")!==(f.note||"")) out.push({d:(f.note?"Photo note on "+nm+": "+qT(f.note):"Cleared the photo note on "+nm)});
+    if(b.lat!==f.lat||b.lng!==f.lng) moved.push(nm);
+    if(JSON.stringify(b.paths)!==JSON.stringify(f.paths)||JSON.stringify(b.vpaths)!==JSON.stringify(f.vpaths)) push("tags",null,null);
+  }
+  for(const [k,g] of agg){ const n=g.n+" photo"+(g.n===1?"":"s");
+    if(k.startsWith("link")) out.push({d:"Linked "+(g.n===1&&its.length===1?phLbl(its[0].id):n)+" to action "+actLbl(g.a),a:g.a});
+    else if(k.startsWith("unlink")) out.push({d:"Unlinked "+(g.n===1&&its.length===1?phLbl(its[0].id):n)+" from action "+actLbl(g.a),a:g.a});
+    else out.push({d:"Changed folder tags on "+n}); }
+  if(moved.length) out.push({d:moved.length<=2?"Moved "+moved.join(", "):"Moved "+moved.length+" photos"});
+  return out;
+}
+function fmtHistTime(t){ return new Date(t).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}); }
+function renderHistory(){
+  const body=document.getElementById("histBody"); if(!body) return;
+  const q=(document.getElementById("histFilter").value||"").trim().toLowerCase();
+  const rows=projLog.slice().reverse().filter(e=>!q||(e.d+" "+e.by).toLowerCase().includes(q));
+  if(!rows.length){ body.innerHTML='<div class="empty-msg">'+(projLog.length?"Nothing matches that filter.":"<b>No changes recorded yet.</b><br/>Every edit — here or on the phone — is listed with who made it and when.")+'</div>'; return; }
+  let html="", day="";
+  for(const e of rows.slice(0,800)){ const dd=new Date(e.t).toLocaleDateString(undefined,{weekday:"short",day:"numeric",month:"short",year:"numeric"});
+    if(dd!==day){ day=dd; html+='<div class="hist-day">'+esc(dd)+'</div>'; }
+    html+='<div class="hist-row'+(e.a!=null&&actById(e.a)?' link':'')+(e.k==="undo"?' undo':'')+'" data-a="'+(e.a!=null?e.a:"")+'"><span class="ht">'+fmtHistTime(e.t)+'</span><span class="hw" title="'+esc(e.by)+'">'+esc(e.by)+'</span><span class="hd">'+esc(e.d)+'</span></div>'; }
+  if(rows.length>800) html+='<div class="empty-msg">Showing the latest 800 of '+rows.length+' \u2014 use the filter to find older ones.</div>';
+  body.innerHTML=html;
+}
+document.getElementById("histBody").addEventListener("click",e=>{ const r=e.target.closest(".hist-row.link"); if(!r) return; const a=actById(Number(r.dataset.a)); if(!a) return;
+  selActs=new Set([a.id]); lastActClick=a.id; if(typeof rebuildActionFilter==="function") rebuildActionFilter(); refreshActSelClasses(); buildCluster(); renderClusters(); actNavigate(a,true); });
+document.getElementById("histFilter").addEventListener("input",()=>{ clearTimeout(_histT); _histT=setTimeout(renderHistory,120); });
+wireClearX(document.getElementById("histFilter"));
 function pushTagAction(items){   // one undo step, possibly touching many photos (e.g. a multi-selection move)
   items=items.filter(it=>JSON.stringify(it.before)!==JSON.stringify(it.after));
   if(!items.length) return;
@@ -3433,8 +3527,8 @@ function applyUndoEntry(a,dir){   // dir: "before" (undo) or "after" (redo)
   its.forEach(it=>applySnapRaw(it.id,undo?it.before:it.after));
   afterFolderChange(); if(folderPopShown) openFolderPop();
 }
-function undoTag(){ const a=tagUndoStack.pop(); if(!a) return false; tagRedoStack.push(a); applyUndoEntry(a,"before"); return true; }
-function redoTag(){ const a=tagRedoStack.pop(); if(!a) return false; tagUndoStack.push(a); applyUndoEntry(a,"after"); return true; }
+function undoTag(){ const a=tagUndoStack.pop(); if(!a) return false; tagRedoStack.push(a); applyUndoEntry(a,"before"); try{ for(const e of describeEntry(a)) logChange("Undid: "+e.d,e.a,"undo"); }catch(err){} return true; }
+function redoTag(){ const a=tagRedoStack.pop(); if(!a) return false; tagUndoStack.push(a); applyUndoEntry(a,"after"); try{ for(const e of describeEntry(a)) logChange("Redid: "+e.d,e.a,"undo"); }catch(err){} return true; }
 function undoLatest(open){
   const ms=open?curMarks():null;
   const markT=(ms&&ms.length&&ms[ms.length-1]._t!=null)?ms[ms.length-1]._t:null;   // marks loaded from disk have no _t: never undoable as 'recent'
@@ -3586,6 +3680,7 @@ function clearAll(redraw){
   clearAreaPreviews(); clearHighlight();
   if(boxRect){map.removeLayer(boxRect);boxRect=null;} boxBounds=null; setAreaBtn();
   photos=[]; nextId=1; cluster=null; markerLayer.clearLayers(); lightboxList=[]; lightboxIndex=0; sizeIndex=new Map();
+  projLog=[];
   tagUndoStack=[]; tagRedoStack=[];   // undo entries reference photo/action ids of the OLD project — replaying them here would corrupt the new one
   selSet.clear(); dotMarkers.clear(); setAreaBtn(); if(typeof closeCtx==="function") closeCtx();
   actions=[]; nextActId=1; selActs.clear(); actionFilter=null; renderActions(); renderIpActions();
@@ -3721,7 +3816,7 @@ document.getElementById("jsonInput").addEventListener("change",async e=>{ const 
 
 function serializeState(includeImages){
   return {
-    version:3, folderName, savedAt:new Date().toISOString(), nextActId,
+    version:3, folderName, savedAt:new Date().toISOString(), nextActId, log:projLog,
     actions: actions.map(a=>{ const o={id:a.id,text:a.text,done:!!a.done,created:a.created||null,doneAt:a.doneAt||null}; if(a.hold)o.hold=true; if(a.fu)o.fu=a.fu; if(a.steps&&a.steps.length)o.steps=a.steps.map(stepCopy); if(Array.isArray(a.porder)&&a.porder.length){o.porder=a.porder; o.porderK=a.porder.map(id=>{const ph=photoById(id);return ph?metaKey(ph):null;}).filter(Boolean);} return o; }),
     settings:{ baseLayer: map.hasLayer(google)?"google":map.hasLayer(esri)?"esri":"none", showNoGeo, sortBy:currentSort,
       thumb:getComputedStyle(document.documentElement).getPropertyValue("--thumb").trim(),
@@ -3771,6 +3866,7 @@ function applyState(st){
   });   // baked full-quality renditions from old files are intentionally dropped
   rebuildPorders();   // ids were just renumbered — restore each action's photo order from the key form
   if(st.nextActId>nextActId) nextActId=st.nextActId;   // deleted action numbers are never reissued
+  projLog=Array.isArray(st.log)?st.log.slice(-3000):[];
   { const live=new Set(actions.map(a=>a.id)); for(const ph of photos) if(Array.isArray(ph.acts)&&ph.acts.some(id=>!live.has(id))) ph.acts=ph.acts.filter(id=>live.has(id)); }   // drop links to actions that no longer exist
   migrateActNotes();
   if(lastFullCache) overlayImagesFromCache(lastFullCache);   // the .json is metadata-only — fill thumbs/previews back in from the browser image cache
@@ -3920,6 +4016,7 @@ function mPend(){   // parsed once per actual change (renders used to re-parse i
   try{ _mpObj=JSON.parse(raw)||{}; }catch(e){ _mpObj={}; } _mpRaw=raw; return _mpObj; }
 let _mpQuiet=false;
 function mPendSave(o){ try{ const raw=JSON.stringify(o); localStorage.setItem("pmField",raw); _mpRaw=raw; _mpObj=o; }catch(e){} if(!_mpQuiet&&typeof mAutoSendSoon==="function") mAutoSendSoon(); }   // every edit auto-syncs
+function mUserName(raw){ let n=""; try{ n=(localStorage.getItem("pmUserName")||"").trim(); }catch(e){} return raw?n:(n||"Phone"); }
 function mDeviceId(){ let d=null; try{ d=localStorage.getItem("pmDevice"); if(!d){ d="d"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); localStorage.setItem("pmDevice",d); } }catch(e){} return d||"d0"; }
 function mUid(){ return "u"+Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
 function mCh(id){ const p=mPend(); return (p.changes||{})[id]||{}; }
@@ -4052,11 +4149,12 @@ function mShowSetup(msg){
   mScr('<div class="m-head"><div class="m-brand">Photo<span>Map</span> Field</div></div>'
     +'<div class="m-body"><div class="m-sec"><div class="m-lab">DATA REPOSITORY</div><input class="m-in" id="mRepo" value="'+esc(g.repo)+'" autocomplete="off" />'
     +'<div class="m-lab">ACCESS TOKEN</div><input class="m-in" id="mTok" type="password" placeholder="github_pat_…" value="'+esc(g.token)+'" />'
+    +'<div class="m-lab">YOUR NAME (FOR THE CHANGE HISTORY)</div><input class="m-in" id="mWhoIn" placeholder="e.g. Sam" value="'+esc(mUserName(true))+'" autocomplete="off" />'
     +(msg?'<div class="m-err">'+esc(msg)+'</div>':'')
     +'</div></div>'
     +'<div class="m-foot"><button class="m-btn" id="mGo">Load actions</button><div class="m-note">One-time setup — remembered on this phone</div></div>');
   document.getElementById("mGo").addEventListener("click",()=>{
-    try{ localStorage.setItem("pmGhRepo",document.getElementById("mRepo").value.trim()); localStorage.setItem("pmGhToken",document.getElementById("mTok").value.trim()); }catch(e){}
+    try{ localStorage.setItem("pmGhRepo",document.getElementById("mRepo").value.trim()); localStorage.setItem("pmGhToken",document.getElementById("mTok").value.trim()); localStorage.setItem("pmUserName",document.getElementById("mWhoIn").value.trim()); }catch(e){}
     mLoadPack();
   });
 }
@@ -4184,7 +4282,7 @@ function mShowList(){
   const acts=news.concat(packActs);   // phone-created actions sit on top until they're merged on desktop
   mScr('<div class="m-head"><div style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0;"><div class="m-brand">Photo<span>Map</span> Field</div>'
     +'<div class="m-sub">'+esc(mPack.project||"")+' · exported '+(mPack.exportedAt?new Date(mPack.exportedAt).toLocaleString(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"")+' · app '+new Date(document.lastModified).toLocaleString(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})+'</div></div>'
-    +mUndoHtml()+'<button class="m-chip" id="mRefresh" type="button">REFRESH</button></div>'
+    +mUndoHtml()+'<button class="m-chip" id="mWho" type="button" title="Your name in the change history">\ud83d\udc64 '+esc(mUserName())+'</button><button class="m-chip" id="mRefresh" type="button">REFRESH</button></div>'
     +'<div class="m-body" id="mList">'
     +'<input class="m-in" id="mNewAct" placeholder="+ New action" autocomplete="off" style="margin-bottom:2px;" />'
     +(acts.length?acts.map(a=>{
@@ -4203,7 +4301,8 @@ function mShowList(){
     +'<button class="m-btn ghost" id="mUpBtn">Upload photos to the map</button>'
     +'<div class="m-note m-sync" id="mSendNote">'+mSyncText()+'</div></div>'
     +'<div class="m-homemap" id="mHomeMap"></div>');
-  document.getElementById("mRefresh").addEventListener("click",()=>{ mCheckFresh(true); mLoadPack(); });   // one tap: newest app build + newest pack
+  document.getElementById("mRefresh").addEventListener("click",()=>{ mCheckFresh(true); mLoadPack(); });
+  document.getElementById("mWho").addEventListener("click",()=>{ const v=prompt("Your name, shown next to your changes in the history:",mUserName(true)); if(v!=null){ try{ localStorage.setItem("pmUserName",v.trim()); }catch(e){} mShowList(); } });   // one tap: newest app build + newest pack
   document.getElementById("mUpBtn").addEventListener("click",()=>{ mUpInput().click(); window.mPickT=Date.now(); });
   document.getElementById("mCamBtn").addEventListener("click",()=>{ mCamInput().click(); window.mPickT=Date.now(); });
   document.getElementById("mSendNote").addEventListener("click",()=>{ mSendChanges(); mPackPoll(true); });   // tap = sync now
@@ -4364,7 +4463,7 @@ async function mUploadPhotos(files,fixed){
       const base=rawName.replace(/\.[^.]+$/,"").replace(/[^\w\- ]+/g,"").slice(0,40)||("photo"+(i+1));
       const path="uploads/"+batch+"-"+(i+1)+"-"+base+ext;
       await ghPutB64(cfg,path,b64,"Photo upload from phone",false,true);   // fresh name: no sha lookup
-      entries.push({f:path,n:batch+"-"+(i+1)+"-"+base+ext,lat,lng,alt,t,src,ts:Date.now()});
+      entries.push({f:path,n:batch+"-"+(i+1)+"-"+base+ext,lat,lng,alt,t,src,ts:Date.now(),by:mUserName()});
     }
     if(!entries.length) throw new Error(tooBig?"photos over 25 MB can\u2019t be sent":"no readable images");
     setB("Registering\u2026",true); mToast("Registering\u2026",true);
@@ -4432,7 +4531,7 @@ async function mSendChanges(){
     const payload={v:2,updatedAt:new Date().toISOString(),project:mPack.project||null,packAt:mPack.exportedAt||null,changes:payloadSrc.changes||{},photoNotes:payloadSrc.pnotes||{},
       newActs:(payloadSrc.newActs||[]).map(x=>({u:x.u||null,text:x.text,steps:(x.steps||[]).map(s=>({t:s.t,d:!!s.d,u:s.u||null})),done:!!x.done,doneAt:x.doneAt||null,hold:!!x.hold})),
       actOrder:(Array.isArray(payloadSrc.actOrder)&&payloadSrc.actOrder.length)?mActOrder().map(i=>(mPack.actions[i]||{}).id).filter(x=>x!=null):[]};
-    payload.device=mDeviceId();
+    payload.device=mDeviceId(); payload.by=mUserName();
     payload.changes=Object.assign({},payload.changes);   // reverts below must not leak into the sent-snapshot bookkeeping
     /* undo removes keys; the desktop needs explicit values to take a sent edit back */
     try{ const S=JSON.parse(p.sentSnap||"null"); if(S&&S.c) for(const id of Object.keys(S.c)){
@@ -4902,6 +5001,7 @@ async function checkPhotoUploads(){   // polled: phone uploads auto-merge as soo
       metaByName.set(nm,it); if(fin(it.t)) queued.add(base+"|"+Math.round(it.t/1000));
       fitems.push({name:nm,path:"phone-uploads/"+nm,getFile:async()=>file});
     }
+    _logBy=String((items.find(it=>it.by)||{}).by||"Phone");
     const added=fitems.length?((await ingest(fitems,true))||[]):[];
     for(const it of metaByName.values()) handled.add(it.f);
     for(const ph of added){ ph.adhoc=true; const m2=metaByName.get(ph.name); if(m2) ph.repoPath=m2.f;   // the full-resolution original stays in the private repo — the viewer fetches it from there
@@ -4933,7 +5033,7 @@ async function checkPhotoUploads(){   // polled: phone uploads auto-merge as soo
       ghDeleteMany(cfg,[...handled].filter(f=>!adopt.has(f)&&(!metaByNameHas(metaByName,f)||onDisk.has(f)))).catch(()=>{});   // originals without a disk copy STAY in the repo (they're the only full-res copy)
     }
   }catch(err){ loadNote("Phone photo merge failed: "+(err&&err.message||err)); setTimeout(()=>loadNote(""),5000); }
-  finally{ _upMerging=false; }
+  finally{ _upMerging=false; _logBy=null; }
 }
 /* Field changes from the phone merge automatically (polled, like photo dumps). Merges are
    idempotent — sub-actions are matched by permanent id, phone-made steps/actions by uid, and
@@ -4966,6 +5066,7 @@ async function checkFieldChanges(){
     let merged=""; try{ merged=localStorage.getItem("pmMergedChanges")||""; }catch(e){}
     if(raw.updatedAt&&raw.updatedAt===merged) return;   // already merged this batch
     const data=batchDiff(raw,lastB);
+    _logBy=String(raw.by||"Phone");   // History credits the phone's user
     const ch=data.changes||{}, pnCh=data.photoNotes||{};
     const nActs=Array.isArray(data.newActs)?data.newActs:[];
     const ordIds=Array.isArray(data.actOrder)?data.actOrder.map(Number).filter(x=>x>0):[];
@@ -5054,7 +5155,7 @@ async function checkFieldChanges(){
     const n=ids.length+pids.length+newN+(ordIds.length>1?1:0);
     if(n) loadNote("Merged "+n+" field change"+(n===1?"":"s")+" from the phone ✓ — Ctrl+Z undoes"); setTimeout(()=>loadNote(""),3500);
   }catch(e){ console.warn("field-changes check failed",e); }
-  finally{ _chMerging=false; }
+  finally{ _chMerging=false; _logBy=null; }
 }
 
 (async function init(){
